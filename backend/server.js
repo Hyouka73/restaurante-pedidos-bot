@@ -1,12 +1,16 @@
 require('dotenv').config();
 const express = require('express');
 const bot = require('./src/config/telegram');
+const configRoutes = require('./src/api/routes/config');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
+
+// Conectar rutas de API
+app.use('/api/config', configRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -15,7 +19,7 @@ app.get('/health', (req, res) => {
 
 // Bot básico
 bot.command('start', (ctx) => {
-  ctx.reply('¡Hola! Soy tu asistente de pedidos');
+  ctx.reply('¡Hola! Soy tu asistente de pedidos 🍕');
 });
 
 // Start
