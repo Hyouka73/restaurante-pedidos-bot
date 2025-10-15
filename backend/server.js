@@ -21,7 +21,16 @@ app.get('/health', (req, res) => {
 
 // Bot - Conectar handlers
 const startHandler = require('./src/bot/handlers/startHandler');
+const menuHandler = require('./src/bot/handlers/menuHandler');
+const orderHandler = require('./src/bot/handlers/orderHandler');
+
 bot.command('start', startHandler);
+bot.command('menu', menuHandler);
+bot.command('pedido', orderHandler);
+
+// Conectar middleware de interacciones (botones inline)
+const interactionHandler = require('./src/bot/middleware/interactionHandler');
+bot.on('callback_query', interactionHandler);
 
 // Start
 bot.launch();
