@@ -1,44 +1,78 @@
+// frontend-pwa/src/components/Layout.jsx
 import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from '../config/firebase';
 import { signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
 
 export default function Layout() {
-  const [user] = useAuthState(auth);
+  const [user, loadingAuth] = useAuthState(auth);
   const navigate = useNavigate();
   const location = useLocation();
   const [restaurantData, setRestaurantData] = useState(null);
   const [loadingRestaurant, setLoadingRestaurant] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false); // Estado para el sidebar (mobile)
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const fetchRestaurantData = async () => {
       if (!user) {
+        console.log("[Layout] No hay usuario autenticado.");
         setLoadingRestaurant(false);
         return;
       }
 
       try {
-        // Obtener restaurantId del usuario
+        console.log(`[Layout] Usuario ${user.uid} autenticado, obteniendo datos...`);
         const userDoc = await getDoc(doc(db, 'users', user.uid));
+        console.log(`[Layout] Doc de usuario ${user.uid} obtenido:`, userDoc.exists());
         if (userDoc.exists()) {
-          const restaurantId = userDoc.data().restaurantId;
-          const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
-          if (restaurantDoc.exists()) {
-            setRestaurantData(restaurantDoc.data());
+          const userData = userDoc.data();
+          console.log(`[Layout] Datos de usuario ${user.uid}:`, userData);
+          const restaurantId = userData.restaurantId;
+          console.log(`[Layout] RestaurantId obtenido: ${restaurantId}`);
+          if (restaurantId) {
+            const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
+            console.log(`[Layout] Doc de restaurante ${restaurantId} obtenido:`, restaurantDoc.exists());
+            if (restaurantDoc.exists()) {
+              const data = restaurantDoc.data();
+              setRestaurantData(data);
+              console.log(`[Layout] Datos de restaurante ${restaurantId}:`, data);
+
+              // --- VERIFICACIÓN CRÍTICA Y REDIRECCIÓN ---
+              // Esta lógica se ejecuta inmediatamente después de cargar los datos
+              if (data.setupCompleted === false && location.pathname !== '/setup') {
+                console.log(`[Layout] setupCompleted es FALSE para ${restaurantId}. Redirigiendo a /setup.`);
+                // Usamos navigate con { replace: true } para evitar historial roto
+                navigate('/setup', { replace: true });
+                // Retornamos para evitar que el resto del useEffect se ejecute
+                // y que el componente intente renderizar el Outlet o Dashboard
+                return;
+              } else if (data.setupCompleted === true && location.pathname === '/setup') {
+                 console.log(`[Layout] setupCompleted es TRUE pero se está en /setup. Redirigiendo a /.`);
+                 navigate('/', { replace: true });
+                 return;
+              }
+              // Si setupCompleted es true y no estamos en /setup, continuamos normalmente
+              // --------------------------------------------
+            } else {
+              console.error(`[Layout] Documento de restaurante ${restaurantId} no encontrado.`);
+            }
+          } else {
+            console.error(`[Layout] No se encontró restaurantId en el doc de usuario ${user.uid}.`);
           }
+        } else {
+          console.error(`[Layout] Documento de usuario ${user.uid} no encontrado.`);
         }
       } catch (error) {
-        console.error("Error obteniendo datos del restaurante:", error);
+        console.error("[Layout] Error obteniendo datos del restaurante:", error);
       } finally {
         setLoadingRestaurant(false);
       }
     };
 
     fetchRestaurantData();
-  }, [user]);
+  }, [user, navigate, location]); // Dependencias críticas
 
   const handleLogout = async () => {
     try {
@@ -51,16 +85,14 @@ export default function Layout() {
 
   const isActive = (path) => location.pathname === path;
 
-  // Definir las rutas del menú
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: '📊' },
     { path: '/menu', label: 'Menú', icon: '📋' },
     { path: '/orders', label: 'Pedidos', icon: '🛒' },
     { path: '/config/messages', label: 'Mensajes', icon: '💬' },
-    { path: '/setup', label: 'Configurar', icon: '⚙️' }, // Accesible si setup no está completo
+    { path: '/setup', label: 'Configurar', icon: '⚙️' },
   ];
 
-  // Filtrar 'Configurar' si el setup ya está completo
   const filteredMenuItems = menuItems.filter(item => {
     if (item.path === '/setup' && restaurantData?.setupCompleted) {
       return false;
@@ -68,7 +100,8 @@ export default function Layout() {
     return true;
   });
 
-  if (loadingRestaurant) {
+  // Mostrar un spinner si está cargando autenticación O restaurantData (y hay un usuario)
+  if (loadingAuth || (user && loadingRestaurant)) {
     return (
       <div className="min-h-screen bg-base-100 flex items-center justify-center">
         <span className="loading loading-spinner loading-lg"></span>
@@ -76,6 +109,12 @@ export default function Layout() {
     );
   }
 
+  // Si no hay usuario (después de cargar), redirigir al login
+  if (!user) {
+    return <div>Redirigiendo...</div>; // O manejar con ProtectedRoute
+  }
+
+  // El resto del JSX del Layout va aquí
   return (
     <div className="min-h-screen bg-base-100 flex flex-col lg:flex-row">
       {/* Botón para abrir el sidebar en móvil */}
@@ -120,8 +159,7 @@ export default function Layout() {
                   setSidebarOpen(false); // Cierra el sidebar en móvil después de hacer clic
                 }}
               >
-                <span className="mr-3">{item.icon}</span>
-                {item.label}
+                <span className="mr-3">{item.icon}</span> {item.label}
               </a>
             ))}
             <a
@@ -146,6 +184,7 @@ export default function Layout() {
       <div className="flex-1 flex flex-col min-w-0">
         <main className="flex-1 pb-8">
           <div className="px-4 sm:px-6 lg:px-8">
+            {/* Outlet renderiza Dashboard o cualquier otra página hija de / */}
             <Outlet />
           </div>
         </main>

@@ -1,3 +1,4 @@
+// frontend-pwa/src/components/Login.jsx
 import { useState } from 'react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../config/firebase';
@@ -9,36 +10,88 @@ export default function Login({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      let userCredential;
-      if (isLogin) {
-        userCredential = await signInWithEmailAndPassword(auth, email, password);
-      } else {
-        userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      }
-      onLogin(userCredential.user);
-    } catch (err) {
-      let errorMessage = 'Ocurrió un error.';
-      if (err.code === 'auth/user-not-found') {
-        errorMessage = 'No se encontró una cuenta con ese email.';
-      } else if (err.code === 'auth/wrong-password') {
-        errorMessage = 'La contraseña es incorrecta.';
-      } else if (err.code === 'auth/email-already-in-use') {
-        errorMessage = 'Ya existe una cuenta con ese email.';
-      } else if (err.code === 'auth/invalid-credential') {
-        errorMessage = 'Credenciales inválidas.';
-      } else if (err.code === 'auth/weak-password') {
-        errorMessage = 'La contraseña es muy débil.';
-      }
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
+  setError('');
+  try {
+    let userCredential;
+    if (isLogin) {
+      userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log("[Login] Inicio de sesión para UID:", userCredential.user.uid);
+    } else {
+      // Registro
+      userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      console.log("[Login] Registro exitoso para UID:", userCredential.user.uid);
+      // No necesitamos hacer nada más aquí, onLogin se encargará de asegurar el perfil
     }
-  };
+
+    // --- MOVEMOS LA LÓGICA DE ensure-profile AQUÍ, FUERA DEL IF ---
+    // Esta lógica se ejecutará tanto para login como para registro.
+    try {
+      console.log("[Login] Intentando asegurar perfil para UID:", userCredential.user.uid);
+      // Breve espera para sincronización
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const currentUser = auth.currentUser;
+      if (!currentUser || currentUser.uid !== userCredential.user.uid) {
+        throw new Error("[Login] auth.currentUser no coincide después de la operación.");
+      }
+
+      const token = await currentUser.getIdToken();
+      if (!token) throw new Error("[Login] No se pudo obtener el token.");
+
+      const apiUrl = import.meta.env.VITE_API_BASE_URL;
+      if (!apiUrl) throw new Error("[Login] VITE_API_BASE_URL no definida.");
+
+      const ensureProfileUrl = `${apiUrl}/auth/ensure-profile`;
+      console.log("[Login] Llamando a ensure-profile:", ensureProfileUrl);
+
+      const response = await fetch(ensureProfileUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("[Login] Error HTTP en ensure-profile:", response.status, errorText);
+        // Opcional: setError("Hubo un problema al configurar tu cuenta.");
+      } else {
+        const data = await response.json();
+        console.log("[Login] Respuesta de ensure-profile:", data);
+      }
+    } catch (apiError) {
+      console.error("[Login] Error al asegurar perfil:", apiError);
+      // Opcional: setError("Error al configurar tu cuenta.");
+    } finally {
+      console.log("[Login] Llamada a ensure-profile finalizada. Procediendo a onLogin.");
+      // Llamar a onLogin DESPUÉS de intentar asegurar el perfil
+      onLogin(userCredential.user);
+    }
+    // ---------------------------------------------------------------
+
+  } catch (err) {
+    console.error("[Login] Error de autenticación:", err);
+    let errorMessage = 'Ocurrió un error.';
+    if (err.code === 'auth/user-not-found') {
+      errorMessage = 'No se encontró una cuenta con ese email.';
+    } else if (err.code === 'auth/wrong-password') {
+      errorMessage = 'La contraseña es incorrecta.';
+    } else if (err.code === 'auth/email-already-in-use') {
+      errorMessage = 'Ya existe una cuenta con ese email.';
+    } else if (err.code === 'auth/invalid-credential') {
+      errorMessage = 'Credenciales inválidas.';
+    } else if (err.code === 'auth/weak-password') {
+      errorMessage = 'La contraseña es muy débil.';
+    }
+    setError(errorMessage);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-neutral flex items-center justify-center p-4">

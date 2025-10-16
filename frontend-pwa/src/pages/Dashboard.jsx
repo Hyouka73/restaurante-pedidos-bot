@@ -1,11 +1,13 @@
+// frontend-pwa/src/pages/Dashboard.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from '../config/firebase';
+import { signOut } from 'firebase/auth';
 import { doc, getDoc, collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
 
 export default function Dashboard() {
-  const [user] = useAuthState(auth);
+  const [user, loadingAuth] = useAuthState(auth);
   const navigate = useNavigate();
   const [restaurantData, setRestaurantData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -18,58 +20,61 @@ export default function Dashboard() {
   const [recentOrders, setRecentOrders] = useState([]);
 
   useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
     const fetchData = async () => {
+      if (!user) {
+        console.log("[Dashboard] No hay usuario autenticado, no se cargan datos.");
+        setLoading(false);
+        return;
+      }
+
       try {
-        // Obtener restaurantId del usuario
+        console.log("[Dashboard] Usuario autenticado, obteniendo restaurantId...");
         const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (!userDoc.exists()) {
-          console.error("Usuario no encontrado en Firestore.");
-          setLoading(false);
-          return;
+        console.log("[Dashboard] Doc de usuario obtenido:", userDoc.exists());
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          console.log("[Dashboard] Datos de usuario:", userData);
+          const restaurantId = userData.restaurantId;
+          console.log("[Dashboard] RestaurantId obtenido:", restaurantId);
+          if (restaurantId) {
+            const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
+            if (restaurantDoc.exists()) {
+              setRestaurantData(restaurantDoc.data());
+            }
+
+            const ordersQuery = query(
+              collection(db, 'restaurants', restaurantId, 'orders'),
+              orderBy('createdAt', 'desc')
+            );
+            const ordersSnapshot = await getDocs(ordersQuery);
+            const ordersList = [];
+            let totalRevenue = 0;
+            let pendingCount = 0;
+
+            ordersSnapshot.forEach((doc) => {
+              const data = doc.data();
+              ordersList.push({ id: doc.id, ...data });
+              totalRevenue += data.total || 0;
+              if (data.status === 'pending') pendingCount++;
+            });
+
+            setRecentOrders(ordersList.slice(0, 5));
+
+            const totalOrders = ordersList.length;
+            const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : 0;
+
+            setMetrics({
+              totalOrders,
+              pendingOrders: pendingCount,
+              revenue: totalRevenue.toFixed(2),
+              avgOrderValue
+            });
+          } else {
+            console.error("[Dashboard] No se encontró restaurantId en el doc de usuario para UID:", user.uid);
+          }
+        } else {
+          console.error("[Dashboard] Documento de usuario no encontrado para UID:", user.uid);
         }
-        const restaurantId = userDoc.data().restaurantId;
-
-        // Obtener datos del restaurante
-        const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
-        if (restaurantDoc.exists()) {
-          setRestaurantData(restaurantDoc.data());
-        }
-
-        // Obtener pedidos recientes (últimos 5)
-        const ordersQuery = query(
-          collection(db, 'restaurants', restaurantId, 'orders'),
-          orderBy('createdAt', 'desc')
-        );
-        const ordersSnapshot = await getDocs(ordersQuery);
-        const ordersList = [];
-        let totalRevenue = 0;
-        let pendingCount = 0;
-
-        ordersSnapshot.forEach((doc) => {
-          const data = doc.data();
-          ordersList.push({ id: doc.id, ...data });
-          totalRevenue += data.total || 0;
-          if (data.status === 'pending') pendingCount++;
-        });
-
-        setRecentOrders(ordersList.slice(0, 5)); // Solo los 5 más recientes
-
-        // Calcular métricas
-        const totalOrders = ordersList.length;
-        const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : 0;
-
-        setMetrics({
-          totalOrders,
-          pendingOrders: pendingCount,
-          revenue: totalRevenue.toFixed(2),
-          avgOrderValue
-        });
-
       } catch (error) {
         console.error("Error al cargar datos del dashboard:", error);
       } finally {
@@ -80,7 +85,7 @@ export default function Dashboard() {
     fetchData();
   }, [user, navigate]);
 
-  if (loading) {
+  if (loadingAuth || (user && loading)) {
     return (
       <div className="hero min-h-screen bg-base-200">
         <div className="hero-content text-center">
@@ -88,6 +93,10 @@ export default function Dashboard() {
         </div>
       </div>
     );
+  }
+
+  if (!user) {
+    return <div>Redirigiendo...</div>;
   }
 
   const { totalOrders, pendingOrders, revenue, avgOrderValue } = metrics;
@@ -113,7 +122,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Métricas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="stat bg-base-100 shadow">
           <div className="stat-figure text-primary">
@@ -168,7 +176,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Últimos Pedidos */}
       <div className="card bg-base-100 shadow-xl">
         <div className="card-body">
           <h2 className="card-title">Últimos Pedidos</h2>
@@ -216,7 +223,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Acciones Rápidas */}
       <div className="card bg-base-100 shadow-xl">
         <div className="card-body">
           <h2 className="card-title">Acciones Rápidas</h2>

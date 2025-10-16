@@ -1,9 +1,24 @@
 require('dotenv').config();
+const cors = require('cors');
 const express = require('express');
 const bot = require('./src/config/telegram');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// --- AGREGAR ESTO PARA CONFIGURAR CORS ---
+// Opción 1: Configuración básica y permisiva para desarrollo
+// const corsOptions = {
+//   origin: 'http://localhost:5173', // Solo permitir solicitudes desde el frontend
+//   credentials: true // Permitir el envío de cookies/headers de autenticación
+// };
+// app.use(cors(corsOptions));
+
+// Opción 2: Permitir todos los orígenes (SOLO PARA DESARROLLO!)
+// Usa esta opción si estás probando cosas rápidamente, pero cámbiala antes de producción.
+app.use(cors()); // <-- AGREGAR ESTA LINEA
+
+// --- FIN CONFIGURACIÓN CORS ---
 
 // Middleware
 app.use(express.json());
