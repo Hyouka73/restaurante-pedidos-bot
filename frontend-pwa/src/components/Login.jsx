@@ -20,68 +20,98 @@ export default function Login({ onLogin }) {
       } else {
         userCredential = await createUserWithEmailAndPassword(auth, email, password);
       }
-      onLogin(userCredential.user); // Llama a la función para indicar que se logró el inicio de sesión
+      onLogin(userCredential.user);
     } catch (err) {
-      setError(err.message);
+      let errorMessage = 'Ocurrió un error.';
+      if (err.code === 'auth/user-not-found') {
+        errorMessage = 'No se encontró una cuenta con ese email.';
+      } else if (err.code === 'auth/wrong-password') {
+        errorMessage = 'La contraseña es incorrecta.';
+      } else if (err.code === 'auth/email-already-in-use') {
+        errorMessage = 'Ya existe una cuenta con ese email.';
+      } else if (err.code === 'auth/invalid-credential') {
+        errorMessage = 'Credenciales inválidas.';
+      } else if (err.code === 'auth/weak-password') {
+        errorMessage = 'La contraseña es muy débil.';
+      }
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="hero min-h-screen bg-base-200">
-      <div className="card bg-base-100 w-full max-w-sm shrink-0 shadow-2xl">
-        <div className="card-body">
-          <h2 className="text-2xl font-bold text-center">{isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}</h2>
+    <div className="min-h-screen bg-neutral flex items-center justify-center p-4">
+      <div className="w-full max-w-sm bg-base-300 rounded-xl p-8 shadow-2xl">
+        <h2 className="text-center text-2xl font-bold text-base-content mb-6">
+          {isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}
+        </h2>
 
-          {error && <div className="alert alert-error"><span>{error}</span></div>}
+        {error && (
+          <div className="mb-6 p-3 bg-error/10 border border-error/20 rounded-lg">
+            <p className="text-error text-sm">{error}</p>
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text">Email</span>
-              </label>
-              <input
-                type="email"
-                placeholder="email@ejemplo.com"
-                className="input input-bordered"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text">Contraseña</span>
-              </label>
-              <input
-                type="password"
-                placeholder="contraseña"
-                className="input input-bordered"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="form-control mt-6">
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={loading}
-              >
-                {loading ? 'Cargando...' : (isLogin ? 'Iniciar Sesión' : 'Crear Cuenta')}
-              </button>
-            </div>
-          </form>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-base-content/60 text-sm mb-1">
+              Correo electrónico
+            </label>
+            <input
+              type="email"
+              placeholder="nombre@ejemplo.com"
+              className="w-full bg-base-300 border border-base-content/20 rounded-md px-4 py-3 text-base-content outline-none focus:border-primary transition-colors"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={loading}
+              autoComplete="email"
+            />
+          </div>
 
-          <div className="divider"></div>
-          <p className="text-center">
+          <div>
+            <label className="block text-base-content/60 text-sm mb-1">
+              Contraseña
+            </label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              className="w-full bg-base-300 border border-base-content/20 rounded-md px-4 py-3 text-base-content outline-none focus:border-primary transition-colors"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={loading}
+              autoComplete={isLogin ? 'current-password' : 'new-password'}
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-primary hover:bg-primary/90 text-primary-content font-semibold py-3 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-6"
+            disabled={loading}
+          >
+            {loading ? (
+              <span className="loading loading-spinner loading-sm"></span>
+            ) : (
+              isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'
+            )}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <p className="text-base-content/60 text-sm">
             {isLogin ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}
+            {' '}
             <button
-              className="btn btn-link"
-              onClick={() => setIsLogin(!isLogin)}
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setError('');
+              }}
+              disabled={loading}
+              className="text-base-content hover:underline font-medium"
             >
-              {isLogin ? 'Crear cuenta' : 'Iniciar sesión'}
+              {isLogin ? 'Regístrate' : 'Inicia sesión'}
             </button>
           </p>
         </div>
