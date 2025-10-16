@@ -11,10 +11,10 @@ class ConfigBotService {
             welcome: '¡Hola {nombre}! Bienvenido a {restaurante}',
             menu_intro: 'Este es nuestro menú:',
             ask_delivery: '¿Cómo deseas tu pedido?',
-            order_confirmed: '✅ Pedido #{numero} confirmado. Total: ',
-            order_preparing: '���‍��� Tu pedido está en preparación',
+            order_confirmed: '✅ Pedido #{numero} confirmado. Total: ${total}',
+            order_preparing: '👨‍🍳 Tu pedido está en preparación',
             order_ready: '✅ ¡Tu pedido está listo!',
-            order_delivered: '��� ¡Gracias por tu compra!'
+            order_delivered: '🎉 ¡Gracias por tu compra!'
           },
           info: {
             name: 'Mi Restaurante'

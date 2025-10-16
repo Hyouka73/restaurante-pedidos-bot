@@ -11,8 +11,12 @@ app.use(express.json());
 // Conectar rutas de API
 const configRoutes = require('./src/api/routes/config');
 const authRoutes = require('./src/api/routes/auth');
+const menuRoutes = require('./src/api/routes/menu'); // Nuevo
+const ordersRoutes = require('./src/api/routes/orders'); // Nuevo
 app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/menu', menuRoutes); // Nuevo
+app.use('/api/orders', ordersRoutes); // Nuevo
 
 // Health check
 app.get('/health', (req, res) => {
