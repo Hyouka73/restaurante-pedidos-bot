@@ -1,0 +1,185 @@
+[33mcommit 8a702d0f4f75543a5d240895a28f94e3c9850a9d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Mon Oct 20 23:13:41 2025 -0600
+
+    feat(frontend): implement comprehensive setup wizard and core admin UI
+    
+    - Add SetupWizard with 4-step flow for initial restaurant configuration
+    - Integrate MapSelectorModal for location picking
+    - Add Telegram bot token field to setup
+    - Create reusable WizardComponents (Tooltip, ProgressBar, StepIndicator, InputField, etc.)
+    - Implement Layout with sidebar navigation and setup-based redirects
+    - Add Dashboard with initial metrics and quick actions
+    - Add MenuManager for menu item CRUD
+    - Add OrdersManager for order tracking and status updates
+    - Improve overall UX with animations, validation, and styled toasts
+    - Fix common React issues (controlled inputs, state management)
+
+[33mcommit 963e183159d209e740e688002724abfb03e41d07[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Thu Oct 16 00:31:11 2025 -0600
+
+    feat(auth): implement full user registration and initial setup flow
+    
+    - frontend-pwa:
+      - Enhance Login.jsx to call backend's /auth/ensure-profile on login/registration.
+      - Fix Login handleSubmit to wait for profile assurance before proceeding.
+      - Strengthen Layout.jsx redirection logic based on restaurant.setupCompleted.
+      - Add detailed logging for debugging auth flow.
+    
+    - backend:
+      - Configure CORS correctly for frontend-backend communication.
+      - Refactor auth middleware: split verifyFirebaseToken (JWT only) from verifyTokenAndProfile (JWT + Firestore doc).
+      - Implement and connect POST /api/auth/ensure-profile route to create user/restaurant docs if missing.
+      - Ensure backend calls authService.createUserWithRestaurant correctly.
+      - Add logging to auth routes for easier debugging.
+
+[33mcommit 41e9f4fad3cec1d9998c2db88893ec67b7cbc4b8[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 23:06:25 2025 -0600
+
+    feat(frontend): update postcss config for Tailwind v4 and enhance login UI
+
+[33mcommit afb67e843b1a65da2d9c5823d65448ff5c68780e[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 22:14:46 2025 -0600
+
+    feat(backend, frontend): integrate core services and resolve dependency issues for Etapa 1 MVP
+
+[33mcommit 3c9dee46c4c5788f2b682d6159fef8c6a0abe4f9[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 22:13:52 2025 -0600
+
+    fix(backend): add missing service files for start handler
+
+[33mcommit e024469b942e74a08f4a19d070a0651c39052de3[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 21:57:54 2025 -0600
+
+    feat(frontend): add ImageItemUpload component for Firebase Storage
+
+[33mcommit 4fe66d4298c244a5e5634bd25e6a29f25e6735cc[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 21:56:56 2025 -0600
+
+    feat(frontend): add MenuEditor component
+
+[33mcommit bed7c6915ca3e2622c955554366f7303a3ef7025[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 21:56:09 2025 -0600
+
+    feat(frontend): add OrderDetail component with status update
+
+[33mcommit ec566c37285826c3bbd384025a73d9c47295c545[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 21:54:54 2025 -0600
+
+    feat(frontend): add OrderCard component
+
+[33mcommit b750a758beeba9341f31d8947f5c52c79d580b35[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 21:53:38 2025 -0600
+
+    feat(frontend): add ProtectedRoute component using context
+
+[33mcommit ee6512ef1d6f8b3a2f705aba8afce7fc717f5f5e[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 21:52:59 2025 -0600
+
+    feat(frontend): add RestaurantContext for global state
+
+[33mcommit 140117a4b284012cd1ef5e77bbaabad50e959235[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 21:51:28 2025 -0600
+
+    feat(frontend): add ConfigNotifications page
+
+[33mcommit e86d1e395b243877aabf4dfbf21bffc8a2e364bf[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 21:50:06 2025 -0600
+
+    feat(frontend): add ConfigCommands page
+
+[33mcommit 26c10a7c73dca7731787f2ac43b821eecae21b1e[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 21:49:00 2025 -0600
+
+    feat(frontend): add ConfigAvailability page with manual status control
+
+[33mcommit 6284741e7dc3b6ccaf2ed49673d31f8fb4ee4078[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 19:57:47 2025 -0600
+
+    feat(frontend): add ConfigDelivery page
+
+[33mcommit 9ecd11b38b7897448682856c813f2e0c3dc86900[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 19:56:09 2025 -0600
+
+    feat(frontend): add ConfigGeneral page with API integration
+
+[33mcommit 0031bcdfa7aadf18aac74d51cc4cd7eb53cacae1[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 19:54:56 2025 -0600
+
+    feat(frontend): update api service with auth headers
+
+[33mcommit 1953087fa28eeac6de5bf3d18f40ba81b4994a2b[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 19:51:36 2025 -0600
+
+    feat(backend): add auth API routes with link-telegram-token endpoint
+
+[33mcommit ce5487f2df407c2f18fd4b7fe78a1921135733c9[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 19:49:57 2025 -0600
+
+    feat(backend): add config API routes with auth check
+
+[33mcommit 7ec9a7b3691968c133004b63ddcc13cdae9970d7[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 19:44:08 2025 -0600
+
+    feat(backend): add telegram config file
+
+[33mcommit 65e391cd0fd815417b62a98c8d4f4f1c8b0acee2[m[33m ([m[1;31morigin/main[m[33m)[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 15:56:49 2025 -0600
+
+    feat: flujo de menú y pedidos con botones inline y manejo de sesión
+
+[33mcommit 138b3aae5b77338cbdb2455102c9ba2a93e7937d[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 01:28:29 2025 -0600
+
+    feat: componente de login con Firebase Auth y manejo de estado global
+
+[33mcommit 360c21a759fbd50e6b9170e9ae5cc86fab0a687e[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 01:19:04 2025 -0600
+
+    feat: módulo de autenticación y servicios para bot con mensajes dinámicos
+
+[33mcommit e5ef006f1796a344324bef4d745a9cbf33c70878[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 01:10:23 2025 -0600
+
+    feat: backend - servicio y API para configurar mensajes del bot
+
+[33mcommit fe5c6430767329afb477d8c04ee78f3753c73e22[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 01:08:35 2025 -0600
+
+    feat: frontend base con Tailwind, layout y páginas de dashboard/config
+
+[33mcommit f4b5b1f206aee782f07e2667fcb03a027424e71b[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 00:32:58 2025 -0600
+
+    feat: backend base con bot de Telegram funcionando
+
+[33mcommit ed32069705b8402755d9db82deebcc615dd8bb0e[m
+Author: carlosIglesias73 <carlos.iglesias48@unach.mx>
+Date:   Wed Oct 15 00:09:04 2025 -0600
+
+    feat: initial project structure
