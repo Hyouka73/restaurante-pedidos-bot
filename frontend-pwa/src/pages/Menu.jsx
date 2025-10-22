@@ -1,8 +1,8 @@
 // frontend-pwa/src/pages/Menu.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAuth } from 'firebase/auth';
-import { doc, getDoc, collection, addDoc, updateDoc, deleteDoc, query, where, getDocs } from 'firebase/firestore';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAlert } from '../components/ui/CustomAlert';
 import { ButtonLoader } from '../components/ui/Loader';
@@ -12,6 +12,7 @@ import MenuItemForm from '../components/menu/MenuItemForm';
 import MenuComboForm from '../components/menu/MenuComboForm';
 import MenuItemCard from '../components/menu/MenuItemCard';
 import MenuComboCard from '../components/menu/MenuComboCard';
+import { api } from '../services/api'; // Asegúrate de tener este archivo de configuración para las llamadas API
 
 const Menu = () => {
   const [loading, setLoading] = useState(true);
@@ -24,6 +25,7 @@ const Menu = () => {
   const [editingCombo, setEditingCombo] = useState(null);
   const [showItemForm, setShowItemForm] = useState(false);
   const [showComboForm, setShowComboForm] = useState(false);
+  const [restaurantId, setRestaurantId] = useState(null);
 
   const [newItem, setNewItem] = useState({
     name: '',
@@ -53,8 +55,8 @@ const Menu = () => {
   const auth = getAuth();
 
   useEffect(() => {
-    const fetchMenu = async () => {
-      if (!auth.currentUser) {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
         navigate('/login');
         return;
       }
@@ -64,24 +66,21 @@ const Menu = () => {
         setError('');
 
         // Obtener restaurantId del usuario
-        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (!userDoc.exists()) {
           setError('Usuario no encontrado.');
           return;
         }
-        const restaurantId = userDoc.data().restaurantId;
+        const userRestaurantId = userDoc.data().restaurantId;
+        setRestaurantId(userRestaurantId); // Guardar el ID para usarlo en las llamadas API
 
-        // Obtener items del menú
-        const itemsQuery = query(collection(db, 'restaurants', restaurantId, 'menu', 'items'));
-        const itemsSnapshot = await getDocs(itemsQuery);
-        const itemsList = itemsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setItems(itemsList);
+        // Obtener items del menú desde el backend
+        const itemsResponse = await api.get(`/menu/${userRestaurantId}/items`);
+        setItems(itemsResponse.data);
 
-        // Obtener combos del menú
-        const combosQuery = query(collection(db, 'restaurants', restaurantId, 'menu', 'combos'));
-        const combosSnapshot = await getDocs(combosQuery);
-        const combosList = combosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setCombos(combosList);
+        // Obtener combos del menú desde el backend
+        const combosResponse = await api.get(`/menu/${userRestaurantId}/combos`);
+        setCombos(combosResponse.data);
 
       } catch (err) {
         console.error("Error al cargar el menú:", err);
@@ -89,16 +88,14 @@ const Menu = () => {
       } finally {
         setLoading(false);
       }
-    };
+    });
 
-    fetchMenu();
-  }, [auth, navigate]); // Dependencias limpias
+    return () => unsubscribe(); // Cleanup para evitar fugas de memoria
+  }, [auth, navigate]);
 
   // Funciones para Items
   const handleAddItem = async () => {
-    if (!auth.currentUser) return;
-    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-    const restaurantId = userDoc.data().restaurantId;
+    if (!restaurantId) return; // Asegurar que tenemos el ID
 
     if (!newItem.name.trim() || !newItem.price) {
       showAlert('Nombre y precio son obligatorios.', 'warning', 3000);
@@ -113,11 +110,9 @@ const Menu = () => {
         prepTime: parseInt(newItem.prepTime) || 5,
         complexity: parseInt(newItem.complexity) || 1,
         order: parseInt(newItem.order) || 1,
-        createdAt: new Date(),
-        updatedAt: new Date()
       };
 
-      await addDoc(collection(db, 'restaurants', restaurantId, 'menu', 'items'), itemData);
+      await api.post(`/menu/${restaurantId}/items`, itemData); // Nueva ruta
       showAlert('Item agregado exitosamente.', 'success', 2000);
       setNewItem({
         name: '',
@@ -133,7 +128,7 @@ const Menu = () => {
       setShowItemForm(false);
     } catch (err) {
       console.error("Error al agregar item:", err);
-      setError('Error al agregar item: ' + err.message);
+      setError('Error al agregar item: ' + err.response?.data?.error || err.message); // Captura el error del backend
       showAlert('Error al agregar item.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -141,9 +136,7 @@ const Menu = () => {
   };
 
   const handleUpdateItem = async () => {
-    if (!auth.currentUser || !editingItem) return;
-    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-    const restaurantId = userDoc.data().restaurantId;
+    if (!restaurantId || !editingItem) return; // Asegurar que tenemos el ID y el item a editar
 
     if (!editingItem.name.trim() || !editingItem.price) {
       showAlert('Nombre y precio son obligatorios.', 'warning', 3000);
@@ -152,22 +145,22 @@ const Menu = () => {
 
     setSaving(true);
     try {
-      const itemRef = doc(db, 'restaurants', restaurantId, 'menu', 'items', editingItem.id);
       const itemData = {
         ...editingItem,
         price: parseFloat(editingItem.price),
         prepTime: parseInt(editingItem.prepTime) || 5,
         complexity: parseInt(editingItem.complexity) || 1,
         order: parseInt(editingItem.order) || 1,
-        updatedAt: new Date()
       };
 
-      await updateDoc(itemRef, itemData);
+      await api.put(`/menu/${restaurantId}/items/${editingItem.id}`, itemData); // Nueva ruta
       showAlert('Item actualizado exitosamente.', 'success', 2000);
+      // Actualizar localmente
+      setItems(prev => prev.map(item => item.id === editingItem.id ? { ...itemData, id: editingItem.id } : item));
       setEditingItem(null);
     } catch (err) {
       console.error("Error al actualizar item:", err);
-      setError('Error al actualizar item: ' + err.message);
+      setError('Error al actualizar item: ' + err.response?.data?.error || err.message); // Captura el error del backend
       showAlert('Error al actualizar item.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -175,18 +168,16 @@ const Menu = () => {
   };
 
   const handleDeleteItem = async (itemId) => {
-    if (!auth.currentUser || !window.confirm('¿Estás seguro de eliminar este item?')) return;
-    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-    const restaurantId = userDoc.data().restaurantId;
+    if (!restaurantId || !window.confirm('¿Estás seguro de eliminar este item?')) return;
 
     setSaving(true);
     try {
-      await deleteDoc(doc(db, 'restaurants', restaurantId, 'menu', 'items', itemId));
+      await api.delete(`/menu/${restaurantId}/items/${itemId}`); // Nueva ruta
       showAlert('Item eliminado exitosamente.', 'success', 2000);
       setItems(prev => prev.filter(item => item.id !== itemId));
     } catch (err) {
       console.error("Error al eliminar item:", err);
-      setError('Error al eliminar item: ' + err.message);
+      setError('Error al eliminar item: ' + err.response?.data?.error || err.message); // Captura el error del backend
       showAlert('Error al eliminar item.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -195,27 +186,32 @@ const Menu = () => {
 
   // Funciones para Combos
   const handleAddCombo = async () => {
-    if (!auth.currentUser) return;
-    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-    const restaurantId = userDoc.data().restaurantId;
+    if (!restaurantId) return; // Asegurar que tenemos el ID
 
-    if (!newCombo.name.trim() || !newCombo.price || newCombo.items.length === 0) {
-      showAlert('Nombre, precio y al menos un item son obligatorios para el combo.', 'warning', 3000);
+    if (!newCombo.name.trim() || newCombo.items.length === 0) { // Ajustar validación según backend
+      showAlert('Nombre y al menos un item son obligatorios para el combo.', 'warning', 3000);
       return;
     }
 
     setSaving(true);
     try {
+      // Calcular precio si es necesario antes de enviar
+      let finalPrice = newCombo.price;
+      if (newCombo.useItemPrices) {
+          const itemPrices = items.filter(item => newCombo.items.includes(item.id)).map(item => item.price);
+          finalPrice = itemPrices.reduce((sum, price) => sum + price, 0).toFixed(2);
+      } else {
+          finalPrice = parseFloat(newCombo.price);
+      }
+
       const comboData = {
         ...newCombo,
-        price: parseFloat(newCombo.price),
+        price: parseFloat(finalPrice), // Siempre enviar como número
         items: newCombo.items, // Lista de IDs
         order: parseInt(newCombo.order) || 1,
-        createdAt: new Date(),
-        updatedAt: new Date()
       };
 
-      await addDoc(collection(db, 'restaurants', restaurantId, 'menu', 'combos'), comboData);
+      await api.post(`/menu/${restaurantId}/combos`, comboData); // Nueva ruta
       showAlert('Combo agregado exitosamente.', 'success', 2000);
       setNewCombo({
         name: '',
@@ -230,7 +226,7 @@ const Menu = () => {
       setShowComboForm(false);
     } catch (err) {
       console.error("Error al agregar combo:", err);
-      setError('Error al agregar combo: ' + err.message);
+      setError('Error al agregar combo: ' + err.response?.data?.error || err.message); // Captura el error del backend
       showAlert('Error al agregar combo.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -238,9 +234,7 @@ const Menu = () => {
   };
 
   const handleUpdateCombo = async () => {
-    if (!auth.currentUser || !editingCombo) return;
-    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-    const restaurantId = userDoc.data().restaurantId;
+    if (!restaurantId || !editingCombo) return; // Asegurar que tenemos el ID y el combo a editar
 
     if (!editingCombo.name.trim() || editingCombo.items.length === 0) {
       showAlert('Nombre y al menos un item son obligatorios para el combo.', 'warning', 3000);
@@ -249,7 +243,6 @@ const Menu = () => {
 
     setSaving(true);
     try {
-      const comboRef = doc(db, 'restaurants', restaurantId, 'menu', 'combos', editingCombo.id);
       let finalPrice = editingCombo.price;
       if (editingCombo.useItemPrices) {
           const itemPrices = items.filter(item => editingCombo.items.includes(item.id)).map(item => item.price);
@@ -260,18 +253,19 @@ const Menu = () => {
 
       const comboData = {
         ...editingCombo,
-        price: finalPrice,
+        price: parseFloat(finalPrice), // Siempre enviar como número
         items: editingCombo.items,
         order: parseInt(editingCombo.order) || 1,
-        updatedAt: new Date()
       };
 
-      await updateDoc(comboRef, comboData);
+      await api.put(`/menu/${restaurantId}/combos/${editingCombo.id}`, comboData); // Nueva ruta
       showAlert('Combo actualizado exitosamente.', 'success', 2000);
+      // Actualizar localmente
+      setCombos(prev => prev.map(combo => combo.id === editingCombo.id ? { ...comboData, id: editingCombo.id } : combo));
       setEditingCombo(null);
     } catch (err) {
       console.error("Error al actualizar combo:", err);
-      setError('Error al actualizar combo: ' + err.message);
+      setError('Error al actualizar combo: ' + err.response?.data?.error || err.message); // Captura el error del backend
       showAlert('Error al actualizar combo.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -279,18 +273,16 @@ const Menu = () => {
   };
 
   const handleDeleteCombo = async (comboId) => {
-    if (!auth.currentUser || !window.confirm('¿Estás seguro de eliminar este combo?')) return;
-    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-    const restaurantId = userDoc.data().restaurantId;
+    if (!restaurantId || !window.confirm('¿Estás seguro de eliminar este combo?')) return;
 
     setSaving(true);
     try {
-      await deleteDoc(doc(db, 'restaurants', restaurantId, 'menu', 'combos', comboId));
+      await api.delete(`/menu/${restaurantId}/combos/${comboId}`); // Nueva ruta
       showAlert('Combo eliminado exitosamente.', 'success', 2000);
       setCombos(prev => prev.filter(combo => combo.id !== comboId));
     } catch (err) {
       console.error("Error al eliminar combo:", err);
-      setError('Error al eliminar combo: ' + err.message);
+      setError('Error al eliminar combo: ' + err.response?.data?.error || err.message); // Captura el error del backend
       showAlert('Error al eliminar combo.', 'error', 4000);
     } finally {
       setSaving(false);
