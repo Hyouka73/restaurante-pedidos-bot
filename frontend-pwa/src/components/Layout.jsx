@@ -16,40 +16,31 @@ export default function Layout() {
 
   useEffect(() => {
     const fetchRestaurantData = async () => {
-      if (!user) {
-        console.log("[Layout] No hay usuario autenticado.");
+      if (!user) {       
         setLoadingRestaurant(false);
         return;
       }
 
       try {
-        console.log(`[Layout] Usuario ${user.uid} autenticado, obteniendo datos...`);
         const userDoc = await getDoc(doc(db, 'users', user.uid));
-        console.log(`[Layout] Doc de usuario ${user.uid} obtenido:`, userDoc.exists());
         if (userDoc.exists()) {
           const userData = userDoc.data();
-          console.log(`[Layout] Datos de usuario ${user.uid}:`, userData);
           const restaurantId = userData.restaurantId;
-          console.log(`[Layout] RestaurantId obtenido: ${restaurantId}`);
           if (restaurantId) {
             const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
-            console.log(`[Layout] Doc de restaurante ${restaurantId} obtenido:`, restaurantDoc.exists());
             if (restaurantDoc.exists()) {
               const data = restaurantDoc.data();
               setRestaurantData(data);
-              console.log(`[Layout] Datos de restaurante ${restaurantId}:`, data);
 
               // --- VERIFICACIÓN CRÍTICA Y REDIRECCIÓN ---
               // Esta lógica se ejecuta inmediatamente después de cargar los datos
               if (data.setupCompleted === false && location.pathname !== '/setup') {
-                console.log(`[Layout] setupCompleted es FALSE para ${restaurantId}. Redirigiendo a /setup.`);
                 // Usamos navigate con { replace: true } para evitar historial roto
                 navigate('/setup', { replace: true });
                 // Retornamos para evitar que el resto del useEffect se ejecute
                 // y que el componente intente renderizar el Outlet o Dashboard
                 return;
               } else if (data.setupCompleted === true && location.pathname === '/setup') {
-                 console.log(`[Layout] setupCompleted es TRUE pero se está en /setup. Redirigiendo a /.`);
                  navigate('/', { replace: true });
                  return;
               }

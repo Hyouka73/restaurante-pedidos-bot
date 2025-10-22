@@ -1,63 +1,37 @@
-// frontend-pwa/src/components/ui/WizardComponents.jsx
 import { motion } from 'framer-motion';
 import { Info, Check, X, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 
 // --- Componente Tooltip ---
-
 export const WizardTooltip = ({ text, children, id, className = "" }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [tooltipStyle, setTooltipStyle] = useState({});
-
-  const showTooltip = (e) => {
-    setIsVisible(true);
-    // Calcular posición basada en la ventana
-    const rect = e.currentTarget.getBoundingClientRect();
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-    
-    setTooltipStyle({
-      position: 'fixed', // Usar fixed para evitar recortes
-      top: `${rect.bottom + scrollTop + 5}px`, // 5px de margen debajo del elemento
-      left: `${rect.left + scrollLeft + rect.width / 2}px`, // Centrado horizontalmente
-      transform: 'translateX(-50%)', // Centrado
-      zIndex: 50, // Asegurar que esté por encima
-    });
-  };
-
-  const hideTooltip = () => {
-    setIsVisible(false);
-  };
 
   return (
     <div className={`relative inline-block ${className}`}>
       <div
-        onMouseEnter={showTooltip}
-        onMouseLeave={hideTooltip}
-        onClick={showTooltip}
+        onMouseEnter={() => setIsVisible(true)}
+        onMouseLeave={() => setIsVisible(false)}
+        onClick={() => setIsVisible(!isVisible)}
         className="cursor-pointer"
       >
         {children}
       </div>
       {isVisible && (
         <>
-          {/* Overlay para cerrar al hacer clic fuera (opcional, mejora UX táctil) */}
           <div
             className="fixed inset-0 z-40"
-            onClick={hideTooltip}
-          ></div>
+            onClick={() => setIsVisible(false)}
+          />
           <motion.div
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 5 }}
             transition={{ duration: 0.2 }}
-            className="absolute p-3 text-xs text-white bg-[#ff7f50] rounded-lg shadow-lg w-64" // w-64 para ancho fijo
-            style={tooltipStyle} // Aplicar estilo calculado
+            className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 p-3 text-xs text-white bg-[#ff7f50] rounded-lg shadow-2xl w-64 z-50"
           >
             <div className="relative">
               {text}
-              {/* Triángulo */}
-              <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-8 border-transparent border-t-[#ff7f50]"></div>
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-8 border-transparent border-t-[#ff7f50]" />
             </div>
           </motion.div>
         </>
@@ -68,9 +42,9 @@ export const WizardTooltip = ({ text, children, id, className = "" }) => {
 
 // --- Componente ProgressBar ---
 export const WizardProgressBar = ({ current, total }) => (
-  <div className="w-full h-2 bg-[#ffe4c4]/50 rounded-full overflow-hidden mb-6">
+  <div className="w-full h-3 bg-white/80 rounded-full overflow-hidden mb-6 shadow-inner border border-[#ffe4c4]">
     <motion.div
-      className="h-full bg-gradient-to-r from-[#ffae91] to-[#ff7f50]"
+      className="h-full bg-gradient-to-r from-[#ffae91] via-[#ff7f50] to-[#ff6347] shadow-lg"
       initial={{ width: "0%" }}
       animate={{ width: `${(current / total) * 100}%` }}
       transition={{ duration: 0.5, ease: "easeInOut" }}
@@ -78,167 +52,316 @@ export const WizardProgressBar = ({ current, total }) => (
   </div>
 );
 
-// --- Componente StepIndicator ---
-export const WizardStepIndicator = ({ steps, currentStep, onStepClick = null }) => (
-  <div className="hidden sm:flex justify-center gap-3 mb-6">
-    {steps.map((_, index) => {
-      const stepNumber = index + 1;
-      let classes = "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ";
-      if (stepNumber === currentStep) {
-        classes += "bg-gradient-to-r from-[#ffae91] to-[#ff7f50] text-white scale-110 ring-2 ring-[#ff7f50] ring-offset-2";
-      } else if (stepNumber < currentStep) {
-        classes += "bg-gradient-to-r from-[#ffae91]/75 to-[#ff7f50]/75 text-white";
-      } else {
-        classes += "bg-[#ffe4c4] text-[#ff7f50] border border-[#ffb9a0]";
-      }
-      return (
-        <motion.div
-          key={stepNumber}
-          className={classes}
-          whileHover={onStepClick ? { scale: 1.1 } : {}}
-          whileTap={onStepClick ? { scale: 0.95 } : {}}
-          onClick={onStepClick ? () => onStepClick(stepNumber) : undefined}
-        >
-          {stepNumber < currentStep ? <Check size={16} /> : stepNumber}
-        </motion.div>
-      );
-    })}
-  </div>
-);
-
-// --- Componente MiniDots ---
-export const WizardMiniDots = ({ steps, currentStep }) => (
-  <div className="flex justify-center items-center gap-1 flex-1">
-    {steps.map((_, index) => {
-      const stepNumber = index + 1;
-      let dotClasses = "w-2 h-2 rounded-full transition-all duration-300 ";
-      if (stepNumber === currentStep) {
-        dotClasses += "w-6 bg-gradient-to-r from-[#ffae91] to-[#ff7f50] rounded";
-      } else if (stepNumber < currentStep) {
-        dotClasses += "bg-gradient-to-r from-[#ffae91]/75 to-[#ff7f50]/75";
-      } else {
-        dotClasses += "bg-[#ffe4c4]";
-      }
-      return <motion.div key={stepNumber} className={dotClasses} layoutId="wizard-step-dot" />;
-    })}
-  </div>
-);
-
 // --- Componente SectionHeader ---
-export const WizardSectionHeader = ({ icon: Icon, title }) => (
-  <div className="flex items-center gap-3 pb-3 mb-5 border-b border-[#ffb9a0]">
-    <div className="w-10 h-10 bg-gradient-to-br from-[#ffae91]/30 to-[#ff7f50]/30 rounded-lg flex items-center justify-center text-[#ff7f50]">
-      <Icon size={20} />
+export const WizardSectionHeader = ({ icon: Icon, title, subtitle }) => (
+  <div className="mb-6">
+    <div className="flex items-center gap-3 pb-4">
+      <div className="w-12 h-12 bg-gradient-to-br from-[#ff7f50] to-[#ff6347] rounded-xl flex items-center justify-center text-white shadow-lg">
+        <Icon size={24} />
+      </div>
+      <div>
+        <h3 className="text-2xl font-bold text-[#ff7f50]">{title}</h3>
+        {subtitle && <p className="text-sm text-gray-600 mt-1">{subtitle}</p>}
+      </div>
     </div>
-    <h3 className="text-xl font-bold text-[#ff7f50]">{title}</h3>
+    <div className="h-1 w-full bg-gradient-to-r from-[#ff7f50] via-[#ffb9a0] to-transparent rounded-full" />
   </div>
 );
 
 // --- Componente InputField ---
-export const WizardInputField = ({ label, value, onChange, placeholder, type = "text", required = false, className = "", icon: Icon, ...props }) => {
-  // --- CORRECCIÓN: Asegurar que `value` siempre sea un string ---
-  // Esto evita el error "A component is changing a controlled input to be uncontrolled"
-  const inputValue = value ?? ''; // Usa el operador de coalescencia nula
-  // ---------------------------------------------------------------
+export const WizardInputField = ({ 
+  label, 
+  value, 
+  onChange, 
+  placeholder, 
+  type = "text", 
+  required = false, 
+  className = "", 
+  icon: Icon,
+  helperText,
+  error,
+  ...props 
+}) => {
+  const [isFocused, setIsFocused] = useState(false);
+  const inputValue = value ?? '';
 
   return (
-    <div className="form-control w-full">
+    <div className="form-control w-full mb-4">
       {label && (
-        <label className="label pb-1">
-          <span className="label-text text-sm font-medium text-gray-700">
-            {label} {required && <span className="text-error">*</span>}
+        <label className="label pb-2">
+          <span className="label-text text-sm font-semibold text-gray-700 flex items-center gap-1">
+            {label} 
+            {required && <span className="text-[#ff7f50] text-lg">*</span>}
           </span>
         </label>
       )}
-      <div className="relative">
+      <div className="relative group">
         {Icon && (
-          <Icon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+          <motion.div
+            animate={{ scale: isFocused ? 1.1 : 1 }}
+            transition={{ duration: 0.2 }}
+            className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none transition-colors ${
+              isFocused ? 'text-[#ff7f50]' : 'text-gray-400'
+            }`}
+          >
+            <Icon size={20} />
+          </motion.div>
         )}
         <input
           type={type}
-          // value={value} // <-- Reemplazar esta línea
-          value={inputValue} // <-- Con esta
+          value={inputValue}
           onChange={onChange}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           placeholder={placeholder}
-          className={`input input-bordered w-full ${Icon ? 'pl-12' : ''} ${className}`}
-          style={{ backgroundColor: 'rgba(255, 228, 196, 0.3)' }}
+          className={`
+            w-full px-4 py-3 ${Icon ? 'pl-12' : ''} 
+            bg-white border-2 rounded-xl
+            font-medium text-gray-800 placeholder-gray-400
+            transition-all duration-300 outline-none
+            shadow-sm hover:shadow-md
+            ${error 
+              ? 'border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-100' 
+              : isFocused 
+                ? 'border-[#ff7f50] ring-4 ring-[#ffe4c4]/50' 
+                : 'border-[#ffe4c4] hover:border-[#ffb9a0]'
+            }
+            ${className}
+          `}
           {...props}
         />
+        {isFocused && !error && (
+          <motion.div
+            layoutId="input-focus-indicator"
+            className="absolute inset-0 rounded-xl border-2 border-[#ff7f50] pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          />
+        )}
       </div>
+      {helperText && !error && (
+        <p className="text-xs text-gray-500 mt-1.5 ml-1">{helperText}</p>
+      )}
+      {error && (
+        <motion.p
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-xs text-red-600 mt-1.5 ml-1 font-medium flex items-center gap-1"
+        >
+          <AlertTriangle size={12} />
+          {error}
+        </motion.p>
+      )}
     </div>
   );
 };
 
 // --- Componente TextAreaField ---
-export const WizardTextAreaField = ({ label, value, onChange, placeholder, rows = 3, className = "", ...props }) => (
-  <div className="form-control w-full">
-    {label && (
-      <label className="label pb-1">
-        <span className="label-text text-sm font-medium text-gray-700">
-          {label}
-        </span>
-      </label>
-    )}
-    <textarea
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      className={`textarea textarea-bordered w-full ${className}`}
-      style={{ backgroundColor: 'rgba(255, 228, 196, 0.3)' }}
-      rows={rows}
-      {...props}
-    />
-  </div>
-);
+export const WizardTextAreaField = ({ 
+  label, 
+  value, 
+  onChange, 
+  placeholder, 
+  rows = 3, 
+  className = "",
+  helperText,
+  error,
+  maxLength,
+  ...props 
+}) => {
+  const [isFocused, setIsFocused] = useState(false);
+  const currentLength = value?.length || 0;
+
+  return (
+    <div className="form-control w-full mb-4">
+      {label && (
+        <label className="label pb-2 flex justify-between items-center">
+          <span className="label-text text-sm font-semibold text-gray-700">
+            {label}
+          </span>
+          {maxLength && (
+            <span className={`text-xs font-medium ${
+              currentLength > maxLength ? 'text-red-500' : 'text-gray-400'
+            }`}>
+              {currentLength}/{maxLength}
+            </span>
+          )}
+        </label>
+      )}
+      <div className="relative">
+        <textarea
+          value={value}
+          onChange={onChange}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          placeholder={placeholder}
+          rows={rows}
+          maxLength={maxLength}
+          className={`
+            w-full px-4 py-3 
+            bg-white border-2 rounded-xl
+            font-medium text-gray-800 placeholder-gray-400
+            transition-all duration-300 outline-none resize-none
+            shadow-sm hover:shadow-md
+            ${error 
+              ? 'border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-100' 
+              : isFocused 
+                ? 'border-[#ff7f50] ring-4 ring-[#ffe4c4]/50' 
+                : 'border-[#ffe4c4] hover:border-[#ffb9a0]'
+            }
+            ${className}
+          `}
+          {...props}
+        />
+      </div>
+      {helperText && !error && (
+        <p className="text-xs text-gray-500 mt-1.5 ml-1">{helperText}</p>
+      )}
+      {error && (
+        <motion.p
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-xs text-red-600 mt-1.5 ml-1 font-medium flex items-center gap-1"
+        >
+          <AlertTriangle size={12} />
+          {error}
+        </motion.p>
+      )}
+    </div>
+  );
+};
 
 // --- Componente SelectField ---
-export const WizardSelectField = ({ label, value, onChange, children, className = "", tooltipText, tooltipId, icon: Icon, ...props }) => (
-  <div className="form-control w-full">
-    {label && (
-      <label className="label pb-1 flex justify-between items-center">
-        <span className="label-text text-sm font-medium text-gray-700">
-          {label}
-        </span>
-        {tooltipText && (
-          <WizardTooltip text={tooltipText} id={tooltipId}>
-            <button type="button" className="btn btn-xs btn-circle btn-ghost text-gray-500 hover:text-[#ff7f50]">
-              <Info size={16} />
-            </button>
-          </WizardTooltip>
-        )}
-      </label>
-    )}
-    <div className="relative">
-      {Icon && (
-        <Icon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+export const WizardSelectField = ({ 
+  label, 
+  value, 
+  onChange, 
+  children, 
+  className = "", 
+  tooltipText, 
+  tooltipId, 
+  icon: Icon,
+  error,
+  helperText,
+  ...props 
+}) => {
+  const [isFocused, setIsFocused] = useState(false);
+
+  return (
+    <div className="form-control w-full mb-4">
+      {label && (
+        <label className="label pb-2 flex justify-between items-center">
+          <span className="label-text text-sm font-semibold text-gray-700">
+            {label}
+          </span>
+          {tooltipText && (
+            <WizardTooltip text={tooltipText} id={tooltipId}>
+              <button type="button" className="btn btn-xs btn-circle btn-ghost text-gray-500 hover:text-[#ff7f50] hover:bg-[#ffe4c4]/50">
+                <Info size={16} />
+              </button>
+            </WizardTooltip>
+          )}
+        </label>
       )}
-      <select
-        value={value}
-        onChange={onChange}
-        className={`select select-bordered w-full ${Icon ? 'pl-12' : ''} ${className}`}
-        style={{ backgroundColor: 'rgba(255, 228, 196, 0.3)' }}
-        {...props}
-      >
-        {children}
-      </select>
+      <div className="relative group">
+        {Icon && (
+          <motion.div
+            animate={{ scale: isFocused ? 1.1 : 1 }}
+            className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none transition-colors ${
+              isFocused ? 'text-[#ff7f50]' : 'text-gray-400'
+            }`}
+          >
+            <Icon size={20} />
+          </motion.div>
+        )}
+        <select
+          value={value}
+          onChange={onChange}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+          className={`
+            w-full px-4 py-3 ${Icon ? 'pl-12' : ''} 
+            bg-white border-2 rounded-xl
+            font-medium text-gray-800
+            transition-all duration-300 outline-none
+            shadow-sm hover:shadow-md cursor-pointer
+            ${error 
+              ? 'border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-100' 
+              : isFocused 
+                ? 'border-[#ff7f50] ring-4 ring-[#ffe4c4]/50' 
+                : 'border-[#ffe4c4] hover:border-[#ffb9a0]'
+            }
+            ${className}
+          `}
+          {...props}
+        >
+          {children}
+        </select>
+      </div>
+      {helperText && !error && (
+        <p className="text-xs text-gray-500 mt-1.5 ml-1">{helperText}</p>
+      )}
+      {error && (
+        <motion.p
+          initial={{ opacity: 0, y: -5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-xs text-red-600 mt-1.5 ml-1 font-medium flex items-center gap-1"
+        >
+          <AlertTriangle size={12} />
+          {error}
+        </motion.p>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 // --- Componente CheckboxField ---
-export const WizardCheckboxField = ({ label, checked, onChange, className = "", ...props }) => (
-  <div className={`flex items-center ps-4 border border-gray-200 rounded-lg ${className}`} style={{ backgroundColor: 'rgba(255, 228, 196, 0.2)' }}>
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      className="checkbox checkbox-primary"
-      {...props}
-    />
-    <label className="w-full py-3 ms-2 text-sm font-medium text-gray-700">
+export const WizardCheckboxField = ({ label, checked, onChange, className = "", disabled = false, ...props }) => (
+  <motion.label
+    whileHover={!disabled ? { scale: 1.01 } : {}}
+    whileTap={!disabled ? { scale: 0.99 } : {}}
+    className={`
+      flex items-center gap-3 p-4 rounded-xl cursor-pointer
+      bg-white border-2 transition-all duration-300
+      ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-md'}
+      ${checked 
+        ? 'border-[#ff7f50] bg-gradient-to-r from-[#ffe4c4]/30 to-[#ffd3c3]/30' 
+        : 'border-[#ffe4c4] hover:border-[#ffb9a0]'
+      }
+      ${className}
+    `}
+  >
+    <div className="relative">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        disabled={disabled}
+        className="sr-only"
+        {...props}
+      />
+      <div className={`
+        w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-300
+        ${checked 
+          ? 'bg-gradient-to-br from-[#ff7f50] to-[#ff6347] border-[#ff7f50] shadow-md' 
+          : 'bg-white border-gray-300'
+        }
+      `}>
+        {checked && (
+          <motion.div
+            initial={{ scale: 0, rotate: -180 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          >
+            <Check size={16} className="text-white font-bold" />
+          </motion.div>
+        )}
+      </div>
+    </div>
+    <span className="text-sm font-medium text-gray-700 flex-1">
       {label}
-    </label>
-  </div>
+    </span>
+  </motion.label>
 );
 
 // --- Componente ErrorBox ---
@@ -248,15 +371,17 @@ export const WizardErrorBox = ({ error, onDismiss }) => (
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      className="relative mb-6 p-4 pr-12 rounded-lg border-2 border-red-300 bg-red-50 text-red-700"
+      className="relative mb-6 p-4 pr-12 rounded-xl border-2 border-red-300 bg-gradient-to-r from-red-50 to-red-100 text-red-700 shadow-lg"
     >
       <div className="flex items-start gap-3">
-        <AlertTriangle className="w-6 h-6 flex-shrink-0 mt-0.5" />
-        <p className="text-sm font-medium">{error}</p>
+        <div className="w-8 h-8 rounded-lg bg-red-200 flex items-center justify-center flex-shrink-0">
+          <AlertTriangle className="w-5 h-5" />
+        </div>
+        <p className="text-sm font-medium flex-1">{error}</p>
       </div>
       <motion.button
         onClick={onDismiss}
-        className="absolute right-3 top-3 p-1 rounded-md border border-red-400 opacity-60 hover:opacity-100 transition-opacity cursor-pointer"
+        className="absolute right-3 top-3 p-1.5 rounded-lg bg-red-200 hover:bg-red-300 transition-colors"
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
       >
@@ -265,3 +390,49 @@ export const WizardErrorBox = ({ error, onDismiss }) => (
     </motion.div>
   )
 );
+
+// --- Componente Card Container ---
+export const WizardCard = ({ children, className = "" }) => (
+  <div className={`bg-white rounded-2xl shadow-xl border-2 border-[#ffe4c4] p-6 ${className}`}>
+    {children}
+  </div>
+);
+
+// --- Componente Info Box ---
+export const WizardInfoBox = ({ children, icon: Icon, variant = "info" }) => {
+  const variants = {
+    info: {
+      bg: "from-blue-50 to-indigo-50",
+      border: "border-blue-200",
+      icon: "text-blue-600",
+      iconBg: "bg-blue-100"
+    },
+    success: {
+      bg: "from-green-50 to-emerald-50",
+      border: "border-green-200",
+      icon: "text-green-600",
+      iconBg: "bg-green-100"
+    },
+    warning: {
+      bg: "from-amber-50 to-orange-50",
+      border: "border-[#ffb9a0]",
+      icon: "text-[#ff7f50]",
+      iconBg: "bg-[#ffe4c4]"
+    }
+  };
+
+  const config = variants[variant];
+
+  return (
+    <div className={`bg-gradient-to-br ${config.bg} border-2 ${config.border} rounded-xl p-5 shadow-sm`}>
+      <div className="flex items-start gap-3">
+        <div className={`w-10 h-10 ${config.iconBg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+          <Icon size={20} className={config.icon} />
+        </div>
+        <div className="flex-1 text-sm text-gray-700">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
