@@ -1,284 +1,417 @@
+// frontend-pwa/src/pages/Login.jsx
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, AlertTriangle, X, Loader2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, LogIn, UserPlus, Sparkles, User } from 'lucide-react';
+import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
+import { ButtonLoader } from '../components/ui/Loader';
 
-export default function Login({ onLogin }) {
-  const [isLogin, setIsLogin] = useState(true);
+export default function Login() {
+  const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const navigate = useNavigate();
+  const { alerts, showAlert, hideAlert } = useAlert();
 
-  const handleSubmit = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+      showAlert('Por favor completa todos los campos', 'warning', 3000);
+      return;
+    }
+
     setLoading(true);
-    setError('');
     try {
-      let userCredential;
-      if (isLogin) {
-        userCredential = await signInWithEmailAndPassword(auth, email, password);
-        console.log("[Login] Inicio de sesión para UID:", userCredential.user.uid);
-      } else {
-        userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        console.log("[Login] Registro exitoso para UID:", userCredential.user.uid);
+      await signInWithEmailAndPassword(auth, email, password);
+      showAlert('¡Inicio de sesión exitoso!', 'success', 2000);
+      
+      setTimeout(() => {
+        navigate('/');
+      }, 500);
+    } catch (error) {
+      console.error('Error en login:', error);
+      
+      let errorMessage = 'Error al iniciar sesión';
+      
+      switch (error.code) {
+        case 'auth/invalid-email':
+          errorMessage = 'Correo electrónico inválido';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'Usuario deshabilitado';
+          break;
+        case 'auth/user-not-found':
+          errorMessage = 'Usuario no encontrado';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Contraseña incorrecta';
+          break;
+        case 'auth/invalid-credential':
+          errorMessage = 'Credenciales inválidas';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Demasiados intentos. Intenta más tarde';
+          break;
+        default:
+          errorMessage = 'Error al iniciar sesión. Verifica tus credenciales';
       }
-
-      try {
-        console.log("[Login] Intentando asegurar perfil para UID:", userCredential.user.uid);
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        const currentUser = auth.currentUser;
-        if (!currentUser || currentUser.uid !== userCredential.user.uid) {
-          throw new Error("[Login] auth.currentUser no coincide después de la operación.");
-        }
-
-        const token = await currentUser.getIdToken();
-        if (!token) throw new Error("[Login] No se pudo obtener el token.");
-
-        const apiUrl = import.meta.env.VITE_API_BASE_URL;
-        if (!apiUrl) throw new Error("[Login] VITE_API_BASE_URL no definida.");
-
-        const ensureProfileUrl = `${apiUrl}/auth/ensure-profile`;
-        console.log("[Login] Llamando a ensure-profile:", ensureProfileUrl);
-
-        const response = await fetch(ensureProfileUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("[Login] Error HTTP en ensure-profile:", response.status, errorText);
-        } else {
-          const data = await response.json();
-          console.log("[Login] Respuesta de ensure-profile:", data);
-        }
-      } catch (apiError) {
-        console.error("[Login] Error al asegurar perfil:", apiError);
-      } finally {
-        console.log("[Login] Llamada a ensure-profile finalizada. Procediendo a onLogin.");
-        onLogin(userCredential.user);
-      }
-
-    } catch (err) {
-      console.error("[Login] Error de autenticación:", err);
-      let errorMessage = 'Ocurrió un error.';
-      if (err.code === 'auth/user-not-found') {
-        errorMessage = 'No se encontró una cuenta con ese email.';
-      } else if (err.code === 'auth/wrong-password') {
-        errorMessage = 'La contraseña es incorrecta.';
-      } else if (err.code === 'auth/email-already-in-use') {
-        errorMessage = 'Ya existe una cuenta con ese email.';
-      } else if (err.code === 'auth/invalid-credential') {
-        errorMessage = 'Credenciales inválidas.';
-      } else if (err.code === 'auth/weak-password') {
-        errorMessage = 'La contraseña es muy débil.';
-      }
-      setError(errorMessage);
+      
+      showAlert(errorMessage, 'error', 4000);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    
+    if (!email || !password || !confirmPassword || !displayName) {
+      showAlert('Por favor completa todos los campos', 'warning', 3000);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      showAlert('Las contraseñas no coinciden', 'error', 3000);
+      return;
+    }
+
+    if (password.length < 6) {
+      showAlert('La contraseña debe tener al menos 6 caracteres', 'warning', 3000);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Crear documento de usuario en Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        email: user.email,
+        displayName: displayName,
+        createdAt: new Date(),
+      });
+
+      // Crear documento de restaurante
+      const restaurantRef = doc(db, 'restaurants', user.uid);
+      await setDoc(restaurantRef, {
+        setupCompleted: false,
+        info: {
+          name: '',
+          description: '',
+          phone: '',
+          location: null,
+          telegramToken: ''
+        },
+        createdAt: new Date(),
+      });
+
+      // Actualizar el documento de usuario con el restaurantId
+      await setDoc(doc(db, 'users', user.uid), {
+        email: user.email,
+        displayName: displayName,
+        restaurantId: user.uid,
+        createdAt: new Date(),
+      });
+
+      showAlert('¡Cuenta creada exitosamente!', 'success', 2000);
+      
+      setTimeout(() => {
+        navigate('/setup');
+      }, 500);
+    } catch (error) {
+      console.error('Error en registro:', error);
+      
+      let errorMessage = 'Error al crear la cuenta';
+      
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = 'Este correo ya está registrado';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Correo electrónico inválido';
+          break;
+        case 'auth/operation-not-allowed':
+          errorMessage = 'Operación no permitida';
+          break;
+        case 'auth/weak-password':
+          errorMessage = 'La contraseña es muy débil';
+          break;
+        default:
+          errorMessage = 'Error al crear la cuenta. Intenta de nuevo';
+      }
+      
+      showAlert(errorMessage, 'error', 4000);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleMode = () => {
+    setIsRegister(!isRegister);
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setDisplayName('');
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{
-      background: 'linear-gradient(135deg, #ffe4c4 0%, #ffe7de 40%, #ffd3c3 70%, rgba(255, 127, 80, 0.4) 100%)'
-    }}>
+    <div className="min-h-screen bg-gradient-to-br from-[#ffe4c4] via-[#ffd3c3] to-[#ffb8a1] flex items-center justify-center p-4">
+      <AlertContainer alerts={alerts} onClose={hideAlert} />
+      
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="w-full max-w-md"
       >
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden">
-          <motion.div
-            className="p-8 text-center"
-            style={{
-              background: 'linear-gradient(120deg, #ffae91 30%, #ff7f50 88%, #ffe4c4 40%, #ffb9a0 78%)'
-            }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-          >
-            <h2 className="text-3xl font-bold text-white">
-              {isLogin ? 'Bienvenido' : 'Crear Cuenta'}
-            </h2>
-            <p className="text-white/95 text-sm mt-2">
-              {isLogin ? 'Inicia sesión para continuar' : 'Únete a nosotros hoy'}
-            </p>
-          </motion.div>
+        {/* Logo y Header */}
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
+          className="text-center mb-8"
+        >
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#ff7f50] to-[#ff6347] rounded-3xl shadow-2xl mb-4">
+            <span className="text-4xl">🍽️</span>
+          </div>
+          <h1 className="text-4xl font-bold text-gray-800 mb-2">
+            RestBot Admin
+          </h1>
+          <p className="text-gray-600 flex items-center justify-center gap-2">
+            <Sparkles size={16} className="text-[#ff7f50]" />
+            Gestiona tu restaurante con facilidad
+          </p>
+        </motion.div>
 
-          <div className="p-8">
-            <AnimatePresence mode="wait">
-              {error && (
+        {/* Card de Login/Register */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={isRegister ? 'register' : 'login'}
+            initial={{ opacity: 0, x: isRegister ? 20 : -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: isRegister ? -20 : 20 }}
+            transition={{ duration: 0.3 }}
+            className="bg-white rounded-3xl shadow-2xl p-8"
+          >
+            <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+              {isRegister ? 'Crear Cuenta' : 'Iniciar Sesión'}
+            </h2>
+
+            <form onSubmit={isRegister ? handleRegister : handleLogin} className="space-y-5">
+              {/* Campo de Nombre (solo en registro) */}
+              {isRegister && (
                 <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="relative mb-6 p-4 pr-12 rounded-lg border-2 border-red-300 bg-red-50 text-red-700"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
                 >
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-6 h-6 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm font-medium">{error}</p>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Nombre Completo
+                    <span className="text-[#ff7f50] ml-1">*</span>
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="Tu nombre"
+                      disabled={loading}
+                      className="
+                        w-full pl-12 pr-4 py-3.5 rounded-xl
+                        border-2 border-[#ffe4c4] 
+                        focus:border-[#ff7f50] focus:ring-2 focus:ring-[#ff7f50]/20
+                        transition-all duration-300
+                        bg-white text-gray-800 placeholder-gray-400
+                        disabled:bg-gray-100 disabled:cursor-not-allowed
+                      "
+                    />
                   </div>
-                  <motion.button
-                    onClick={() => setError('')}
-                    className="absolute right-3 top-3 p-1 rounded-md border border-red-400 opacity-60 hover:opacity-100 transition-opacity cursor-pointer"
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                  >
-                    <X className="w-4 h-4" />
-                  </motion.button>
                 </motion.div>
               )}
-            </AnimatePresence>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <motion.div 
-                className="group"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                <label 
-                  htmlFor="email" 
-                  className="block mb-2 text-sm font-bold text-gray-600 transition-colors duration-300 group-hover:text-gray-800"
-                >
-                  Correo electrónico
+              {/* Campo de Email */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Correo Electrónico
+                  <span className="text-[#ff7f50] ml-1">*</span>
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none transition-colors duration-300 group-hover:text-orange-400" />
+                  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
                     type="email"
-                    id="email"
-                    placeholder="nombre@ejemplo.com"
-                    className="w-full h-12 rounded-lg px-12 border-2 border-transparent text-base text-gray-800 outline-none transition-all duration-300 focus:bg-white"
-                    style={{
-                      backgroundColor: 'rgba(255, 228, 196, 0.2)'
-                    }}
-                    onMouseEnter={(e) => e.target.style.borderColor = '#ffb9a0'}
-                    onMouseLeave={(e) => e.target.style.borderColor = 'transparent'}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#ff7f50';
-                      e.target.style.backgroundColor = '#ffffff';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = 'transparent';
-                      e.target.style.backgroundColor = 'rgba(255, 228, 196, 0.2)';
-                    }}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    required
+                    placeholder="tu@email.com"
                     disabled={loading}
-                    autoComplete="email"
+                    className="
+                      w-full pl-12 pr-4 py-3.5 rounded-xl
+                      border-2 border-[#ffe4c4] 
+                      focus:border-[#ff7f50] focus:ring-2 focus:ring-[#ff7f50]/20
+                      transition-all duration-300
+                      bg-white text-gray-800 placeholder-gray-400
+                      disabled:bg-gray-100 disabled:cursor-not-allowed
+                    "
                   />
                 </div>
-              </motion.div>
+              </div>
 
-              <motion.div 
-                className="group"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 }}
-              >
-                <label 
-                  htmlFor="password" 
-                  className="block mb-2 text-sm font-bold text-gray-600 transition-colors duration-300 group-hover:text-gray-800"
-                >
+              {/* Campo de Contraseña */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Contraseña
+                  <span className="text-[#ff7f50] ml-1">*</span>
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none transition-colors duration-300 group-hover:text-orange-400" />
+                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                   <input
-                    type="password"
-                    id="password"
-                    placeholder="••••••••"
-                    className="w-full h-12 rounded-lg px-12 border-2 border-transparent text-base text-gray-800 outline-none transition-all duration-300 focus:bg-white"
-                    style={{
-                      backgroundColor: 'rgba(255, 228, 196, 0.2)'
-                    }}
-                    onMouseEnter={(e) => e.target.style.borderColor = '#ffb9a0'}
-                    onMouseLeave={(e) => e.target.style.borderColor = 'transparent'}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#ff7f50';
-                      e.target.style.backgroundColor = '#ffffff';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = 'transparent';
-                      e.target.style.backgroundColor = 'rgba(255, 228, 196, 0.2)';
-                    }}
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    required
+                    placeholder="••••••••"
                     disabled={loading}
-                    autoComplete={isLogin ? 'current-password' : 'new-password'}
+                    className="
+                      w-full pl-12 pr-12 py-3.5 rounded-xl
+                      border-2 border-[#ffe4c4] 
+                      focus:border-[#ff7f50] focus:ring-2 focus:ring-[#ff7f50]/20
+                      transition-all duration-300
+                      bg-white text-gray-800 placeholder-gray-400
+                      disabled:bg-gray-100 disabled:cursor-not-allowed
+                    "
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-[#ff7f50] transition-colors"
+                    disabled={loading}
+                  >
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
                 </div>
-              </motion.div>
+                {isRegister && (
+                  <p className="text-xs text-gray-500 mt-1 ml-1">
+                    Mínimo 6 caracteres
+                  </p>
+                )}
+              </div>
 
+              {/* Campo de Confirmar Contraseña (solo en registro) */}
+              {isRegister && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                >
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Confirmar Contraseña
+                    <span className="text-[#ff7f50] ml-1">*</span>
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      disabled={loading}
+                      className="
+                        w-full pl-12 pr-12 py-3.5 rounded-xl
+                        border-2 border-[#ffe4c4] 
+                        focus:border-[#ff7f50] focus:ring-2 focus:ring-[#ff7f50]/20
+                        transition-all duration-300
+                        bg-white text-gray-800 placeholder-gray-400
+                        disabled:bg-gray-100 disabled:cursor-not-allowed
+                      "
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-[#ff7f50] transition-colors"
+                      disabled={loading}
+                    >
+                      {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Botón de Submit */}
               <motion.button
                 type="submit"
-                className="w-full text-white font-bold py-4 rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl cursor-pointer"
-                style={{
-                  background: 'linear-gradient(120deg, #ffae91 30%, #ff7f50 88%, #ffe4c4 40%, #ffb9a0 78%)'
-                }}
                 disabled={loading}
-                whileHover={{ scale: loading ? 1 : 1.02 }}
-                whileTap={{ scale: loading ? 1 : 0.98 }}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
+                whileTap={{ scale: 0.98 }}
+                className="
+                  w-full py-4 rounded-xl font-bold text-white
+                  bg-gradient-to-r from-[#ff7f50] to-[#ff6347]
+                  hover:shadow-xl hover:scale-[1.02]
+                  disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
+                  transition-all duration-300
+                  flex items-center justify-center gap-2
+                "
               >
                 {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Procesando...</span>
-                  </span>
+                  <>
+                    <ButtonLoader size="md" />
+                    <span>{isRegister ? 'Creando cuenta...' : 'Iniciando sesión...'}</span>
+                  </>
                 ) : (
-                  <span>{isLogin ? 'Iniciar Sesión' : 'Crear Cuenta'}</span>
+                  <>
+                    {isRegister ? <UserPlus size={20} /> : <LogIn size={20} />}
+                    <span>{isRegister ? 'Crear Cuenta' : 'Iniciar Sesión'}</span>
+                  </>
                 )}
               </motion.button>
             </form>
 
-            <motion.div
-              className="mt-8 text-center"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
-            >
-              <p className="text-gray-600 text-sm">
-                {isLogin ? '¿No tienes cuenta?' : '¿Ya tienes cuenta?'}
-                {' '}
-                <motion.button
-                  onClick={() => {
-                    setIsLogin(!isLogin);
-                    setError('');
-                  }}
+            {/* Toggle entre Login y Register */}
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-600">
+                {isRegister ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}
+                <button
+                  onClick={toggleMode}
                   disabled={loading}
-                  className="font-semibold transition-colors cursor-pointer"
-                  style={{ color: '#ff7f50' }}
-                  whileHover={{ scale: 1.05, y: -2, color: '#ff6347' }}
-                  whileTap={{ scale: 0.95 }}
+                  className="ml-2 text-[#ff7f50] hover:text-[#ff6347] font-semibold transition-colors disabled:opacity-50"
                 >
-                  {isLogin ? 'Regístrate aquí' : 'Inicia sesión aquí'}
-                </motion.button>
+                  {isRegister ? 'Inicia sesión' : 'Regístrate'}
+                </button>
               </p>
-            </motion.div>
-          </div>
-        </div>
+            </div>
 
+            {/* Link de recuperación (solo en login) */}
+            {!isRegister && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => showAlert('Contacta al administrador para recuperar tu contraseña', 'info', 4000)}
+                  className="text-sm text-gray-500 hover:text-[#ff7f50] transition-colors"
+                  disabled={loading}
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Footer */}
         <motion.p
-          className="text-center text-gray-500 text-xs mt-6"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
+          transition={{ delay: 0.6, duration: 0.5 }}
+          className="text-center mt-6 text-sm text-gray-600"
         >
-          Protegido y seguro con Firebase Auth
+          © 2024 RestBot. Todos los derechos reservados.
         </motion.p>
       </motion.div>
     </div>
