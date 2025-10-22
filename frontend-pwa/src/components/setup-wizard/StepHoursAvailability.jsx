@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
-import { Clock, Info, Sparkles, Calendar } from 'lucide-react';
+import { Clock, Info, Sparkles, Calendar, HelpCircle } from 'lucide-react';
 import * as WizardComponents from '../ui/WizardComponents';
+import CustomTooltip from '../ui/CustomTooltip';
 
 export default function StepHoursAvailability({ formData, setFormData, handleChange, handleHourChange }) {
   const dayNames = {
@@ -34,10 +35,10 @@ export default function StepHoursAvailability({ formData, setFormData, handleCha
   };
 
   const tooltips = {
-    hybrid: "Combina horarios fijos con control manual. Ideal para negocios con horarios regulares pero flexibles.",
-    fixed_hours: "El sistema abre y cierra automáticamente según los horarios establecidos.",
-    always_open: "Tu negocio acepta pedidos 24/7 sin restricciones.",
-    manual_control: "Tú decides manualmente cuándo abrir y cerrar cada día."
+    hybrid: "Modo recomendado. Combina horarios fijos con control manual. El sistema te recordará abrir según tu horario, pero tú tienes control total para abrir/cerrar cuando lo necesites.",
+    fixed_hours: "El sistema abre y cierra automáticamente según los horarios establecidos. Ideal para negocios con horarios muy regulares que no necesitan flexibilidad.",
+    always_open: "Tu negocio acepta pedidos 24/7 sin restricciones de horario. Perfecto para negocios que operan sin parar.",
+    manual_control: "Tú decides manualmente cuándo abrir y cerrar cada día. Máxima flexibilidad, sin automatización."
   };
 
   return (
@@ -57,37 +58,91 @@ export default function StepHoursAvailability({ formData, setFormData, handleCha
 
       {/* Card de Modo de Disponibilidad */}
       <WizardComponents.WizardCard>
-        <WizardComponents.WizardSelectField
-          label="Modo de Disponibilidad"
-          value={formData.availabilitySettings.mode}
-          onChange={(e) => handleChange('availabilitySettings', 'mode', e.target.value)}
-          icon={Clock}
-          tooltipText={tooltips[formData.availabilitySettings.mode]}
-          tooltipId="availability-mode"
-          helperText="Elige cómo gestionarás tu disponibilidad"
-        >
-          <option value="fixed_hours">⏰ Horarios Fijos</option>
-          <option value="always_open">🌟 Siempre Abierto</option>
-          <option value="manual_control">🎮 Control Manual</option>
-          <option value="hybrid">🔄 Híbrido (Recomendado)</option>
-        </WizardComponents.WizardSelectField>
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="label-text text-xs sm:text-sm font-semibold text-gray-700">
+              Modo de Disponibilidad
+            </label>
+            <CustomTooltip 
+              text={tooltips[formData.availabilitySettings.mode]}
+              position="right"
+            >
+              <HelpCircle className="w-4 h-4 text-gray-400 hover:text-[#ff7f50] cursor-help transition-colors" />
+            </CustomTooltip>
+          </div>
+          
+          <div className="relative">
+            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400 pointer-events-none z-10" />
+            <select
+              value={formData.availabilitySettings.mode}
+              onChange={(e) => handleChange('availabilitySettings', 'mode', e.target.value)}
+              className="
+                w-full pl-10 pr-4 py-2.5 sm:py-3 text-sm sm:text-base
+                bg-white border-2 border-[#ffe4c4] rounded-xl
+                text-gray-700 font-medium
+                focus:outline-none focus:border-[#ff7f50] focus:ring-4 focus:ring-[#ffe4c4]/50
+                transition-all duration-300 appearance-none cursor-pointer
+                hover:border-[#ffb9a0]
+              "
+            >
+              <option value="fixed_hours">⏰ Horarios Fijos</option>
+              <option value="always_open">🌟 Siempre Abierto</option>
+              <option value="manual_control">🎮 Control Manual</option>
+              <option value="hybrid">🔄 Híbrido (Recomendado)</option>
+            </select>
+          </div>
+          <p className="text-xs text-gray-500 mt-2 ml-1">Elige cómo gestionarás tu disponibilidad</p>
+        </div>
 
         {formData.availabilitySettings.mode === 'hybrid' && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
-            className="space-y-2 sm:space-y-3 mt-3 sm:mt-4"
+            className="space-y-2 sm:space-y-3 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200"
           >
-            <WizardComponents.WizardCheckboxField
-              label="📋 Usar horarios para recordatorios"
-              checked={formData.availabilitySettings.useScheduledHours}
-              onChange={(e) => handleChange('availabilitySettings', 'useScheduledHours', e.target.checked)}
-            />
-            <WizardComponents.WizardCheckboxField
-              label="🔔 Recordarme si olvido abrir"
-              checked={formData.availabilitySettings.remindersEnabled}
-              onChange={(e) => handleChange('availabilitySettings', 'remindersEnabled', e.target.checked)}
-            />
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                id="useScheduledHours"
+                checked={formData.availabilitySettings.useScheduledHours}
+                onChange={(e) => handleChange('availabilitySettings', 'useScheduledHours', e.target.checked)}
+                className="mt-0.5 checkbox checkbox-sm"
+                style={{ accentColor: '#ff7f50' }}
+              />
+              <div className="flex-1">
+                <label htmlFor="useScheduledHours" className="text-xs sm:text-sm font-medium text-gray-700 cursor-pointer flex items-center gap-2">
+                  📋 Usar horarios para recordatorios
+                  <CustomTooltip 
+                    text="Los horarios definidos se usarán como referencia para enviarte recordatorios"
+                    position="right"
+                  >
+                    <HelpCircle className="w-3 h-3 text-gray-400 hover:text-[#ff7f50] cursor-help transition-colors" />
+                  </CustomTooltip>
+                </label>
+              </div>
+            </div>
+            
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                id="remindersEnabled"
+                checked={formData.availabilitySettings.remindersEnabled}
+                onChange={(e) => handleChange('availabilitySettings', 'remindersEnabled', e.target.checked)}
+                className="mt-0.5 checkbox checkbox-sm"
+                style={{ accentColor: '#ff7f50' }}
+              />
+              <div className="flex-1">
+                <label htmlFor="remindersEnabled" className="text-xs sm:text-sm font-medium text-gray-700 cursor-pointer flex items-center gap-2">
+                  🔔 Recordarme si olvido abrir
+                  <CustomTooltip 
+                    text="Recibirás una notificación si no has abierto el restaurante 5 minutos después de tu hora programada"
+                    position="right"
+                  >
+                    <HelpCircle className="w-3 h-3 text-gray-400 hover:text-[#ff7f50] cursor-help transition-colors" />
+                  </CustomTooltip>
+                </label>
+              </div>
+            </div>
           </motion.div>
         )}
       </WizardComponents.WizardCard>
@@ -110,6 +165,12 @@ export default function StepHoursAvailability({ formData, setFormData, handleCha
         <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-5">
           <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-[#ff7f50]" />
           <h4 className="font-bold text-sm sm:text-lg text-gray-800">Horarios por Día</h4>
+          <CustomTooltip 
+            text="Define los horarios de apertura y cierre para cada día. Puedes marcar días como cerrados si no trabajas ese día."
+            position="top"
+          >
+            <HelpCircle className="w-4 h-4 text-gray-400 hover:text-[#ff7f50] cursor-help transition-colors" />
+          </CustomTooltip>
         </div>
 
         <div className="space-y-2 sm:space-y-3">
