@@ -2,9 +2,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from '../config/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import { api } from '../services/api';
+import { useAlert } from '../components/ui/CustomAlert';
+import { WizardCard, WizardSectionHeader, WizardErrorBox } from './SetupWizard'; // Reutilizamos componentes del wizard
+import { ButtonLoader } from '../components/ui/Loader';
+import { Settings, CheckCircle } from 'lucide-react';
+import BasicInfoForm from '../components/config/BasicInfoForm';
+import HoursForm from '../components/config/HoursForm';
+import DeliveryForm from '../components/config/DeliveryForm';
+import FeaturesForm from '../components/config/FeaturesForm';
+import PaymentMethodsForm from '../components/config/PaymentMethodsForm';
+import CommandsForm from '../components/config/CommandsForm';
 
 export default function ConfigGeneral() {
   const [user] = useAuthState(auth);
@@ -65,6 +75,8 @@ export default function ConfigGeneral() {
     }
   });
 
+  const { showAlert } = useAlert();
+
   useEffect(() => {
     if (!user) {
       navigate('/login');
@@ -74,8 +86,8 @@ export default function ConfigGeneral() {
     const fetchConfig = async () => {
       try {
         setLoading(true);
-        // Usar la API para obtener la configuración general
-        // Este endpoint debe verificar ownership internamente
+        setError('');
+
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (!userDoc.exists) {
           setError('Usuario no encontrado.');
@@ -86,66 +98,23 @@ export default function ConfigGeneral() {
         const data = await api.get(`/config/${restaurantId}/general`);
         setConfig(data);
       } catch (err) {
+        console.error('Error al cargar la configuración:', err);
         setError('Error al cargar la configuración: ' + err.message);
+        showAlert('Error al cargar la configuración.', 'error', 4000);
       } finally {
         setLoading(false);
       }
     };
 
     fetchConfig();
-  }, [user, navigate]);
+  }, [user, navigate, showAlert]);
 
   const handleChange = (section, field, value) => {
     setConfig(prev => ({
       ...prev,
-      [section]: {
+      [section]: Array.isArray(prev[section]) ? value : { // Para manejar el array de paymentMethods
         ...prev[section],
         [field]: value
-      }
-    }));
-  };
-
-  const handleHourChange = (day, field, value) => {
-    setConfig(prev => ({
-      ...prev,
-      hours: {
-        ...prev.hours,
-        [day]: {
-          ...prev.hours[day],
-          [field]: value
-        }
-      }
-    }));
-  };
-
-  const handlePaymentMethodChange = (id, field, value) => {
-    setConfig(prev => ({
-      ...prev,
-      paymentMethods: prev.paymentMethods.map(pm =>
-        pm.id === id ? { ...pm, [field]: value } : pm
-      )
-    }));
-  };
-
-  const handleFeatureChange = (field, value) => {
-    setConfig(prev => ({
-      ...prev,
-      features: {
-        ...prev.features,
-        [field]: value
-      }
-    }));
-  };
-
-  const handleCommandChange = (id, field, value) => {
-    setConfig(prev => ({
-      ...prev,
-      commands: {
-        ...prev.commands,
-        [id]: {
-          ...prev.commands[id],
-          [field]: value
-        }
       }
     }));
   };
@@ -159,197 +128,59 @@ export default function ConfigGeneral() {
     setSaving(true);
     setError('');
     try {
-      // Obtener restaurantId
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       const restaurantId = userDoc.data().restaurantId;
 
-      // Enviar la configuración actualizada al backend
       await api.put(`/config/${restaurantId}/general`, config);
-      alert('✅ Configuración guardada exitosamente.');
+      showAlert('✅ Configuración guardada exitosamente.', 'success', 2000);
     } catch (err) {
+      console.error('Error al guardar la configuración:', err);
       setError('Error al guardar la configuración: ' + err.message);
+      showAlert('Error al guardar la configuración.', 'error', 4000);
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <div className="hero min-h-screen bg-base-200"><div className="hero-content text-center"><span className="loading loading-spinner loading-lg"></span></div></div>;
-  if (error) return <div className="hero min-h-screen bg-base-200"><div className="hero-content text-center"><div className="max-w-md"><h1 className="text-2xl font-bold">Error</h1><p>{error}</p></div></div></div>;
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <ButtonLoader size="lg" />
+    </div>
+  );
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-3xl font-bold mb-6">Configuración General del Restaurante</h1>
-      {error && <div className="alert alert-error mb-4"><span>{error}</span></div>}
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Información Básica */}
-        <div className="card bg-base-100 shadow-xl p-4">
-          <h2 className="text-xl font-semibold mb-4">Información Básica</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="form-control">
-              <label className="label">Nombre del Restaurante</label>
-              <input
-                type="text"
-                className="input input-bordered"
-                value={config.info.name}
-                onChange={(e) => handleChange('info', 'name', e.target.value)}
-                required
-              />
-            </div>
-            <div className="form-control">
-              <label className="label">Teléfono</label>
-              <input
-                type="text"
-                className="input input-bordered"
-                value={config.info.phone}
-                onChange={(e) => handleChange('info', 'phone', e.target.value)}
-              />
-            </div>
-            <div className="form-control md:col-span-2">
-              <label className="label">Dirección</label>
-              <input
-                type="text"
-                className="input input-bordered"
-                value={config.info.address}
-                onChange={(e) => handleChange('info', 'address', e.target.value)}
-              />
-            </div>
-            <div className="form-control md:col-span-2">
-              <label className="label">Descripción</label>
-              <textarea
-                className="textarea textarea-bordered"
-                value={config.info.description}
-                onChange={(e) => handleChange('info', 'description', e.target.value)}
-              ></textarea>
-            </div>
-          </div>
-        </div>
+    <div className="p-4 max-w-6xl mx-auto">
+      <WizardCard>
+        <WizardSectionHeader icon={Settings} title="Configuración General" subtitle="Gestiona la información y opciones de tu restaurante" />
+        {error && <WizardErrorBox error={error} onDismiss={() => setError('')} />}
 
-        {/* Horarios */}
-        <div className="card bg-base-100 shadow-xl p-4">
-          <h2 className="text-xl font-semibold mb-4">Horarios de Operación</h2>
-          <div className="space-y-2">
-            {Object.keys(config.hours).map(day => (
-              <div key={day} className="flex items-center justify-between p-2 border-b">
-                <span className="capitalize w-24">{day}</span>
-                <label className="cursor-pointer label">
-                  <input
-                    type="checkbox"
-                    className="checkbox checkbox-sm"
-                    checked={config.hours[day].closed}
-                    onChange={(e) => handleHourChange(day, 'closed', e.target.checked)}
-                  />
-                  <span className="label-text ml-2">Cerrado</span>
-                </label>
-                {!config.hours[day].closed && (
-                  <>
-                    <input
-                      type="time"
-                      className="input input-sm input-bordered w-24"
-                      value={config.hours[day].open}
-                      onChange={(e) => handleHourChange(day, 'open', e.target.value)}
-                    />
-                    <span className="mx-2">a</span>
-                    <input
-                      type="time"
-                      className="input input-sm input-bordered w-24"
-                      value={config.hours[day].close}
-                      onChange={(e) => handleHourChange(day, 'close', e.target.value)}
-                    />
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <BasicInfoForm config={config} onChange={handleChange} />
+          <HoursForm config={config} onChange={handleChange} />
+          <DeliveryForm config={config} onChange={handleChange} />
+          <FeaturesForm config={config} onChange={handleChange} />
+          <PaymentMethodsForm config={config} onChange={handleChange} />
+          <CommandsForm config={config} onChange={handleChange} />
 
-        {/* Opciones de Pedido */}
-        <div className="card bg-base-100 shadow-xl p-4">
-          <h2 className="text-xl font-semibold mb-4">Opciones de Pedido</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label className="label cursor-pointer justify-start">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-primary mr-2"
-                checked={config.features.deliveryEnabled}
-                onChange={(e) => handleFeatureChange('deliveryEnabled', e.target.checked)}
-              />
-              <span className="label-text">Aceptar Pedidos con Delivery</span>
-            </label>
-            <label className="label cursor-pointer justify-start">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-primary mr-2"
-                checked={config.features.pickupEnabled}
-                onChange={(e) => handleFeatureChange('pickupEnabled', e.target.checked)}
-              />
-              <span className="label-text">Aceptar Pedidos para Recoger</span>
-            </label>
-            <label className="label cursor-pointer justify-start">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-primary mr-2"
-                checked={config.features.requireLocationIfDelivery}
-                onChange={(e) => handleFeatureChange('requireLocationIfDelivery', e.target.checked)}
-              />
-              <span className="label-text">Requerir ubicación si es delivery</span>
-            </label>
-            <label className="label cursor-pointer justify-start">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-primary mr-2"
-                checked={config.features.showMenuImages}
-                onChange={(e) => handleFeatureChange('showMenuImages', e.target.checked)}
-              />
-              <span className="label-text">Mostrar imágenes en el menú</span>
-            </label>
+          <div className="flex justify-end mt-6">
+            <button
+              type="submit"
+              className="px-6 py-3 bg-gradient-to-r from-[#ff7f50] to-[#ff6347] text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center gap-2 disabled:opacity-50"
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <ButtonLoader size="sm" /> Guardando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle size={20} /> Guardar Cambios
+                </>
+              )}
+            </button>
           </div>
-        </div>
-
-        {/* Métodos de Pago */}
-        <div className="card bg-base-100 shadow-xl p-4">
-          <h2 className="text-xl font-semibold mb-4">Métodos de Pago</h2>
-          <div className="space-y-2">
-            {config.paymentMethods.map((method) => (
-              <label key={method.id} className="label cursor-pointer justify-between p-2 border-b">
-                <span className="label-text">{method.name}</span>
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-primary"
-                  checked={method.enabled}
-                  onChange={(e) => handlePaymentMethodChange(method.id, 'enabled', e.target.checked)}
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Comandos del Bot */}
-        <div className="card bg-base-100 shadow-xl p-4">
-          <h2 className="text-xl font-semibold mb-4">Comandos del Bot</h2>
-          <div className="space-y-2">
-            {Object.keys(config.commands).map((cmdId) => (
-              <label key={cmdId} className="label cursor-pointer justify-between p-2 border-b">
-                <div>
-                  <span className="label-text font-mono">/{cmdId}</span>
-                  <span className="text-sm text-gray-500 ml-2">{config.commands[cmdId].description}</span>
-                </div>
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-primary"
-                  checked={config.commands[cmdId].enabled}
-                  onChange={(e) => handleCommandChange(cmdId, 'enabled', e.target.checked)}
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="form-control mt-6">
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? 'Guardando...' : 'Guardar Cambios'}
-          </button>
-        </div>
-      </form>
+        </form>
+      </WizardCard>
     </div>
   );
 }
