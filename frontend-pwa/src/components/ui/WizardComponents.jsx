@@ -2,43 +2,6 @@ import { motion } from 'framer-motion';
 import { Info, Check, X, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 
-// --- Componente Tooltip ---
-export const WizardTooltip = ({ text, children, id, className = "" }) => {
-  const [isVisible, setIsVisible] = useState(false);
-
-  return (
-    <div className={`relative inline-block ${className}`}>
-      <div
-        onMouseEnter={() => setIsVisible(true)}
-        onMouseLeave={() => setIsVisible(false)}
-        onClick={() => setIsVisible(!isVisible)}
-        className="cursor-pointer"
-      >
-        {children}
-      </div>
-      {isVisible && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setIsVisible(false)}
-          />
-          <motion.div
-            initial={{ opacity: 0, y: 5 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 5 }}
-            transition={{ duration: 0.2 }}
-            className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 p-3 text-xs text-white bg-[#ff7f50] rounded-lg shadow-2xl w-64 z-50"
-          >
-            <div className="relative">
-              {text}
-              <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-8 border-transparent border-t-[#ff7f50]" />
-            </div>
-          </motion.div>
-        </>
-      )}
-    </div>
-  );
-};
 
 // --- Componente ProgressBar ---
 export const WizardProgressBar = ({ current, total }) => (
