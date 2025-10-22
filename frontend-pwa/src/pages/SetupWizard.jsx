@@ -89,6 +89,7 @@ export default function SetupWizard() {
 
   const navigate = useNavigate();
 
+  // --- useEffect para verificar estado inicial ---
   useEffect(() => {
     const checkSetupStatus = async () => {
       if (!auth.currentUser) return;
@@ -120,7 +121,6 @@ export default function SetupWizard() {
 
         if (restaurantData.info) {
           setFormData(prev => ({ ...prev, ...restaurantData }));
-          // Removed duplicate alert - data loads silently
         }
 
       } catch (err) {
@@ -131,7 +131,26 @@ export default function SetupWizard() {
     };
 
     checkSetupStatus();
-  }, [navigate]); // Removed showAlert from dependencies - it's stable from the hook
+  }, [navigate]);
+
+  // --- useEffect para redirección después de completar setup ---
+  useEffect(() => {
+    let redirectTimer;
+    if (setupCompleted) {
+      console.log("[SetupWizard] Setup completado, redirigiendo en 2s");
+      redirectTimer = setTimeout(() => {
+        console.log("[SetupWizard] Redirigiendo a dashboard");
+        navigate('/');
+      }, 2000);
+    }
+
+    return () => {
+      if (redirectTimer) {
+        console.log("[SetupWizard] Limpiando timeout de redirección");
+        clearTimeout(redirectTimer);
+      }
+    };
+  }, [setupCompleted, navigate]);
 
   const handleChange = (section, field, value) => {
     setFormData(prev => ({
@@ -248,10 +267,7 @@ export default function SetupWizard() {
       });
 
       showAlert('¡Configuración guardada!', 'success', 3000);
-      setSetupCompleted(true);
-      setTimeout(() => {
-        navigate('/');
-      }, 2000);
+      setSetupCompleted(true); // Esto activará el useEffect de redirección
 
     } catch (err) {
       const errorMsg = 'Error al guardar: ' + err.message;
