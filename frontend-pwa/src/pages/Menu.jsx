@@ -31,7 +31,7 @@ const Menu = () => {
     name: '',
     description: '',
     price: '',
-    imageUrl: '',
+    imageUrl: '', // Inicializado vacío
     available: true,
     category: 'Platos Fuertes', // Valor por defecto
     prepTime: 5,
@@ -43,7 +43,7 @@ const Menu = () => {
     name: '',
     description: '',
     price: '',
-    imageUrl: '',
+    imageUrl: '', // Inicializado vacío
     available: true,
     order: 1,
     items: [], // Lista de IDs de items
@@ -93,6 +93,17 @@ const Menu = () => {
     return () => unsubscribe(); // Cleanup para evitar fugas de memoria
   }, [auth, navigate]);
 
+  // Funciones para manejo de imágenes (opcional, si necesitas lógica adicional)
+  const handleItemImageUploadSuccess = (url, isEditing) => {
+    // Esta función se puede dejar vacía si solo se usa onChange
+    // console.log('Imagen subida para', isEditing ? 'editar' : 'nuevo', ':', url);
+  };
+
+  const handleItemImageRemove = (isEditing) => {
+    // Esta función se puede dejar vacía si solo se usa onChange
+    // console.log('Imagen removida para', isEditing ? 'editar' : 'nuevo');
+  };
+
   // Funciones para Items
   const handleAddItem = async () => {
     if (!restaurantId) return; // Asegurar que tenemos el ID
@@ -112,13 +123,13 @@ const Menu = () => {
         order: parseInt(newItem.order) || 1,
       };
 
-      await api.post(`/menu/${restaurantId}/items`, itemData); // Nueva ruta
+      await api.post(`/menu/${restaurantId}/items`, itemData);
       showAlert('Item agregado exitosamente.', 'success', 2000);
       setNewItem({
         name: '',
         description: '',
         price: '',
-        imageUrl: '',
+        imageUrl: '', // Limpiar URL de imagen
         available: true,
         category: 'Platos Fuertes',
         prepTime: 5,
@@ -128,7 +139,7 @@ const Menu = () => {
       setShowItemForm(false);
     } catch (err) {
       console.error("Error al agregar item:", err);
-      setError('Error al agregar item: ' + err.response?.data?.error || err.message); // Captura el error del backend
+      setError('Error al agregar item: ' + err.response?.data?.error || err.message);
       showAlert('Error al agregar item.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -153,14 +164,14 @@ const Menu = () => {
         order: parseInt(editingItem.order) || 1,
       };
 
-      await api.put(`/menu/${restaurantId}/items/${editingItem.id}`, itemData); // Nueva ruta
+      await api.put(`/menu/${restaurantId}/items/${editingItem.id}`, itemData);
       showAlert('Item actualizado exitosamente.', 'success', 2000);
       // Actualizar localmente
       setItems(prev => prev.map(item => item.id === editingItem.id ? { ...itemData, id: editingItem.id } : item));
       setEditingItem(null);
     } catch (err) {
       console.error("Error al actualizar item:", err);
-      setError('Error al actualizar item: ' + err.response?.data?.error || err.message); // Captura el error del backend
+      setError('Error al actualizar item: ' + err.response?.data?.error || err.message);
       showAlert('Error al actualizar item.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -172,30 +183,29 @@ const Menu = () => {
 
     setSaving(true);
     try {
-      await api.delete(`/menu/${restaurantId}/items/${itemId}`); // Nueva ruta
+      await api.delete(`/menu/${restaurantId}/items/${itemId}`);
       showAlert('Item eliminado exitosamente.', 'success', 2000);
       setItems(prev => prev.filter(item => item.id !== itemId));
     } catch (err) {
       console.error("Error al eliminar item:", err);
-      setError('Error al eliminar item: ' + err.response?.data?.error || err.message); // Captura el error del backend
+      setError('Error al eliminar item: ' + err.response?.data?.error || err.message);
       showAlert('Error al eliminar item.', 'error', 4000);
     } finally {
       setSaving(false);
     }
   };
 
-  // Funciones para Combos
+  // Funciones para Combos (sin cambios en la imagen para este ejemplo)
   const handleAddCombo = async () => {
     if (!restaurantId) return; // Asegurar que tenemos el ID
 
-    if (!newCombo.name.trim() || newCombo.items.length === 0) { // Ajustar validación según backend
+    if (!newCombo.name.trim() || newCombo.items.length === 0) {
       showAlert('Nombre y al menos un item son obligatorios para el combo.', 'warning', 3000);
       return;
     }
 
     setSaving(true);
     try {
-      // Calcular precio si es necesario antes de enviar
       let finalPrice = newCombo.price;
       if (newCombo.useItemPrices) {
           const itemPrices = items.filter(item => newCombo.items.includes(item.id)).map(item => item.price);
@@ -211,13 +221,13 @@ const Menu = () => {
         order: parseInt(newCombo.order) || 1,
       };
 
-      await api.post(`/menu/${restaurantId}/combos`, comboData); // Nueva ruta
+      await api.post(`/menu/${restaurantId}/combos`, comboData);
       showAlert('Combo agregado exitosamente.', 'success', 2000);
       setNewCombo({
         name: '',
         description: '',
         price: '',
-        imageUrl: '',
+        imageUrl: '', // Limpiar URL de imagen
         available: true,
         order: 1,
         items: [],
@@ -226,7 +236,7 @@ const Menu = () => {
       setShowComboForm(false);
     } catch (err) {
       console.error("Error al agregar combo:", err);
-      setError('Error al agregar combo: ' + err.response?.data?.error || err.message); // Captura el error del backend
+      setError('Error al agregar combo: ' + err.response?.data?.error || err.message);
       showAlert('Error al agregar combo.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -258,14 +268,14 @@ const Menu = () => {
         order: parseInt(editingCombo.order) || 1,
       };
 
-      await api.put(`/menu/${restaurantId}/combos/${editingCombo.id}`, comboData); // Nueva ruta
+      await api.put(`/menu/${restaurantId}/combos/${editingCombo.id}`, comboData);
       showAlert('Combo actualizado exitosamente.', 'success', 2000);
       // Actualizar localmente
       setCombos(prev => prev.map(combo => combo.id === editingCombo.id ? { ...comboData, id: editingCombo.id } : combo));
       setEditingCombo(null);
     } catch (err) {
       console.error("Error al actualizar combo:", err);
-      setError('Error al actualizar combo: ' + err.response?.data?.error || err.message); // Captura el error del backend
+      setError('Error al actualizar combo: ' + err.response?.data?.error || err.message);
       showAlert('Error al actualizar combo.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -277,12 +287,12 @@ const Menu = () => {
 
     setSaving(true);
     try {
-      await api.delete(`/menu/${restaurantId}/combos/${comboId}`); // Nueva ruta
+      await api.delete(`/menu/${restaurantId}/combos/${comboId}`);
       showAlert('Combo eliminado exitosamente.', 'success', 2000);
       setCombos(prev => prev.filter(combo => combo.id !== comboId));
     } catch (err) {
       console.error("Error al eliminar combo:", err);
-      setError('Error al eliminar combo: ' + err.response?.data?.error || err.message); // Captura el error del backend
+      setError('Error al eliminar combo: ' + err.response?.data?.error || err.message);
       showAlert('Error al eliminar combo.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -348,6 +358,8 @@ const Menu = () => {
               onCancel={() => { setShowItemForm(false); setEditingItem(null); }}
               onChange={(field, value) => editingItem ? setEditingItem({...editingItem, [field]: value}) : setNewItem({...newItem, [field]: value})}
               saving={saving}
+              onImageUploadSuccess={(url) => handleItemImageUploadSuccess(url, !!editingItem)}
+              onImageRemove={() => handleItemImageRemove(!!editingItem)}
             />
           </div>
         )}

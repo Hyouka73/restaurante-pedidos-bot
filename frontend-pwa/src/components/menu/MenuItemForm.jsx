@@ -2,9 +2,20 @@
 import { WizardInputField, WizardTextAreaField, WizardSelectField, WizardCheckboxField } from '../ui/WizardComponents'; // Ajusta la ruta
 import { ButtonLoader } from '../ui/Loader';
 import { X } from 'lucide-react';
+import ItemImageUpload from './ItemImageUpload'; // Importar el nuevo componente
 
-const MenuItemForm = ({ item, categories, onSave, onCancel, onChange, saving }) => {
+const MenuItemForm = ({ item, categories, onSave, onCancel, onChange, saving, onImageUploadSuccess, onImageRemove }) => { // Agregar props para imagen
   const isEditing = !!item.id;
+
+  const handleImageUploadSuccess = (url) => {
+    onChange('imageUrl', url); // Actualiza el campo imageUrl en el estado del padre
+    onImageUploadSuccess(url); // Opcional: hacer algo más en el padre
+  };
+
+  const handleImageRemove = () => {
+    onChange('imageUrl', ''); // Limpia el campo imageUrl en el estado del padre
+    onImageRemove(); // Opcional: hacer algo más en el padre
+  };
 
   return (
     <div className="bg-white rounded-xl p-4 shadow-md">
@@ -66,10 +77,16 @@ const MenuItemForm = ({ item, categories, onSave, onCancel, onChange, saving }) 
             onChange={(e) => onChange('order', e.target.value)}
           />
         </div>
-        <WizardInputField
+        {/* Reemplazar el input de URL por el componente de subida */}
+        {/* <WizardInputField
           label="URL de Imagen (Opcional)"
           value={item.imageUrl}
           onChange={(e) => onChange('imageUrl', e.target.value)}
+        /> */}
+        <ItemImageUpload
+          onUploadSuccess={handleImageUploadSuccess}
+          currentImageUrl={item.imageUrl}
+          onRemoveImage={handleImageRemove}
         />
         <WizardCheckboxField
           label="Disponible"
