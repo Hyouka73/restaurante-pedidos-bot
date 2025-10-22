@@ -8,7 +8,7 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import ConfigMessages from './pages/ConfigMessages';
 import SetupWizard from './pages/SetupWizard';
-import MenuManager from './pages/MenuManager';
+import Menu from './pages/Menu';
 import OrdersManager from './pages/OrdersManager';
 import Loader from './components/ui/Loader';
 
@@ -52,7 +52,7 @@ function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="config/messages" element={<ConfigMessages />} />
-          <Route path="menu" element={<MenuManager />} />
+          <Route path="menu" element={<Menu />} />
           <Route path="orders" element={<OrdersManager />} />
         </Route>
 

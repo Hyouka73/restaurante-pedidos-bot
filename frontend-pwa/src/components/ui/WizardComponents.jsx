@@ -1,3 +1,4 @@
+//src/components/ui/WizardComponents.jsx
 import { motion } from 'framer-motion';
 import { Info, Check, X, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';

@@ -6,7 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAlert } from '../components/ui/CustomAlert';
 import { ButtonLoader } from '../components/ui/Loader';
-import { WizardCard, WizardSectionHeader, WizardErrorBox } from './SetupWizard'; // Reutilizamos componentes del wizard
+import { WizardCard, WizardSectionHeader, WizardErrorBox } from '../components/ui/WizardComponents.jsx'; // Reutilizamos componentes del wizard
 import { Plus } from 'lucide-react';
 import MenuItemForm from '../components/menu/MenuItemForm';
 import MenuComboForm from '../components/menu/MenuComboForm';
