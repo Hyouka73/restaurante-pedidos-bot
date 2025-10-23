@@ -27,15 +27,44 @@ export default function OrdersManager() {
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
+    // En algunos entornos PWA puede fallar el fullscreen; escuchar errores
+    const handleFullscreenError = () => {
+      setIsFullscreen(false);
+      showAlert('No se pudo cambiar el modo pantalla completa', 'error', 3000);
+    };
+    document.addEventListener('fullscreenerror', handleFullscreenError);
+
+    // Permitir salir con ESC (útil en desktop y algunas PWAs)
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && document.fullscreenElement) {
+        try {
+          document.exitFullscreen();
+        } catch (err) {
+          console.warn('Error saliendo de fullscreen con ESC', err);
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   const toggleFullscreen = async () => {
     try {
       if (!isFullscreen) {
-        await document.documentElement.requestFullscreen();
+        // intentar entrar a pantalla completa
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        } else {
+          showAlert('Modo pantalla completa no soportado en este dispositivo', 'warning', 3000);
+        }
       } else {
-        await document.exitFullscreen();
+        // intentar salir de pantalla completa sólo si estamos en fullscreen
+        if (document.fullscreenElement) {
+          await document.exitFullscreen();
+        } else {
+          // Si no hay elemento fullscreen, simplemente actualizar el estado
+          setIsFullscreen(false);
+        }
       }
     } catch (err) {
       console.error('Error toggling fullscreen:', err);
@@ -137,6 +166,17 @@ export default function OrdersManager() {
   return (
     <div className="container mx-auto p-4">
       <AlertContainer alerts={alerts} onClose={hideAlert} />
+      {/* Botón persistente para salir de pantalla completa (útil en PWA donde la chrome puede ocultarse) */}
+      {isFullscreen && (
+        <div className="fixed right-4 top-4 z-50">
+          <button
+            onClick={toggleFullscreen}
+            className="btn btn-sm btn-ghost bg-white/80 backdrop-blur-sm"
+          >
+            ❌ Salir Pantalla Completa
+          </button>
+        </div>
+      )}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Gestión de Pedidos</h1>
         <button 
