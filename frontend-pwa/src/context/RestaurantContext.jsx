@@ -133,9 +133,33 @@ export function RestaurantProvider({ children }) {
     }
   }
 
+  // Funciones para abrir/cerrar la tienda via API y actualizar el estado local
+  const openStore = async (restaurantId) => {
+    try {
+      await api.put(`/config/${restaurantId}/availability`, { status: 'open', reason: null });
+      // Forzar refetch
+      fetchRestaurantData();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err };
+    }
+  };
+
+  const closeStore = async (restaurantId, reason = 'closed_by_owner') => {
+    try {
+      await api.put(`/config/${restaurantId}/availability`, { status: 'closed_by_owner', reason });
+      fetchRestaurantData();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err };
+    }
+  };
+
   const value = {
     ...state,
     refetch: fetchRestaurantData, // Permitir recargar datos manualmente
+    openStore,
+    closeStore,
   };
 
   return (

@@ -17,8 +17,26 @@ export default function OrdersManager() {
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'
   const [isFullscreen, setIsFullscreen] = useState(document.fullscreenElement !== null);
   const { showAlert, alerts, hideAlert } = useAlert();
-
   const { data: restaurantData, loading: restaurantLoading } = useRestaurant();
+
+  // Redirigir a /orders si la tienda está abierta y el usuario intenta navegar fuera
+  useEffect(() => {
+    const isOpen = restaurantData?.availabilityComputed?.status === 'open' || restaurantData?.availability?.status === 'open';
+    if (isOpen && window.location.pathname !== '/orders') {
+      navigate('/orders', { replace: true });
+      showAlert('La tienda está abierta: modo gestión de pedidos activo', 'notification', 2500);
+    }
+
+    // Evitar que el usuario use el botón atrás para salir (simple guard)
+    const handlePopstate = () => {
+      const isStillOpen = restaurantData?.availabilityComputed?.status === 'open' || restaurantData?.availability?.status === 'open';
+      if (isStillOpen) {
+        navigate('/orders', { replace: true });
+      }
+    };
+    window.addEventListener('popstate', handlePopstate);
+    return () => window.removeEventListener('popstate', handlePopstate);
+  }, [restaurantData, navigate, showAlert]);
 
   // Manejar cambios en el estado de pantalla completa
   useEffect(() => {
