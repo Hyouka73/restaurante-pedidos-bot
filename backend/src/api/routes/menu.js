@@ -1,9 +1,32 @@
 // backend/src/api/routes/menu.js
 const express = require('express');
 const router = express.Router();
-const menuService = require('../services/menuService');
-const authService = require('../services/authService'); // Importamos authService para verificación de dueño
-const { verifyToken } = require('../middleware/auth'); // Importamos middleware de autenticación
+// CORREGIDO: Ruta para menuService (relativa a backend/src/api/routes/)
+const menuService = require('../../services/menuService'); // Subimos 2 niveles: ../.. -> backend/src/, luego bajamos a services/
+// CORREGIDO: Ruta para authService (relativa a backend/src/api/routes/)
+const authService = require('../../services/authService'); // Subimos 2 niveles: ../.. -> backend/src/, luego bajamos a services/
+// CORREGIDO: Ruta para verifyToken (definido localmente)
+// QUITADO: const { verifyToken } = require('../middleware/auth');
+
+// Asegúrate de tener admin importado para verifyToken
+const { admin } = require('../../config/firebase'); // Subimos 2 niveles: ../.. -> backend/src/, luego bajamos a config/
+
+// Define verifyToken aquí mismo
+const verifyToken = async (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1]; // Bearer <token>
+  if (!token) {
+    return res.status(401).json({ error: 'Token no proporcionado' });
+  }
+
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    req.user = decodedToken; // Agrega los datos del usuario al request
+    next();
+  } catch (error) {
+    console.error("Error verificando token:", error);
+    res.status(401).json({ error: 'Token inválido' });
+  }
+};
 
 // Middleware para verificar que el usuario es dueño del restaurante
 const verifyOwner = async (req, res, next) => {

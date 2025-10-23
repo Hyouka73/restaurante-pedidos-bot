@@ -1,5 +1,6 @@
 // backend/src/services/menuService.js
-const { db } = require('../config/firebase');
+// CORREGIDO: Ruta para config/firebase.js (relativa a backend/src/services/)
+const { db } = require('../config/firebase'); // Subimos 1 nivel: .. -> backend/src/, luego bajamos a config/
 
 class MenuService {
 
