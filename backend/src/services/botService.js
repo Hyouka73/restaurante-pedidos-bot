@@ -6,19 +6,20 @@ const sharedBot = require('../config/telegram');
 
 class BotService {
   constructor() {
-    // Map: restaurantId -> { bot: TelegrafInstance, isShared: boolean }
     this.bots = new Map();
+    this._sharedHookAttached = false;
+    this.initializationRetries = new Map();
   }
 
   async initBot(restaurantId) {
     try {
-      // Si ya existe una instancia, la detenemos
+      // Si ya existe, retornar
       if (this.bots.has(restaurantId)) {
-        // If already initialized for this restaurant, do nothing
+        console.log(`ℹ️ Bot para ${restaurantId} ya está inicializado`);
         return true;
       }
 
-      // Obtener token encriptado
+      // Obtener configuración del restaurante
       const doc = await db.collection('restaurants').doc(restaurantId).get();
       if (!doc.exists) throw new Error('Restaurante no encontrado');
       
@@ -29,39 +30,54 @@ class BotService {
       // Desencriptar token
       const token = cryptoUtils.decryptToken(enc);
 
-      // If token matches the global token in env, reuse the shared bot instance
+      // Verificar si es el bot compartido
       const envToken = process.env.TELEGRAM_BOT_TOKEN;
       if (envToken && token === envToken) {
         console.log(`ℹ️ Usando bot compartido para restaurante ${restaurantId}`);
-        // Attach simple catcher to shared bot if not already present
+        
         if (!this._sharedHookAttached) {
           sharedBot.catch((err, ctx) => {
             console.error(`Error en bot compartido:`, err);
-            try { ctx.reply('Hubo un error al procesar tu mensaje.'); } catch (e) { /* ignore */ }
+            try { 
+              ctx.reply('Hubo un error al procesar tu mensaje. Por favor intenta nuevamente.'); 
+            } catch (e) { 
+              console.error('Error enviando mensaje de error:', e);
+            }
           });
           this._sharedHookAttached = true;
         }
 
         this.bots.set(restaurantId, { bot: sharedBot, isShared: true });
-        // Do NOT launch or stop the shared bot here; server.js controls it
         return true;
       }
 
-      // Crear nueva instancia de bot para token específico
-      const bot = new Telegraf(token);
-
-      // Configurar handlers básicos (los específicos se configuran desde server.js)
+      // Crear nueva instancia con retry logic
+      const bot = await this._createBotWithRetry(token, restaurantId);
+      
+      // Configurar handlers básicos
       bot.catch((err, ctx) => {
         console.error(`Error en bot ${restaurantId}:`, err);
-        try { ctx.reply('Hubo un error al procesar tu mensaje.'); } catch (e) { /* ignore */ }
+        try { 
+          ctx.reply('Hubo un error al procesar tu mensaje. Por favor intenta nuevamente.'); 
+        } catch (e) { 
+          console.error('Error enviando mensaje de error:', e);
+        }
       });
 
       // Guardar instancia
       this.bots.set(restaurantId, { bot, isShared: false });
 
-      // Iniciar bot
-      await bot.launch();
-      console.log(`✅ Bot para restaurante ${restaurantId} iniciado`);
+      // Iniciar bot con manejo de errores
+      try {
+        await bot.launch({
+          dropPendingUpdates: true,
+        });
+        console.log(`✅ Bot para restaurante ${restaurantId} iniciado correctamente`);
+      } catch (launchError) {
+        console.error(`Error al lanzar bot ${restaurantId}:`, launchError);
+        this.bots.delete(restaurantId);
+        throw new Error(`No se pudo iniciar el bot: ${launchError.message}`);
+      }
 
       return true;
     } catch (error) {
@@ -70,14 +86,45 @@ class BotService {
     }
   }
 
+  async _createBotWithRetry(token, restaurantId, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const bot = new Telegraf(token);
+        
+        // Verificar conexión con timeout
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout conectando a Telegram API')), 10000)
+        );
+        
+        const getMePromise = bot.telegram.getMe();
+        
+        const botInfo = await Promise.race([getMePromise, timeoutPromise]);
+        
+        console.log(`✅ Bot conectado: @${botInfo.username} (ID: ${botInfo.id})`);
+        return bot;
+      } catch (error) {
+        console.error(`Intento ${i + 1}/${maxRetries} falló:`, error.message);
+        
+        if (i === maxRetries - 1) {
+          throw new Error(
+            `No se pudo conectar a Telegram API después de ${maxRetries} intentos. ` +
+            `Verifica tu conexión a internet y que el token sea válido.`
+          );
+        }
+        
+        // Esperar antes de reintentar (backoff exponencial)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+      }
+    }
+  }
+
   async stopBot(restaurantId) {
     const entry = this.bots.get(restaurantId);
     if (entry) {
       try {
         if (entry.isShared) {
-          // Do not stop the globally shared bot from here
           this.bots.delete(restaurantId);
-          console.log(`ℹ️ Desregistrado restaurante ${restaurantId} del bot compartido (no se detiene el bot global)`);
+          console.log(`ℹ️ Desregistrado restaurante ${restaurantId} del bot compartido`);
           return true;
         }
 
@@ -104,11 +151,9 @@ class BotService {
 
     const bot = entry.bot;
     try {
-      // Primero eliminamos webhook existente
       await bot.telegram.deleteWebhook();
 
       if (url) {
-        // Configurar nuevo webhook
         await bot.telegram.setWebhook(`${url}/webhook/${restaurantId}`);
         console.log(`✅ Webhook configurado para ${restaurantId} en ${url}`);
       } else {
@@ -122,7 +167,6 @@ class BotService {
     }
   }
 
-  // Helpers para obtener estado
   isRunning(restaurantId) {
     return this.bots.has(restaurantId);
   }
@@ -134,10 +178,12 @@ class BotService {
 
       const bot = entry.bot;
       const webhookInfo = await bot.telegram.getWebhookInfo();
+      
       return {
         running: true,
         webhook: webhookInfo.url || null,
-        pendingUpdates: webhookInfo.pending_update_count
+        pendingUpdates: webhookInfo.pending_update_count,
+        isShared: entry.isShared
       };
     } catch (error) {
       console.error(`Error obteniendo estado del bot ${restaurantId}:`, error);
@@ -146,5 +192,4 @@ class BotService {
   }
 }
 
-// Exportar instancia singleton
 module.exports = new BotService();

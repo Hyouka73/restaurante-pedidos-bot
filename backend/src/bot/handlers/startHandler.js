@@ -1,84 +1,107 @@
-//backend/src/bot/handlers/startHandler.js
+// backend/src/bot/handlers/startHandler.js - ACTUALIZADO
 const configBotService = require('../services/configBotService');
 const telegramUserService = require('../services/telegramUserService');
 const availabilityService = require('../../services/availabilityService');
-const reminderService = require('../../services/reminderService');
-const notificationService = require('../services/notificationService'); // Nuevo servicio
+const { Markup } = require('telegraf');
 
 module.exports = async (ctx) => {
   try {
-    // Obtener el ID del chat de Telegram
-    const chatId = ctx.chat.id;
+    const firstName = ctx.from.first_name;
 
-    // Obtener el ID del restaurante asociado a este chat
-    const restaurantId = await telegramUserService.getRestaurantIdByChat(chatId);
+    // 🔑 CLAVE: Usar el contexto para identificar el restaurante
+    const restaurantId = await telegramUserService.getRestaurantIdByBotContext(ctx);
 
-    // Si no hay restaurante vinculado, responder y salir
     if (!restaurantId) {
-      console.warn(`[startHandler] Chat ${chatId} no está vinculado a un restaurante`);
-      await ctx.reply('Lo siento, este chat no está vinculado a ningún restaurante.');
+      const botInfo = await ctx.telegram.getMe();
+      console.error(`❌ No se encontró restaurante para bot @${botInfo.username}`);
+      
+      await ctx.reply(
+        '⚠️ *Configuración Incompleta*\n\n' +
+        'Este bot aún no está vinculado a un restaurante.\n\n' +
+        '👨‍💼 Si eres el administrador:\n' +
+        '1. Ve al panel de administración\n' +
+        '2. Completa la configuración inicial\n' +
+        '3. Asegúrate de guardar el token del bot\n\n' +
+        `🤖 Bot ID: \`${botInfo.id}\`\n` +
+        `📝 Username: @${botInfo.username}`,
+        { 
+          parse_mode: 'Markdown',
+          reply_markup: { remove_keyboard: true }
+        }
+      );
       return;
     }
 
-    // --- NUEVO: Verificar si es momento de enviar un recordatorio ---
-  const shouldRemind = await reminderService.shouldSendOpeningReminder(restaurantId);
-    if (shouldRemind) {
-      console.log(`[startHandler] Enviando recordatorio para restaurante ${restaurantId}`);
-      // Obtener la hora programada de apertura para el día de hoy
-      const now = new Date();
-      const dayKey = availabilityService.getDayKey(now.getDay());
-  const restaurantDoc = await require('../../config/firebase').db.collection('restaurants').doc(restaurantId).get();
-  const scheduledOpenTime = restaurantDoc.data()?.hours?.[dayKey]?.open;
-      await notificationService.sendOpeningReminderToOwner(restaurantId, scheduledOpenTime);
-      // No se responde al cliente aún, se continúa para verificar disponibilidad
-    }
-    // --- FIN NUEVO ---
+    // Guardar info del usuario
+    await telegramUserService.saveUserInfo(ctx.from, restaurantId);
 
-    // --- VERIFICAR DISPONIBILIDAD ---
+    // Obtener datos del restaurante
+    const restaurantData = await configBotService.getRestaurantData(restaurantId);
+    const messages = restaurantData.messages || {};
+    const restaurantName = restaurantData.info?.name || 'Nuestro Restaurante';
+
+    // Verificar disponibilidad
     const availability = await availabilityService.checkAvailability(restaurantId);
 
+    // Si no está abierto
     if (availability.status !== 'open') {
-      let messageToSend = 'Lo sentimos, no podemos aceptar pedidos en este momento.';
+      const hours = restaurantData.hours || {};
+      const now = new Date();
+      const dayKey = availabilityService.getDayKey(now.getDay());
+      const todayHours = hours[dayKey];
+
+      let closedMessage = `👋 ¡Hola ${firstName}!\n\n`;
+      closedMessage += `Bienvenido a *${restaurantName}* 🍽️\n\n`;
+      closedMessage += `😔 Actualmente estamos *cerrados*\n\n`;
+
       if (availability.reason) {
-        messageToSend += ` Motivo: ${availability.reason}`;
+        closedMessage += `📋 ${availability.reason}\n\n`;
       }
-      await ctx.reply(messageToSend);
-      return; // Salir del handler si no está abierto
+
+      if (todayHours && !todayHours.closed) {
+        closedMessage += `⏰ *Horario de hoy:*\n`;
+        closedMessage += `   Abrimos: ${todayHours.open}\n`;
+        closedMessage += `   Cerramos: ${todayHours.close}`;
+      }
+
+      await ctx.reply(closedMessage, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('📋 Ver Menú', 'show_menu')],
+          [Markup.button.callback('ℹ️ Información', 'show_info')]
+        ])
+      });
+      return;
     }
-    // --- FIN VERIFICAR DISPONIBILIDAD ---
 
-    // Obtener los mensajes y la información del restaurante (solo si está abierto)
-    const messages = await configBotService.getRestaurantMessages(restaurantId);
-    const restaurantData = await configBotService.getRestaurantData(restaurantId);
-
-    // Obtener el nombre del usuario
-    const firstName = ctx.from.first_name;
-    const restaurantName = restaurantData.info?.name || 'Mi Restaurante';
-
-    // Reemplazar variables en el mensaje
-    const welcomeMessage = messages.welcome
+    // Restaurante abierto
+    const welcomeMessage = (messages.welcome || '¡Hola {nombre}! Bienvenido a {restaurante} 🍽️')
       .replace('{nombre}', firstName)
       .replace('{restaurante}', restaurantName);
 
-    // Opcional: Enviar teclado inline con opciones iniciales
-    const inlineKeyboard = [
-      [
-        { text: '🛒 Hacer Pedido', callback_data: 'init_order' },
-        { text: '📋 Ver Menú', callback_data: 'show_menu' }
-      ],
-      [
-        { text: '📞 Información', callback_data: 'show_info' },
-        { text: '❓ Ayuda', callback_data: 'show_help' }
-      ]
-    ];
-
-    await ctx.reply(welcomeMessage, {
-      reply_markup: {
-        inline_keyboard: inlineKeyboard
-      }
+    await ctx.reply(`${welcomeMessage}\n\n✨ Estamos *abiertos* y listos para atenderte`, {
+      parse_mode: 'Markdown'
     });
+
+    await ctx.reply(
+      '👇 *¿Qué te gustaría hacer?*',
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🛒 Hacer Pedido', 'init_order')],
+          [
+            Markup.button.callback('📋 Ver Menú', 'show_menu'),
+            Markup.button.callback('📞 Info', 'show_info')
+          ]
+        ])
+      }
+    );
+
   } catch (error) {
     console.error('Error en startHandler:', error);
-    await ctx.reply('Hubo un error al procesar tu solicitud.');
+    await ctx.reply(
+      '❌ Hubo un error al procesar tu solicitud.\n\n' +
+      'Por favor intenta nuevamente con /start'
+    );
   }
 };
