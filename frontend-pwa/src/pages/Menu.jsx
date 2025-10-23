@@ -67,7 +67,7 @@ const Menu = () => {
 
         // Obtener restaurantId del usuario
         const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (!userDoc.exists()) {
+        if (!userDoc.exists) {
           setError('Usuario no encontrado.');
           return;
         }
@@ -113,17 +113,6 @@ const Menu = () => {
     return () => unsubscribe(); // Cleanup para evitar fugas de memoria
   }, [auth, navigate, showAlert]); // Agregar showAlert si se usa para mostrar errores aquí
 
-  // Funciones para manejo de imágenes (opcional, si necesitas lógica adicional)
-  const handleItemImageUploadSuccess = (url, isEditing) => {
-    // Esta función se puede dejar vacía si solo se usa onChange
-    // console.log('Imagen subida para', isEditing ? 'editar' : 'nuevo', ':', url);
-  };
-
-  const handleItemImageRemove = (isEditing) => {
-    // Esta función se puede dejar vacía si solo se usa onChange
-    // console.log('Imagen removida para', isEditing ? 'editar' : 'nuevo');
-  };
-
   // Funciones para Items
   const handleAddItem = async () => {
     if (!restaurantId) return; // Asegurar que tenemos el ID
@@ -144,7 +133,8 @@ const Menu = () => {
       };
 
       await api.post(`/menu/${restaurantId}/items`, itemData);
-      showAlert('Item agregado exitosamente.', 'success', 2000);
+      // showAlert('Item agregado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.post
+      setItems(prev => [...prev, { id: 'temp-id', ...itemData }]); // Agregar temporalmente
       setNewItem({
         name: '',
         description: '',
@@ -159,8 +149,8 @@ const Menu = () => {
       setShowItemForm(false);
     } catch (err) {
       console.error("Error al agregar item:", err);
-      setError('Error al agregar item: ' + err.message); // Captura el error del backend
-      showAlert('Error al agregar item.', 'error', 4000);
+      setError('Error al agregar item: ' + err.message);
+      showAlert('Error al agregar item.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
@@ -185,14 +175,13 @@ const Menu = () => {
       };
 
       await api.put(`/menu/${restaurantId}/items/${editingItem.id}`, itemData);
-      showAlert('Item actualizado exitosamente.', 'success', 2000);
-      // Actualizar localmente
-      setItems(prev => prev.map(item => item.id === editingItem.id ? { ...itemData, id: editingItem.id } : item));
+      // showAlert('Item actualizado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.put
+      setItems(prev => prev.map(item => item.id === editingItem.id ? { ...itemData, id: editingItem.id } : item)); // Actualizar localmente
       setEditingItem(null);
     } catch (err) {
       console.error("Error al actualizar item:", err);
-      setError('Error al actualizar item: ' + err.message); // Captura el error del backend
-      showAlert('Error al actualizar item.', 'error', 4000);
+      setError('Error al actualizar item: ' + err.message);
+      showAlert('Error al actualizar item.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
@@ -204,12 +193,12 @@ const Menu = () => {
     setSaving(true);
     try {
       await api.delete(`/menu/${restaurantId}/items/${itemId}`);
-      showAlert('Item eliminado exitosamente.', 'success', 2000);
-      setItems(prev => prev.filter(item => item.id !== itemId));
+      // showAlert('Item eliminado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.delete
+      setItems(prev => prev.filter(item => item.id !== itemId)); // Eliminar localmente
     } catch (err) {
       console.error("Error al eliminar item:", err);
-      setError('Error al eliminar item: ' + err.message); // Captura el error del backend
-      showAlert('Error al eliminar item.', 'error', 4000);
+      setError('Error al eliminar item: ' + err.message);
+      showAlert('Error al eliminar item.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
@@ -242,7 +231,8 @@ const Menu = () => {
       };
 
       await api.post(`/menu/${restaurantId}/combos`, comboData);
-      showAlert('Combo agregado exitosamente.', 'success', 2000);
+      // showAlert('Combo agregado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.post
+      setCombos(prev => [...prev, { id: 'temp-id', ...comboData }]); // Agregar temporalmente
       setNewCombo({
         name: '',
         description: '',
@@ -256,8 +246,8 @@ const Menu = () => {
       setShowComboForm(false);
     } catch (err) {
       console.error("Error al agregar combo:", err);
-      setError('Error al agregar combo: ' + err.message); // Captura el error del backend
-      showAlert('Error al agregar combo.', 'error', 4000);
+      setError('Error al agregar combo: ' + err.message);
+      showAlert('Error al agregar combo.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
@@ -289,14 +279,13 @@ const Menu = () => {
       };
 
       await api.put(`/menu/${restaurantId}/combos/${editingCombo.id}`, comboData);
-      showAlert('Combo actualizado exitosamente.', 'success', 2000);
-      // Actualizar localmente
-      setCombos(prev => prev.map(combo => combo.id === editingCombo.id ? { ...comboData, id: editingCombo.id } : combo));
+      // showAlert('Combo actualizado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.put
+      setCombos(prev => prev.map(combo => combo.id === editingCombo.id ? { ...comboData, id: editingCombo.id } : combo)); // Actualizar localmente
       setEditingCombo(null);
     } catch (err) {
       console.error("Error al actualizar combo:", err);
-      setError('Error al actualizar combo: ' + err.message); // Captura el error del backend
-      showAlert('Error al actualizar combo.', 'error', 4000);
+      setError('Error al actualizar combo: ' + err.message);
+      showAlert('Error al actualizar combo.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
@@ -308,12 +297,12 @@ const Menu = () => {
     setSaving(true);
     try {
       await api.delete(`/menu/${restaurantId}/combos/${comboId}`);
-      showAlert('Combo eliminado exitosamente.', 'success', 2000);
-      setCombos(prev => prev.filter(combo => combo.id !== comboId));
+      // showAlert('Combo eliminado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.delete
+      setCombos(prev => prev.filter(combo => combo.id !== comboId)); // Eliminar localmente
     } catch (err) {
       console.error("Error al eliminar combo:", err);
-      setError('Error al eliminar combo: ' + err.message); // Captura el error del backend
-      showAlert('Error al eliminar combo.', 'error', 4000);
+      setError('Error al eliminar combo: ' + err.message);
+      showAlert('Error al eliminar combo.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
@@ -350,8 +339,9 @@ const Menu = () => {
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <WizardCard>
-          <WizardSectionHeader icon={Settings} title="Menú del Restaurante" subtitle="Gestiona tus items y combos" />
-          {error && <WizardErrorBox error={error} onDismiss={() => setError('')} />}  
+        {/* Asegúrate de pasar un icono válido */}
+        <WizardSectionHeader icon={Settings} title="Menú del Restaurante" subtitle="Gestiona tus items y combos" />
+        {error && <WizardErrorBox error={error} onDismiss={() => setError('')} />}
 
         <div className="flex gap-4 mb-6">
           <button
@@ -378,8 +368,7 @@ const Menu = () => {
               onCancel={() => { setShowItemForm(false); setEditingItem(null); }}
               onChange={(field, value) => editingItem ? setEditingItem({...editingItem, [field]: value}) : setNewItem({...newItem, [field]: value})}
               saving={saving}
-              onImageUploadSuccess={(url) => handleItemImageUploadSuccess(url, !!editingItem)}
-              onImageRemove={() => handleItemImageRemove(!!editingItem)}
+              // No se pasan más las funciones handleItemImageUploadSuccess y handleItemImageRemove
             />
           </div>
         )}

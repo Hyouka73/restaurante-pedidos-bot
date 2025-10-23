@@ -29,10 +29,12 @@ const configRoutes = require('./src/api/routes/config');
 const authRoutes = require('./src/api/routes/auth');
 const menuRoutes = require('./src/api/routes/menu'); // Nuevo
 const ordersRoutes = require('./src/api/routes/orders'); // Nuevo
+const uploadRoutes = require('./src/api/routes/upload'); 
 app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/menu', menuRoutes); // Nuevo
 app.use('/api/orders', ordersRoutes); // Nuevo
+app.use('/api/upload', uploadRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
