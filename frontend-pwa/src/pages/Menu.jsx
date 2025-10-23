@@ -1,10 +1,10 @@
 // frontend-pwa/src/pages/Menu.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { useAlert } from '../components/ui/CustomAlert';
+import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
 import { ButtonLoader } from '../components/ui/Loader';
 import { WizardCard, WizardSectionHeader, WizardErrorBox } from '../components/ui/WizardComponents.jsx';
 import { Plus, Settings } from 'lucide-react';
@@ -12,7 +12,7 @@ import MenuItemForm from '../components/menu/MenuItemForm';
 import MenuComboForm from '../components/menu/MenuComboForm';
 import MenuItemCard from '../components/menu/MenuItemCard';
 import MenuComboCard from '../components/menu/MenuComboCard';
-import { api, configureAlerts } from '../services/api'; // Importar configureAlerts
+import { api, configureAlerts } from '../services/api';
 
 const Menu = () => {
   const [loading, setLoading] = useState(true);
@@ -51,13 +51,30 @@ const Menu = () => {
   });
 
   const navigate = useNavigate();
-  const { showAlert } = useAlert();
+  const { showAlert, alerts, hideAlert } = useAlert();
   const auth = getAuth();
+  
+  // Ref para el formulario
+  const formRef = useRef(null);
 
   // Configurar las alertas cuando el componente se monte
   useEffect(() => {
     configureAlerts(showAlert);
   }, [showAlert]);
+
+  // Efecto para hacer scroll cuando se abre un formulario
+  useEffect(() => {
+    if ((showItemForm || editingItem || showComboForm || editingCombo) && formRef.current) {
+      // Pequeño delay para asegurar que el DOM se haya actualizado
+      setTimeout(() => {
+        formRef.current.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start',
+          inline: 'nearest'
+        });
+      }, 100);
+    }
+  }, [showItemForm, editingItem, showComboForm, editingCombo]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -129,9 +146,8 @@ const Menu = () => {
         order: parseInt(newItem.order) || 1,
       };
 
-      const response = await api.post(`/menu/${restaurantId}/items`, itemData);
+      await api.post(`/menu/${restaurantId}/items`, itemData);
       
-      // Recargar items para obtener el ID real del servidor
       const itemsResponse = await api.get(`/menu/${restaurantId}/items`);
       setItems(Array.isArray(itemsResponse) ? itemsResponse : []);
       
@@ -223,7 +239,6 @@ const Menu = () => {
 
       await api.post(`/menu/${restaurantId}/combos`, comboData);
       
-      // Recargar combos
       const combosResponse = await api.get(`/menu/${restaurantId}/combos`);
       setCombos(Array.isArray(combosResponse) ? combosResponse : []);
       
@@ -322,27 +337,42 @@ const Menu = () => {
 
   return (
     <div className="p-4 max-w-6xl mx-auto">
+      <AlertContainer alerts={alerts} onClose={hideAlert} />
+      
       <WizardCard>
         <WizardSectionHeader icon={Settings} title="Menú del Restaurante" subtitle="Gestiona tus items y combos" />
         {error && <WizardErrorBox error={error} onDismiss={() => setError('')} />}
 
         <div className="flex gap-4 mb-6">
           <button
-            onClick={() => { setShowItemForm(true); setEditingItem(null); }}
+            onClick={() => { 
+              setShowItemForm(true); 
+              setEditingItem(null);
+              // Cerrar formularios de combo
+              setShowComboForm(false);
+              setEditingCombo(null);
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#ff7f50] to-[#ff6347] text-white rounded-lg hover:shadow-lg transition-all"
           >
             <Plus size={18} /> Agregar Item
           </button>
           <button
-            onClick={() => { setShowComboForm(true); setEditingCombo(null); }}
+            onClick={() => { 
+              setShowComboForm(true); 
+              setEditingCombo(null);
+              // Cerrar formularios de item
+              setShowItemForm(false);
+              setEditingItem(null);
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all"
           >
             <Plus size={18} /> Agregar Combo
           </button>
         </div>
 
+        {/* Formulario de Item - Con ref para scroll */}
         {(showItemForm || editingItem) && (
-          <div className="mb-6">
+          <div ref={formRef} className="mb-6 scroll-mt-20">
             <MenuItemForm
               item={editingItem || newItem}
               categories={categories}
@@ -354,8 +384,9 @@ const Menu = () => {
           </div>
         )}
 
+        {/* Formulario de Combo - Con ref para scroll */}
         {(showComboForm || editingCombo) && (
-          <div className="mb-6">
+          <div ref={formRef} className="mb-6 scroll-mt-20">
             <MenuComboForm
               combo={editingCombo || newCombo}
               availableItems={items.filter(item => item.available)}
@@ -376,7 +407,13 @@ const Menu = () => {
               <MenuItemCard
                 key={item.id}
                 item={item}
-                onEdit={(itemData) => { setEditingItem(itemData); setShowItemForm(false); }}
+                onEdit={(itemData) => { 
+                  setEditingItem(itemData); 
+                  setShowItemForm(false);
+                  // Cerrar formularios de combo
+                  setShowComboForm(false);
+                  setEditingCombo(null);
+                }}
                 onDelete={handleDeleteItem}
               />
             ))}
@@ -391,7 +428,13 @@ const Menu = () => {
                 key={combo.id}
                 combo={combo}
                 items={items}
-                onEdit={(comboData) => { setEditingCombo(comboData); setShowComboForm(false); }}
+                onEdit={(comboData) => { 
+                  setEditingCombo(comboData); 
+                  setShowComboForm(false);
+                  // Cerrar formularios de item
+                  setShowItemForm(false);
+                  setEditingItem(null);
+                }}
                 onDelete={handleDeleteCombo}
               />
             ))}

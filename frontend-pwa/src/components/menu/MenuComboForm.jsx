@@ -1,10 +1,15 @@
 // frontend-pwa/src/components/menu/MenuComboForm.jsx
-import { WizardInputField, WizardTextAreaField, WizardCheckboxField } from '../ui/WizardComponents'; // Ajusta la ruta
+import { WizardInputField, WizardTextAreaField, WizardCheckboxField } from '../ui/WizardComponents';
 import { ButtonLoader } from '../ui/Loader';
 import { X, Plus } from 'lucide-react';
+import ItemImageUpload from './ItemImageUpload'; // Reutilizar el componente
 
 const MenuComboForm = ({ combo, availableItems, onSave, onCancel, onChange, onAddItem, onRemoveItem, saving }) => {
   const isEditing = !!combo.id;
+
+  const handleImageUrlChange = (url) => {
+    onChange('imageUrl', url);
+  };
 
   return (
     <div className="bg-white rounded-xl p-4 shadow-md">
@@ -27,7 +32,14 @@ const MenuComboForm = ({ combo, availableItems, onSave, onCancel, onChange, onAd
           onChange={(e) => onChange('description', e.target.value)}
           rows={3}
         />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        {/* Upload de imagen para combo */}
+        <ItemImageUpload
+          imageUrl={combo.imageUrl}
+          onImageChange={handleImageUrlChange}
+        />
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <WizardCheckboxField
             label="Calcular precio sumando items individuales"
             checked={combo.useItemPrices}
@@ -60,11 +72,7 @@ const MenuComboForm = ({ combo, availableItems, onSave, onCancel, onChange, onAd
             onChange={(e) => onChange('order', e.target.value)}
           />
         </div>
-        <WizardInputField
-          label="URL de Imagen (Opcional)"
-          value={combo.imageUrl}
-          onChange={(e) => onChange('imageUrl', e.target.value)}
-        />
+        
         <WizardCheckboxField
           label="Disponible"
           checked={combo.available}
@@ -77,7 +85,7 @@ const MenuComboForm = ({ combo, availableItems, onSave, onCancel, onChange, onAd
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-2 border rounded-lg">
             {availableItems.filter(item => !combo.items.includes(item.id)).map(item => (
               <div key={item.id} className="flex items-center justify-between bg-white p-2 rounded border">
-                <span>{item.name} - ${item.price}</span>
+                <span className="text-sm">{item.name} - ${item.price}</span>
                 <button
                   type="button"
                   onClick={() => onAddItem(item.id)}
@@ -96,7 +104,7 @@ const MenuComboForm = ({ combo, availableItems, onSave, onCancel, onChange, onAd
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-2 border rounded-lg">
             {availableItems.filter(item => combo.items.includes(item.id)).map(item => (
               <div key={item.id} className="flex items-center justify-between bg-gray-100 p-2 rounded">
-                <span>{item.name} - ${item.price}</span>
+                <span className="text-sm">{item.name} - ${item.price}</span>
                 <button
                   type="button"
                   onClick={() => onRemoveItem(item.id)}

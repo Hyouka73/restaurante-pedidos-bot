@@ -93,10 +93,11 @@ const ImageUploader = ({
       <div className="flex flex-col gap-3">
         {preview ? (
           <div className="relative group">
+            {/* Imagen en tamaño más pequeño y bonito */}
             <img
               src={preview}
               alt="Preview"
-              className="w-full h-48 object-cover rounded-lg border-2 border-gray-200"
+              className="w-full h-32 object-cover rounded-lg border-2 border-gray-300"
             />
             {uploading && (
               <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
@@ -116,20 +117,20 @@ const ImageUploader = ({
         ) : (
           <label
             htmlFor="image-upload"
-            className={`flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors ${
-              uploading ? 'opacity-50 cursor-not-allowed' : ''
+            className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors ${
+              uploading ? 'opacity-50 cursor-not-allowed' : 'border-gray-300'
             }`}
           >
             {uploading ? (
               <ButtonLoader size="md" />
             ) : (
               <>
-                <ImageIcon className="w-12 h-12 text-gray-400 mb-2" />
-                <p className="text-sm text-gray-500">
-                  <span className="font-semibold">Click para subir</span> o arrastra una imagen
+                <ImageIcon className="w-10 h-10 text-gray-400 mb-2" />
+                <p className="text-xs text-gray-500 text-center px-2">
+                  <span className="font-semibold">Click para subir</span> imagen
                 </p>
                 <p className="text-xs text-gray-400 mt-1">
-                  PNG, JPG, GIF hasta {maxFileSizeMB}MB
+                  PNG, JPG hasta {maxFileSizeMB}MB
                 </p>
               </>
             )}
@@ -139,7 +140,7 @@ const ImageUploader = ({
         {preview && !uploading && (
           <label
             htmlFor="image-upload"
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors cursor-pointer"
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors cursor-pointer text-sm"
           >
             <Upload size={16} />
             Cambiar imagen
