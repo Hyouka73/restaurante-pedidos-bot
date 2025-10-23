@@ -7,6 +7,7 @@ import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import ConfigMessages from './pages/ConfigMessages';
+import ConfigGeneral from './pages/ConfigGeneral';
 import SetupWizard from './pages/SetupWizard';
 import Menu from './pages/Menu';
 import OrdersManager from './pages/OrdersManager';
@@ -52,6 +53,7 @@ function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="config/messages" element={<ConfigMessages />} />
+           <Route path="config/general" element={<ConfigGeneral />} />
           <Route path="menu" element={<Menu />} />
           <Route path="orders" element={<OrdersManager />} />
         </Route>

@@ -27,6 +27,11 @@ const verifyToken = async (req, res, next) => {
 const verifyOwner = async (req, res, next) => {
   try {
     const restaurantData = await authService.getRestaurantByUserUid(req.user.uid);
+    console.log('[verifyOwner] Comparando IDs:', {
+      fromURL: req.params.restaurantId,
+      fromDB: restaurantData.restaurantId,
+      userUID: req.user.uid
+    });
     if (restaurantData.restaurantId !== req.params.restaurantId) {
       return res.status(403).json({ error: 'No autorizado para acceder a este restaurante' });
     }
@@ -67,8 +72,8 @@ router.put('/:restaurantId/general', verifyToken, verifyOwner, async (req, res) 
     const { restaurantId } = req.params;
     const updateData = req.body;
     // CORREGIDO: Usar configService en lugar de authService
-    await configService.updateGeneralInfo(restaurantId, updateData);
-    res.json({ success: true });
+    const updated = await configService.updateGeneralInfo(restaurantId, updateData);
+    res.json({ success: true, updated });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

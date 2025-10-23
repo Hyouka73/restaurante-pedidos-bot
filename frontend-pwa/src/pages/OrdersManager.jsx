@@ -184,25 +184,9 @@ export default function OrdersManager() {
   return (
     <div className="container mx-auto p-4">
       <AlertContainer alerts={alerts} onClose={hideAlert} />
-      {/* Botón persistente para salir de pantalla completa (útil en PWA donde la chrome puede ocultarse) */}
-      {isFullscreen && (
-        <div className="fixed right-4 top-4 z-50">
-          <button
-            onClick={toggleFullscreen}
-            className="btn btn-sm btn-ghost bg-white/80 backdrop-blur-sm"
-          >
-            ❌ Salir Pantalla Completa
-          </button>
-        </div>
-      )}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Gestión de Pedidos</h1>
-        <button 
-          className={`btn ${isFullscreen ? 'btn-error' : 'btn-primary'}`}
-          onClick={toggleFullscreen}
-        >
-          {isFullscreen ? '❌ Salir Pantalla Completa' : '🔲 Pantalla Completa'}
-        </button>
+        {/* Ya no necesitamos este botón aquí, está en el Layout */}
       </div>
 
       <div className="mb-4 flex gap-2 items-center">

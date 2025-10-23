@@ -10,6 +10,7 @@ import {
   Settings, LogOut, X, Store, ChevronRight
 } from 'lucide-react';
 import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
+import { useRestaurant } from '../context/RestaurantContext';
 import Loader from '../components/ui/Loader';
 import { api } from '../services/api';
 
@@ -19,6 +20,7 @@ export default function Layout() {
   const location = useLocation();
   const [restaurantData, setRestaurantData] = useState(null);
   const [loadingRestaurant, setLoadingRestaurant] = useState(true);
+  const { data: ctxData, refetch, openStore, closeStore } = useRestaurant();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { alerts, showAlert, hideAlert } = useAlert();
   const [isStoreOpen, setIsStoreOpen] = useState(false);
@@ -81,8 +83,8 @@ export default function Layout() {
               setRestaurantData(data);
               console.log('[Layout] Datos del restaurante cargados:', data);
 
-              // Actualizar el estado de isStoreOpen basado en el estado actual
-              setIsStoreOpen(data.availability?.status === 'open');
+              // Mantener sincronía con RestaurantContext: refetch para que el contexto tenga los datos
+              refetch();
 
               // Verificar si necesita completar el setup
               if (data.setupCompleted === false && location.pathname !== '/setup') {
@@ -115,10 +117,10 @@ export default function Layout() {
     fetchRestaurantData();
   }, [user, navigate, location.pathname]);
 
-  // Bloquear navegación cuando la tienda está abierta
+  // Bloquear navegación cuando la tienda está abierta (usando ctxData)
   useEffect(() => {
     const handleBeforeUnload = (e) => {
-      if (isStoreOpen) {
+      if (ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open') {
         e.preventDefault();
         e.returnValue = '¿Seguro que quieres salir? La tienda está abierta.';
       }
@@ -128,11 +130,12 @@ export default function Layout() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [isStoreOpen]);
+  }, [ctxData]);
 
   // Forzar pantalla completa en /orders cuando la tienda está abierta
   useEffect(() => {
-    if (isStoreOpen && location.pathname === '/orders') {
+    const isOpen = ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open';
+    if (isOpen && location.pathname === '/orders') {
       const enterFullscreen = async () => {
         try {
           if (!document.fullscreenElement) {
@@ -144,7 +147,7 @@ export default function Layout() {
       };
       enterFullscreen();
     }
-  }, [isStoreOpen, location.pathname]);
+  }, [ctxData, location.pathname]);
 
   const handleLogout = useCallback(async () => {
     try {
@@ -160,7 +163,8 @@ export default function Layout() {
   }, [navigate, showAlert]);
 
   const handleToggleStore = async () => {
-    if (!isStoreOpen) {
+    const isOpen = ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open';
+    if (!isOpen) {
       try {
         const response = await api.get(`/config/${restaurantData.id}/today-schedule`);
         setTodaySchedule(response);
@@ -169,13 +173,10 @@ export default function Layout() {
         showAlert('Error al obtener horario: ' + error.message, 'error', 3000);
       }
     } else {
-      // Cerrar tienda
+      // Cerrar tienda via context
       try {
-        await api.put(`/config/${restaurantData.id}/availability`, {
-          status: 'closed_by_owner',
-          reason: 'Cerrado manualmente por el dueño'
-        });
-        setIsStoreOpen(false);
+        await closeStore(restaurantData.id, 'Cerrado manualmente por el dueño');
+        refetch();
         navigate('/');
         if (document.fullscreenElement) {
           document.exitFullscreen();
@@ -189,11 +190,8 @@ export default function Layout() {
 
   const handleConfirmOpen = async () => {
     try {
-      await api.put(`/config/${restaurantData.id}/availability`, {
-        status: 'open',
-        reason: null
-      });
-      setIsStoreOpen(true);
+      await openStore(restaurantData.id);
+      refetch();
       setIsConfirmOpen(false);
       navigate('/orders');
       // Forzar pantalla completa

@@ -22,11 +22,17 @@ class ConfigService {
   // Actualizar información general (info, horarios, etc.) - Combina varios métodos anteriores
   async updateGeneralInfo(restaurantId, updateData) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
+    // Usar update para permitir actualizaciones parciales por sección
     await restaurantRef.update({
-      ...updateData, // Incluye info, hours, delivery, etc.
+      ...updateData,
       updatedAt: new Date()
     });
-    return { success: true };
+
+    // Devolver la configuración actualizada (solo la parte general)
+    const updatedDoc = await restaurantRef.get();
+    const data = updatedDoc.exists ? updatedDoc.data() : {};
+    const { info, hours, availabilitySettings, delivery, paymentMethods, features, commands } = data;
+    return { info, hours, availabilitySettings, delivery, paymentMethods, features, commands };
   }
 
   // Método específico para actualizar solo el token de Telegram
