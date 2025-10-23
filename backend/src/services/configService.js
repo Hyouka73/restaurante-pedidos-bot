@@ -1,3 +1,4 @@
+//backend/src/services/configService.js
 const { db } = require('../config/firebase');
 
 class ConfigService {

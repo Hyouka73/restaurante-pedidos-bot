@@ -1,3 +1,4 @@
+//backend/src/bot/handlers/startHandler.js
 const configBotService = require('../services/configBotService');
 const telegramUserService = require('../services/telegramUserService');
 const availabilityService = require('../../services/availabilityService');

@@ -1,3 +1,4 @@
+//backend/src/services/availabiltyService.js
 const { db } = require('../config/firebase');
 
 class AvailabilityService {

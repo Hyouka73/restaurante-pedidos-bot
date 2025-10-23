@@ -1,3 +1,4 @@
+//backend/src/bot/services/configBotService.js
 const { db } = require('../../config/firebase');
 
 class ConfigBotService {

@@ -1,3 +1,4 @@
+//backend/src/bot/handlers/menuHandler.js
 const menuService = require('../../services/menuService');
 const telegramUserService = require('../services/telegramUserService');
 const availabilityService = require('../../services/availabilityService'); // Importar servicio

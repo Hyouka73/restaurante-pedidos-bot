@@ -1,3 +1,4 @@
+//backend/src/services/authService.js
 const { db, admin } = require('../config/firebase');
 
 class AuthService {

@@ -1,3 +1,4 @@
+//backend/src/bot/services/telegramUserService.js
 const { db } = require('../../config/firebase');
 
 class TelegramUserService {

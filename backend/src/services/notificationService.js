@@ -1,7 +1,4 @@
-// Este archivo define la interfaz para enviar notificaciones.
-// Por ahora, solo implementaremos el envío de recordatorios a través de FCM.
-// Requiere configurar FCM en el proyecto de Firebase.
-
+//backend/src/services/notificationService.js
 // Importar el SDK de Firebase Admin (ya debería estar disponible)
 const { getMessaging } = require('firebase-admin/messaging');
 const { db } = require('../config/firebase');

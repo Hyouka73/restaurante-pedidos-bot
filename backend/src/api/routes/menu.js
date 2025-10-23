@@ -1,4 +1,4 @@
-// backend/src/routes/menu.js
+// backend/src/api/routes/menu.js
 const express = require('express');
 const router = express.Router();
 const menuService = require('../services/menuService');
