@@ -178,6 +178,17 @@ router.put('/:restaurantId/commands', verifyToken, verifyOwner, async (req, res)
   }
 });
 
+// GET /api/config/:restaurantId/messages
+router.get('/:restaurantId/messages', verifyToken, verifyOwner, async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const messages = await configService.getMessages(restaurantId);
+    res.json(messages);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // PUT /api/config/:restaurantId/messages
 router.put('/:restaurantId/messages', verifyToken, verifyOwner, async (req, res) => {
   try {

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import { useRestaurant } from '../context/RestaurantContext';
 import { motion } from 'framer-motion';
 import { 
   Store, ShoppingCart, Clock, DollarSign, TrendingUp, 
@@ -14,7 +15,7 @@ import Loader from '../components/ui/Loader';
 export default function Dashboard() {
   const [user, loadingAuth] = useAuthState(auth);
   const navigate = useNavigate();
-  const [restaurantData, setRestaurantData] = useState(null);
+  const [restaurantDoc, setRestaurantData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({
     totalOrders: 0,
@@ -23,6 +24,7 @@ export default function Dashboard() {
     avgOrderValue: 0,
   });
   const [recentOrders, setRecentOrders] = useState([]);
+  const { data: restaurantData } = useRestaurant();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -44,9 +46,9 @@ export default function Dashboard() {
           console.log("[Dashboard] RestaurantId obtenido:", restaurantId);
           
           if (restaurantId) {
-            const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
-            if (restaurantDoc.exists()) {
-              setRestaurantData(restaurantDoc.data());
+            const rDoc = await getDoc(doc(db, 'restaurants', restaurantId));
+            if (rDoc.exists()) {
+              setRestaurantData(rDoc.data());
             }
 
             const ordersQuery = query(
@@ -139,7 +141,6 @@ export default function Dashboard() {
 
   const quickActions = [
     { label: 'Gestionar Menú', icon: Package, path: '/menu', color: 'from-blue-500 to-indigo-600' },
-    { label: 'Ver Pedidos', icon: ShoppingCart, path: '/orders', color: 'from-amber-500 to-orange-600' },
     { label: 'Configurar Mensajes', icon: Sparkles, path: '/config/messages', color: 'from-purple-500 to-pink-600' },
   ];
 
@@ -180,7 +181,7 @@ export default function Dashboard() {
               </p>
               <p className="text-[#ff7f50] font-semibold mt-1 flex items-center gap-2">
                 <Store size={18} />
-                {restaurantData?.info?.name || 'Restaurante no configurado'}
+                {restaurantDoc?.info?.name || 'Restaurante no configurado'}
               </p>
             </div>
             
@@ -244,87 +245,113 @@ export default function Dashboard() {
           })}
         </div>
 
-        {/* Últimos Pedidos */}
+        {/* Centro de Control de Pedidos */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="bg-white rounded-3xl shadow-xl p-6 sm:p-8"
+          className="bg-gradient-to-r from-[#ff7f50] to-[#ff6347] rounded-3xl shadow-xl p-6 sm:p-8 text-white"
         >
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-              <ShoppingCart className="text-[#ff7f50]" size={28} />
-              Últimos Pedidos
-            </h2>
-            <button
-              onClick={() => navigate('/orders')}
-              className="px-4 py-2 bg-gradient-to-r from-[#ff7f50] to-[#ff6347] text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center gap-2"
-            >
-              Ver Todos
-              <ArrowRight size={16} />
-            </button>
-          </div>
-
-          {recentOrders.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ShoppingCart className="text-gray-400" size={32} />
-              </div>
-              <p className="text-gray-500 text-lg font-medium">
-                No hay pedidos recientes
-              </p>
-              <p className="text-gray-400 text-sm mt-2">
-                Los pedidos aparecerán aquí cuando los clientes empiecen a ordenar
+            <div>
+              <h2 className="text-2xl font-bold flex items-center gap-2 mb-2">
+                <ShoppingCart size={28} />
+                Centro de Control de Pedidos
+              </h2>
+              <p className="text-white/90">
+                Gestiona tus pedidos en tiempo real y controla el estado de tu restaurante
               </p>
             </div>
+            <div className="flex items-center gap-4">
+              <div className={`px-4 py-2 rounded-xl ${
+                (restaurantData?.availabilityComputed?.status || restaurantData?.availability?.status) === 'open' 
+                ? 'bg-green-500' 
+                : 'bg-red-500'
+              } text-white font-medium`}>
+                {(restaurantData?.availabilityComputed?.status || restaurantData?.availability?.status) === 'open' 
+                  ? '🟢 Abierto' 
+                  : '🔴 Cerrado'}
+              </div>
+              <button
+                onClick={() => navigate('/orders')}
+                className="px-6 py-3 bg-white text-[#ff6347] rounded-xl font-medium hover:shadow-lg transition-all flex items-center gap-2"
+              >
+                Ir al Centro de Control
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Mostrar pedidos recientes solo si el restaurante está abierto */}
+          { (restaurantData?.availabilityComputed?.status || restaurantData?.availability?.status) === 'open' ? (
+            recentOrders.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <ShoppingCart className="text-gray-400" size={32} />
+                </div>
+                <p className="text-gray-500 text-lg font-medium">
+                  No hay pedidos recientes
+                </p>
+                <p className="text-gray-400 text-sm mt-2">
+                  Los pedidos aparecerán aquí cuando los clientes empiecen a ordenar
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b-2 border-gray-100">
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">ID</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Cliente</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Total</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Estado</th>
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentOrders.map((order, index) => (
+                      <motion.tr
+                        key={order.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="py-4 px-4">
+                          <span className="font-mono text-sm font-semibold text-gray-700">
+                            #{order.id.substring(0, 8)}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
+                          <span className="text-sm text-gray-800">
+                            {order.customer?.name || 'Desconocido'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
+                          <span className="text-sm font-bold text-emerald-600">
+                            ${order.total}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4">
+                          {getStatusBadge(order.status)}
+                        </td>
+                        <td className="py-4 px-4">
+                          <span className="text-sm text-gray-600">
+                            {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString() : 'N/A'}
+                          </span>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b-2 border-gray-100">
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">ID</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Cliente</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Total</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Estado</th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600">Fecha</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentOrders.map((order, index) => (
-                    <motion.tr
-                      key={order.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="py-4 px-4">
-                        <span className="font-mono text-sm font-semibold text-gray-700">
-                          #{order.id.substring(0, 8)}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-sm text-gray-800">
-                          {order.customer?.name || 'Desconocido'}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-sm font-bold text-emerald-600">
-                          ${order.total}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        {getStatusBadge(order.status)}
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-sm text-gray-600">
-                          {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString() : 'N/A'}
-                        </span>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="text-center py-12">
+              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Clock className="text-gray-400" size={32} />
+              </div>
+              <p className="text-gray-500 text-lg font-medium">La tienda está cerrada. Los pedidos no serán aceptados ahora.</p>
             </div>
           )}
         </motion.div>

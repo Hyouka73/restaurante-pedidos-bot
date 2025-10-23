@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
+import { useRestaurant } from '../context/RestaurantContext';
 
 export default function ConfigMessages() {
   const [messages, setMessages] = useState({
@@ -9,34 +11,42 @@ export default function ConfigMessages() {
     order_confirmed: '',
   });
   const [loading, setLoading] = useState(false);
-
-  const restaurantId = 'demo-restaurant'; // Hardcoded por ahora
+  const { showAlert, alerts, hideAlert } = useAlert();
+  const { restaurantData } = useRestaurant();
+  const restaurantId = restaurantData?.id;
 
   useEffect(() => {
+    if (!restaurantId) return;
     const fetchMessages = async () => {
       try {
         const data = await api.get(`/config/${restaurantId}/messages`);
         setMessages(data);
       } catch (error) {
         console.error('Error al cargar mensajes:', error);
+        showAlert('Error al cargar mensajes: ' + error.message, 'error', 4000);
       }
     };
     fetchMessages();
-  }, []);
+  }, [restaurantId]);
 
   const handleSave = async () => {
+    if (!restaurantId) {
+      showAlert('No hay restaurante seleccionado', 'error', 3000);
+      return;
+    }
     setLoading(true);
     try {
       await api.put(`/config/${restaurantId}/messages`, messages);
-      alert('✅ Mensajes actualizados');
+      showAlert('✅ Mensajes actualizados', 'success', 3000);
     } catch (error) {
-      alert('❌ Error: ' + error.message);
+      showAlert('❌ Error: ' + error.message, 'error', 4000);
     }
     setLoading(false);
   };
 
   return (
     <div className="space-y-6">
+      <AlertContainer alerts={alerts} onClose={hideAlert} />
       <h1 className="text-3xl font-bold">Configurar Mensajes del Bot</h1>
 
       <div className="space-y-4">

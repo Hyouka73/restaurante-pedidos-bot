@@ -142,6 +142,29 @@ export default function ConfigGeneral() {
     }
   };
 
+  // Nuevo: token de Telegram (no mostrar nunca el token actual, solo permitir actualizar)
+  const [botTokenInput, setBotTokenInput] = useState('');
+  const [updatingToken, setUpdatingToken] = useState(false);
+
+  const handleUpdateBotToken = async () => {
+    if (!user) return navigate('/login');
+    if (!botTokenInput || botTokenInput.trim().length === 0) return showAlert('Ingresa el token antes de actualizar', 'warning', 3000);
+
+    setUpdatingToken(true);
+    try {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const restaurantId = userDoc.data().restaurantId;
+      await api.put(`/config/${restaurantId}/bot-token`, { token: botTokenInput.trim() });
+      setBotTokenInput('');
+      showAlert('Token actualizado correctamente', 'success', 3000);
+    } catch (err) {
+      console.error('Error actualizando token:', err);
+      showAlert('Error actualizando token: ' + err.message, 'error', 5000);
+    } finally {
+      setUpdatingToken(false);
+    }
+  };
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <ButtonLoader size="lg" />
@@ -161,6 +184,29 @@ export default function ConfigGeneral() {
           <FeaturesForm config={config} onChange={handleChange} />
           <PaymentMethodsForm config={config} onChange={handleChange} />
           <CommandsForm config={config} onChange={handleChange} />
+
+          {/* Actualizar token del bot (no mostrar el token actual) */}
+          <div className="mt-4 p-4 border rounded-lg bg-gray-50">
+            <h4 className="font-semibold mb-2">Actualizar Token de Telegram</h4>
+            <p className="text-sm text-gray-600 mb-3">Por seguridad el token nunca se muestra. Puedes reemplazarlo aquí si necesitas actualizarlo.</p>
+            <div className="flex gap-2 items-center">
+              <input
+                type="password"
+                placeholder="Nuevo token de Telegram"
+                className="input input-bordered w-full"
+                value={botTokenInput}
+                onChange={(e) => setBotTokenInput(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleUpdateBotToken}
+                disabled={updatingToken}
+              >
+                {updatingToken ? <ButtonLoader size="sm" /> : 'Actualizar Token'}
+              </button>
+            </div>
+          </div>
 
           <div className="flex justify-end mt-6">
             <button

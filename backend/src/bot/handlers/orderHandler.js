@@ -4,6 +4,7 @@ const orderService = require('../../services/orderService');
 const configBotService = require('../services/configBotService');
 const telegramUserService = require('../services/telegramUserService');
 const availabilityService = require('../../services/availabilityService'); // Importar servicio
+const deliveryService = require('../../services/deliveryService');
 
 // Para almacenar temporalmente el estado de los pedidos en sesión (simplificado)
 // En producción, esto debería ir en Firestore o Redis
@@ -14,6 +15,38 @@ module.exports = async (ctx) => {
     const chatId = ctx.chat.id;
     const userId = ctx.from.id;
     const restaurantId = await telegramUserService.getRestaurantIdByChat(chatId);
+
+    // Manejo de mensaje de ubicación enviado por el usuario
+    if (ctx.message && ctx.message.location) {
+      const session = userOrderSessions.get(userId);
+      if (!session) {
+        await ctx.reply('No tienes un pedido activo. Inicia un pedido primero con /pedido o "Hacer Pedido".');
+        return;
+      }
+
+      const { latitude, longitude } = ctx.message.location;
+      session.customerLocation = { latitude, longitude };
+      userOrderSessions.set(userId, session);
+
+      // Calcular tarifa
+      try {
+        const result = await deliveryService.calculateFee(session.restaurantId, session.customerLocation);
+        if (!result.withinMaxDistance) {
+          await ctx.reply('Lo sentimos, tu ubicación está fuera de la zona de entrega.');
+          return;
+        }
+
+        session.delivery = { fee: result.fee, distanceKm: result.distanceKm };
+        userOrderSessions.set(userId, session);
+
+        await ctx.reply(`La distancia hasta el local es de ${result.distanceKm} km. Tarifa estimada: $${result.fee}. \nEnvía /confirmar para continuar con el pedido o /cancelar para cancelar.`);
+      } catch (err) {
+        console.error('Error calculando tarifa:', err);
+        await ctx.reply('Error calculando tarifa de envío. Intenta nuevamente más tarde.');
+      }
+
+      return; // manejado el mensaje de ubicación
+    }
 
     // --- VERIFICAR DISPONIBILIDAD ---
     const availability = await availabilityService.checkAvailability(restaurantId);
