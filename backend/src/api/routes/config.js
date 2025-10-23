@@ -6,17 +6,6 @@ const authService = require('../../services/authService'); // Importar authServi
 const { admin } = require('../../config/firebase'); // Para verificar el token de Firebase Auth
 const router = express.Router();
 
-// GET /api/config/:restaurantId/today-schedule
-router.get('/:restaurantId/today-schedule', verifyToken, verifyOwner, async (req, res) => {
-  try {
-    const { restaurantId } = req.params;
-    const schedule = await availabilityService.getTodaySchedule(restaurantId);
-    res.json(schedule);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Middleware para verificar token de Firebase Auth
 const verifyToken = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1]; // Bearer <token>
@@ -56,6 +45,17 @@ router.get('/:restaurantId/general', verifyToken, verifyOwner, async (req, res) 
     // CORREGIDO: Usar configService en lugar de authService
     const config = await configService.getGeneralInfo(restaurantId);
     res.json(config);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/config/:restaurantId/today-schedule
+router.get('/:restaurantId/today-schedule', verifyToken, verifyOwner, async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const schedule = await availabilityService.getTodaySchedule(restaurantId);
+    res.json(schedule);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
