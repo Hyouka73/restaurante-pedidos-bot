@@ -6,20 +6,20 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAlert } from '../components/ui/CustomAlert';
 import { ButtonLoader } from '../components/ui/Loader';
-import { WizardCard, WizardSectionHeader, WizardErrorBox } from '../components/ui/WizardComponents.jsx'; // Reutilizamos componentes del wizard
+import { WizardCard, WizardSectionHeader, WizardErrorBox } from '../components/ui/WizardComponents.jsx';
 import { Plus, Settings } from 'lucide-react';
 import MenuItemForm from '../components/menu/MenuItemForm';
 import MenuComboForm from '../components/menu/MenuComboForm';
 import MenuItemCard from '../components/menu/MenuItemCard';
 import MenuComboCard from '../components/menu/MenuComboCard';
-import { api } from '../services/api'; // Asegúrate de tener este archivo de configuración para las llamadas API
+import { api, configureAlerts } from '../services/api'; // Importar configureAlerts
 
 const Menu = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState([]);
   const [combos, setCombos] = useState([]);
-  const [categories] = useState(['Entradas', 'Platos Fuertes', 'Postres', 'Bebidas', 'Adicionales']); // Categorías por defecto
+  const [categories] = useState(['Entradas', 'Platos Fuertes', 'Postres', 'Bebidas', 'Adicionales']);
   const [error, setError] = useState('');
   const [editingItem, setEditingItem] = useState(null);
   const [editingCombo, setEditingCombo] = useState(null);
@@ -31,9 +31,9 @@ const Menu = () => {
     name: '',
     description: '',
     price: '',
-    imageUrl: '', // Inicializado vacío
+    imageUrl: '',
     available: true,
-    category: 'Platos Fuertes', // Valor por defecto
+    category: 'Platos Fuertes',
     prepTime: 5,
     complexity: 1,
     order: 1
@@ -43,16 +43,21 @@ const Menu = () => {
     name: '',
     description: '',
     price: '',
-    imageUrl: '', // Inicializado vacío
+    imageUrl: '',
     available: true,
     order: 1,
-    items: [], // Lista de IDs de items
-    useItemPrices: false // Si es true, suma precios de items; si false, usa precio único
+    items: [],
+    useItemPrices: false
   });
 
   const navigate = useNavigate();
   const { showAlert } = useAlert();
   const auth = getAuth();
+
+  // Configurar las alertas cuando el componente se monte
+  useEffect(() => {
+    configureAlerts(showAlert);
+  }, [showAlert]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -65,7 +70,6 @@ const Menu = () => {
         setLoading(true);
         setError('');
 
-        // Obtener restaurantId del usuario
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (!userDoc.exists) {
           setError('Usuario no encontrado.');
@@ -74,31 +78,25 @@ const Menu = () => {
         const userRestaurantId = userDoc.data().restaurantId;
         setRestaurantId(userRestaurantId);
 
-        // Obtener items del menú desde el backend
         let itemsData = [];
         try {
           const itemsResponse = await api.get(`/menu/${userRestaurantId}/items`);
-          // Asegurar que itemsResponse.data sea un array
           itemsData = Array.isArray(itemsResponse) ? itemsResponse : [];
         } catch (itemsErr) {
           console.error("Error al cargar items:", itemsErr);
-          setError(`Error al cargar items: ${itemsErr.message}`);
-          itemsData = []; // Asegurar array vacío en caso de error
+          itemsData = [];
         }
-        setItems(itemsData); // Actualizar estado
+        setItems(itemsData);
 
-        // Obtener combos del menú desde el backend
         let combosData = [];
         try {
           const combosResponse = await api.get(`/menu/${userRestaurantId}/combos`);
-          // Asegurar que combosResponse.data sea un array
           combosData = Array.isArray(combosResponse) ? combosResponse : [];
         } catch (combosErr) {
           console.error("Error al cargar combos:", combosErr);
-          setError(`Error al cargar combos: ${combosErr.message}`);
-          combosData = []; // Asegurar array vacío en caso de error
+          combosData = [];
         }
-        setCombos(combosData); // Actualizar estado
+        setCombos(combosData);
 
       } catch (err) {
         console.error("Error general al cargar el menú:", err);
@@ -110,12 +108,11 @@ const Menu = () => {
       }
     });
 
-    return () => unsubscribe(); // Cleanup para evitar fugas de memoria
-  }, [auth, navigate, showAlert]); // Agregar showAlert si se usa para mostrar errores aquí
+    return () => unsubscribe();
+  }, [auth, navigate]);
 
-  // Funciones para Items
   const handleAddItem = async () => {
-    if (!restaurantId) return; // Asegurar que tenemos el ID
+    if (!restaurantId) return;
 
     if (!newItem.name.trim() || !newItem.price) {
       showAlert('Nombre y precio son obligatorios.', 'warning', 3000);
@@ -126,20 +123,23 @@ const Menu = () => {
     try {
       const itemData = {
         ...newItem,
-        price: parseFloat(newItem.price), // Asegurar que sea número
+        price: parseFloat(newItem.price),
         prepTime: parseInt(newItem.prepTime) || 5,
         complexity: parseInt(newItem.complexity) || 1,
         order: parseInt(newItem.order) || 1,
       };
 
-      await api.post(`/menu/${restaurantId}/items`, itemData);
-      // showAlert('Item agregado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.post
-      setItems(prev => [...prev, { id: 'temp-id', ...itemData }]); // Agregar temporalmente
+      const response = await api.post(`/menu/${restaurantId}/items`, itemData);
+      
+      // Recargar items para obtener el ID real del servidor
+      const itemsResponse = await api.get(`/menu/${restaurantId}/items`);
+      setItems(Array.isArray(itemsResponse) ? itemsResponse : []);
+      
       setNewItem({
         name: '',
         description: '',
         price: '',
-        imageUrl: '', // Limpiar URL de imagen
+        imageUrl: '',
         available: true,
         category: 'Platos Fuertes',
         prepTime: 5,
@@ -149,15 +149,13 @@ const Menu = () => {
       setShowItemForm(false);
     } catch (err) {
       console.error("Error al agregar item:", err);
-      setError('Error al agregar item: ' + err.message);
-      showAlert('Error al agregar item.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
   };
 
   const handleUpdateItem = async () => {
-    if (!restaurantId || !editingItem) return; // Asegurar que tenemos el ID y el item a editar
+    if (!restaurantId || !editingItem) return;
 
     if (!editingItem.name.trim() || !editingItem.price) {
       showAlert('Nombre y precio son obligatorios.', 'warning', 3000);
@@ -175,13 +173,10 @@ const Menu = () => {
       };
 
       await api.put(`/menu/${restaurantId}/items/${editingItem.id}`, itemData);
-      // showAlert('Item actualizado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.put
-      setItems(prev => prev.map(item => item.id === editingItem.id ? { ...itemData, id: editingItem.id } : item)); // Actualizar localmente
+      setItems(prev => prev.map(item => item.id === editingItem.id ? { ...itemData, id: editingItem.id } : item));
       setEditingItem(null);
     } catch (err) {
       console.error("Error al actualizar item:", err);
-      setError('Error al actualizar item: ' + err.message);
-      showAlert('Error al actualizar item.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
@@ -193,20 +188,16 @@ const Menu = () => {
     setSaving(true);
     try {
       await api.delete(`/menu/${restaurantId}/items/${itemId}`);
-      // showAlert('Item eliminado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.delete
-      setItems(prev => prev.filter(item => item.id !== itemId)); // Eliminar localmente
+      setItems(prev => prev.filter(item => item.id !== itemId));
     } catch (err) {
       console.error("Error al eliminar item:", err);
-      setError('Error al eliminar item: ' + err.message);
-      showAlert('Error al eliminar item.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
   };
 
-  // Funciones para Combos (sin cambios en la imagen para este ejemplo)
   const handleAddCombo = async () => {
-    if (!restaurantId) return; // Asegurar que tenemos el ID
+    if (!restaurantId) return;
 
     if (!newCombo.name.trim() || newCombo.items.length === 0) {
       showAlert('Nombre y al menos un item son obligatorios para el combo.', 'warning', 3000);
@@ -217,27 +208,30 @@ const Menu = () => {
     try {
       let finalPrice = newCombo.price;
       if (newCombo.useItemPrices) {
-          const itemPrices = items.filter(item => newCombo.items.includes(item.id)).map(item => item.price);
-          finalPrice = itemPrices.reduce((sum, price) => sum + price, 0).toFixed(2);
+        const itemPrices = items.filter(item => newCombo.items.includes(item.id)).map(item => item.price);
+        finalPrice = itemPrices.reduce((sum, price) => sum + price, 0).toFixed(2);
       } else {
-          finalPrice = parseFloat(newCombo.price);
+        finalPrice = parseFloat(newCombo.price);
       }
 
       const comboData = {
         ...newCombo,
-        price: parseFloat(finalPrice), // Siempre enviar como número
-        items: newCombo.items, // Lista de IDs
+        price: parseFloat(finalPrice),
+        items: newCombo.items,
         order: parseInt(newCombo.order) || 1,
       };
 
       await api.post(`/menu/${restaurantId}/combos`, comboData);
-      // showAlert('Combo agregado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.post
-      setCombos(prev => [...prev, { id: 'temp-id', ...comboData }]); // Agregar temporalmente
+      
+      // Recargar combos
+      const combosResponse = await api.get(`/menu/${restaurantId}/combos`);
+      setCombos(Array.isArray(combosResponse) ? combosResponse : []);
+      
       setNewCombo({
         name: '',
         description: '',
         price: '',
-        imageUrl: '', // Limpiar URL de imagen
+        imageUrl: '',
         available: true,
         order: 1,
         items: [],
@@ -246,15 +240,13 @@ const Menu = () => {
       setShowComboForm(false);
     } catch (err) {
       console.error("Error al agregar combo:", err);
-      setError('Error al agregar combo: ' + err.message);
-      showAlert('Error al agregar combo.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
   };
 
   const handleUpdateCombo = async () => {
-    if (!restaurantId || !editingCombo) return; // Asegurar que tenemos el ID y el combo a editar
+    if (!restaurantId || !editingCombo) return;
 
     if (!editingCombo.name.trim() || editingCombo.items.length === 0) {
       showAlert('Nombre y al menos un item son obligatorios para el combo.', 'warning', 3000);
@@ -265,27 +257,24 @@ const Menu = () => {
     try {
       let finalPrice = editingCombo.price;
       if (editingCombo.useItemPrices) {
-          const itemPrices = items.filter(item => editingCombo.items.includes(item.id)).map(item => item.price);
-          finalPrice = itemPrices.reduce((sum, price) => sum + price, 0).toFixed(2);
+        const itemPrices = items.filter(item => editingCombo.items.includes(item.id)).map(item => item.price);
+        finalPrice = itemPrices.reduce((sum, price) => sum + price, 0).toFixed(2);
       } else {
-          finalPrice = parseFloat(editingCombo.price);
+        finalPrice = parseFloat(editingCombo.price);
       }
 
       const comboData = {
         ...editingCombo,
-        price: parseFloat(finalPrice), // Siempre enviar como número
+        price: parseFloat(finalPrice),
         items: editingCombo.items,
         order: parseInt(editingCombo.order) || 1,
       };
 
       await api.put(`/menu/${restaurantId}/combos/${editingCombo.id}`, comboData);
-      // showAlert('Combo actualizado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.put
-      setCombos(prev => prev.map(combo => combo.id === editingCombo.id ? { ...comboData, id: editingCombo.id } : combo)); // Actualizar localmente
+      setCombos(prev => prev.map(combo => combo.id === editingCombo.id ? { ...comboData, id: editingCombo.id } : combo));
       setEditingCombo(null);
     } catch (err) {
       console.error("Error al actualizar combo:", err);
-      setError('Error al actualizar combo: ' + err.message);
-      showAlert('Error al actualizar combo.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
@@ -297,36 +286,31 @@ const Menu = () => {
     setSaving(true);
     try {
       await api.delete(`/menu/${restaurantId}/combos/${comboId}`);
-      // showAlert('Combo eliminado exitosamente.', 'success', 2000); // Ya no es necesario aquí si se maneja en api.delete
-      setCombos(prev => prev.filter(combo => combo.id !== comboId)); // Eliminar localmente
+      setCombos(prev => prev.filter(combo => combo.id !== comboId));
     } catch (err) {
       console.error("Error al eliminar combo:", err);
-      setError('Error al eliminar combo: ' + err.message);
-      showAlert('Error al eliminar combo.', 'error', 4000); // Usar showAlert
     } finally {
       setSaving(false);
     }
   };
 
-  // Funciones para manejo de items en combos
   const handleAddItemToCombo = (itemId, isEditing) => {
-      const state = isEditing ? editingCombo : newCombo;
-      if (state.items.includes(itemId)) return;
-      if (isEditing) {
-          setEditingCombo(prev => ({ ...prev, items: [...prev.items, itemId] }));
-      } else {
-          setNewCombo(prev => ({ ...prev, items: [...prev.items, itemId] }));
-      }
+    const state = isEditing ? editingCombo : newCombo;
+    if (state.items.includes(itemId)) return;
+    if (isEditing) {
+      setEditingCombo(prev => ({ ...prev, items: [...prev.items, itemId] }));
+    } else {
+      setNewCombo(prev => ({ ...prev, items: [...prev.items, itemId] }));
+    }
   };
 
   const handleRemoveItemFromCombo = (itemId, isEditing) => {
-      if (isEditing) {
-          setEditingCombo(prev => ({ ...prev, items: prev.items.filter(id => id !== itemId) }));
-      } else {
-          setNewCombo(prev => ({ ...prev, items: prev.items.filter(id => id !== itemId) }));
-      }
+    if (isEditing) {
+      setEditingCombo(prev => ({ ...prev, items: prev.items.filter(id => id !== itemId) }));
+    } else {
+      setNewCombo(prev => ({ ...prev, items: prev.items.filter(id => id !== itemId) }));
+    }
   };
-
 
   if (loading) {
     return (
@@ -339,7 +323,6 @@ const Menu = () => {
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <WizardCard>
-        {/* Asegúrate de pasar un icono válido */}
         <WizardSectionHeader icon={Settings} title="Menú del Restaurante" subtitle="Gestiona tus items y combos" />
         {error && <WizardErrorBox error={error} onDismiss={() => setError('')} />}
 
@@ -358,7 +341,6 @@ const Menu = () => {
           </button>
         </div>
 
-        {/* Formulario de Item */}
         {(showItemForm || editingItem) && (
           <div className="mb-6">
             <MenuItemForm
@@ -368,17 +350,15 @@ const Menu = () => {
               onCancel={() => { setShowItemForm(false); setEditingItem(null); }}
               onChange={(field, value) => editingItem ? setEditingItem({...editingItem, [field]: value}) : setNewItem({...newItem, [field]: value})}
               saving={saving}
-              // No se pasan más las funciones handleItemImageUploadSuccess y handleItemImageRemove
             />
           </div>
         )}
 
-        {/* Formulario de Combo */}
         {(showComboForm || editingCombo) && (
           <div className="mb-6">
             <MenuComboForm
               combo={editingCombo || newCombo}
-              availableItems={items.filter(item => item.available)} // Solo items disponibles
+              availableItems={items.filter(item => item.available)}
               onSave={editingCombo ? handleUpdateCombo : handleAddCombo}
               onCancel={() => { setShowComboForm(false); setEditingCombo(null); }}
               onChange={(field, value) => editingCombo ? setEditingCombo({...editingCombo, [field]: value}) : setNewCombo({...newCombo, [field]: value})}
@@ -389,11 +369,9 @@ const Menu = () => {
           </div>
         )}
 
-        {/* Lista de Items */}
         <div className="mb-8">
           <h3 className="text-xl font-semibold mb-4">Items del Menú</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Asegurar que items sea un array antes de mapear */}
             {Array.isArray(items) && items.map(item => (
               <MenuItemCard
                 key={item.id}
@@ -405,16 +383,14 @@ const Menu = () => {
           </div>
         </div>
 
-        {/* Lista de Combos */}
         <div>
           <h3 className="text-xl font-semibold mb-4">Combos</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Asegurar que combos sea un array antes de mapear */}
             {Array.isArray(combos) && combos.map(combo => (
               <MenuComboCard
                 key={combo.id}
                 combo={combo}
-                items={items} // Asegúrate que items esté definido aquí también si lo usas
+                items={items}
                 onEdit={(comboData) => { setEditingCombo(comboData); setShowComboForm(false); }}
                 onDelete={handleDeleteCombo}
               />

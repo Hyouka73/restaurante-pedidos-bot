@@ -1,109 +1,151 @@
 // frontend-pwa/src/components/ui/ImageUploader.jsx
-import { useState } from 'react';
-import { useAlert } from './CustomAlert'; // Usamos el alert del frontend
+import { useState, useRef } from 'react';
+import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { api } from '../../services/api';
 import { ButtonLoader } from './Loader';
-import { Upload } from 'lucide-react';
-import { api } from '../../services/api'; // Importa tu servicio API
 
-const ImageUploader = ({ onUploadSuccess, onError, currentImageUrl = '', accept = "image/*", maxFileSizeMB = 5 }) => {
-  const [file, setFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(currentImageUrl); // Vista previa local
+const ImageUploader = ({ 
+  onUploadSuccess, 
+  onError, 
+  currentImageUrl = '', 
+  maxFileSizeMB = 5 
+}) => {
   const [uploading, setUploading] = useState(false);
-  const { showAlert } = useAlert(); // Obtén la función showAlert
+  const [preview, setPreview] = useState(currentImageUrl);
+  const fileInputRef = useRef(null);
 
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      // Validación de tipo
-      if (!selectedFile.type.startsWith('image/')) {
-        const errorMsg = 'Por favor selecciona un archivo de imagen válido.';
-        if (onError) onError(errorMsg);
-        showAlert(errorMsg, 'error', 3000);
-        return;
-      }
-      // Validación de tamaño
-      const maxSizeBytes = maxFileSizeMB * 1024 * 1024; // Convertir MB a bytes
-      if (selectedFile.size > maxSizeBytes) {
-        const errorMsg = `El archivo es demasiado grande. Máximo ${maxFileSizeMB}MB permitidos.`;
-        if (onError) onError(errorMsg);
-        showAlert(errorMsg, 'error', 3000);
-        return;
-      }
+  const handleFileSelect = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
 
-      setFile(selectedFile);
-      setPreviewUrl(URL.createObjectURL(selectedFile)); // Vista previa local
-    }
-  };
-
-  const handleUpload = async () => {
-    if (!file) {
-      const errorMsg = 'No se ha seleccionado ningún archivo.';
-      if (onError) onError(errorMsg);
-      showAlert(errorMsg, 'warning', 3000);
+    // Validar tipo de archivo
+    if (!file.type.startsWith('image/')) {
+      const error = new Error('Solo se permiten archivos de imagen');
+      if (onError) onError(error);
       return;
     }
 
+    // Validar tamaño
+    const maxSize = maxFileSizeMB * 1024 * 1024;
+    if (file.size > maxSize) {
+      const error = new Error(`El archivo debe ser menor a ${maxFileSizeMB}MB`);
+      if (onError) onError(error);
+      return;
+    }
+
+    // Crear preview local
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+
+    // Subir imagen
     setUploading(true);
-    const formData = new FormData();
-    formData.append('image', file);
-
     try {
-      // Enviar al backend
-      const response = await api.post('/upload/image', formData); // Nueva ruta en el backend
-      const downloadURL = response.url; // Asumiendo que el backend devuelve { url: '...' }
-
-      // Notificar al componente padre
-      onUploadSuccess(downloadURL);
-      showAlert('Imagen subida exitosamente.', 'success', 2000);
-
+      const response = await api.upload('/upload/image', file);
+      
+      if (response && response.url) {
+        setPreview(response.url);
+        if (onUploadSuccess) {
+          onUploadSuccess(response.url);
+        }
+      } else {
+        throw new Error('No se recibió URL de la imagen');
+      }
     } catch (error) {
       console.error('Error al subir imagen:', error);
-      const errorMsg = 'Error al subir la imagen: ' + error.message;
-      if (onError) onError(errorMsg);
-      showAlert(errorMsg, 'error', 4000);
+      setPreview(currentImageUrl); // Restaurar preview anterior
+      if (onError) {
+        onError(error);
+      }
     } finally {
       setUploading(false);
+      // Limpiar el input para permitir subir el mismo archivo otra vez
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
-  const handleRemove = () => {
-    setFile(null);
-    setPreviewUrl(''); // Limpiar vista previa
-    onUploadSuccess(''); // Notificar al padre que la URL es vacía
-    showAlert('Imagen removida.', 'info', 2000);
+  const handleRemoveImage = () => {
+    setPreview('');
+    if (onUploadSuccess) {
+      onUploadSuccess('');
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   return (
-    <div className="form-control mt-2">
-      <label className="label">
-        <span className="label-text">Seleccionar Imagen</span>
-      </label>
+    <div className="w-full">
       <input
+        ref={fileInputRef}
         type="file"
-        accept={accept}
-        onChange={handleFileChange}
-        className="file-input file-input-bordered w-full max-w-xs"
+        accept="image/*"
+        onChange={handleFileSelect}
+        className="hidden"
+        id="image-upload"
+        disabled={uploading}
       />
-      {previewUrl && (
-        <div className="mt-2">
-          <img src={previewUrl} alt="Vista previa" className="max-w-xs max-h-48 object-contain border rounded-lg" />
-          <button
-            type="button"
-            onClick={handleRemove}
-            className="mt-2 px-3 py-1 bg-red-500 text-white rounded-lg text-sm hover:bg-red-600 transition-colors flex items-center gap-1"
+      
+      <div className="flex flex-col gap-3">
+        {preview ? (
+          <div className="relative group">
+            <img
+              src={preview}
+              alt="Preview"
+              className="w-full h-48 object-cover rounded-lg border-2 border-gray-200"
+            />
+            {uploading && (
+              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+                <ButtonLoader size="md" />
+              </div>
+            )}
+            {!uploading && (
+              <button
+                onClick={handleRemoveImage}
+                className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+        ) : (
+          <label
+            htmlFor="image-upload"
+            className={`flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors ${
+              uploading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
           >
-            Remover
-          </button>
-        </div>
-      )}
-      <button
-        type="button"
-        className="btn btn-sm btn-primary mt-2"
-        onClick={handleUpload}
-        disabled={uploading || !file}
-      >
-        {uploading ? <><ButtonLoader size="xs" /> Subiendo...</> : <><Upload size={14} /> Subir Imagen</>}
-      </button>
+            {uploading ? (
+              <ButtonLoader size="md" />
+            ) : (
+              <>
+                <ImageIcon className="w-12 h-12 text-gray-400 mb-2" />
+                <p className="text-sm text-gray-500">
+                  <span className="font-semibold">Click para subir</span> o arrastra una imagen
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  PNG, JPG, GIF hasta {maxFileSizeMB}MB
+                </p>
+              </>
+            )}
+          </label>
+        )}
+        
+        {preview && !uploading && (
+          <label
+            htmlFor="image-upload"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors cursor-pointer"
+          >
+            <Upload size={16} />
+            Cambiar imagen
+          </label>
+        )}
+      </div>
     </div>
   );
 };
