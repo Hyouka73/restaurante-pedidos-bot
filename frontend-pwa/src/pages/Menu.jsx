@@ -7,7 +7,7 @@ import { db } from '../config/firebase';
 import { useAlert } from '../components/ui/CustomAlert';
 import { ButtonLoader } from '../components/ui/Loader';
 import { WizardCard, WizardSectionHeader, WizardErrorBox } from '../components/ui/WizardComponents.jsx'; // Reutilizamos componentes del wizard
-import { Plus } from 'lucide-react';
+import { Plus, Settings } from 'lucide-react';
 import MenuItemForm from '../components/menu/MenuItemForm';
 import MenuComboForm from '../components/menu/MenuComboForm';
 import MenuItemCard from '../components/menu/MenuItemCard';
@@ -72,26 +72,46 @@ const Menu = () => {
           return;
         }
         const userRestaurantId = userDoc.data().restaurantId;
-        setRestaurantId(userRestaurantId); // Guardar el ID para usarlo en las llamadas API
+        setRestaurantId(userRestaurantId);
 
         // Obtener items del menú desde el backend
-        const itemsResponse = await api.get(`/menu/${userRestaurantId}/items`);
-        setItems(itemsResponse.data);
+        let itemsData = [];
+        try {
+          const itemsResponse = await api.get(`/menu/${userRestaurantId}/items`);
+          // Asegurar que itemsResponse.data sea un array
+          itemsData = Array.isArray(itemsResponse) ? itemsResponse : [];
+        } catch (itemsErr) {
+          console.error("Error al cargar items:", itemsErr);
+          setError(`Error al cargar items: ${itemsErr.message}`);
+          itemsData = []; // Asegurar array vacío en caso de error
+        }
+        setItems(itemsData); // Actualizar estado
 
         // Obtener combos del menú desde el backend
-        const combosResponse = await api.get(`/menu/${userRestaurantId}/combos`);
-        setCombos(combosResponse.data);
+        let combosData = [];
+        try {
+          const combosResponse = await api.get(`/menu/${userRestaurantId}/combos`);
+          // Asegurar que combosResponse.data sea un array
+          combosData = Array.isArray(combosResponse) ? combosResponse : [];
+        } catch (combosErr) {
+          console.error("Error al cargar combos:", combosErr);
+          setError(`Error al cargar combos: ${combosErr.message}`);
+          combosData = []; // Asegurar array vacío en caso de error
+        }
+        setCombos(combosData); // Actualizar estado
 
       } catch (err) {
-        console.error("Error al cargar el menú:", err);
-        setError('Error al cargar el menú: ' + err.message);
+        console.error("Error general al cargar el menú:", err);
+        setError('Error general al cargar el menú: ' + err.message);
+        setItems([]);
+        setCombos([]);
       } finally {
         setLoading(false);
       }
     });
 
     return () => unsubscribe(); // Cleanup para evitar fugas de memoria
-  }, [auth, navigate]);
+  }, [auth, navigate, showAlert]); // Agregar showAlert si se usa para mostrar errores aquí
 
   // Funciones para manejo de imágenes (opcional, si necesitas lógica adicional)
   const handleItemImageUploadSuccess = (url, isEditing) => {
@@ -139,7 +159,7 @@ const Menu = () => {
       setShowItemForm(false);
     } catch (err) {
       console.error("Error al agregar item:", err);
-      setError('Error al agregar item: ' + err.response?.data?.error || err.message);
+      setError('Error al agregar item: ' + err.message); // Captura el error del backend
       showAlert('Error al agregar item.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -171,7 +191,7 @@ const Menu = () => {
       setEditingItem(null);
     } catch (err) {
       console.error("Error al actualizar item:", err);
-      setError('Error al actualizar item: ' + err.response?.data?.error || err.message);
+      setError('Error al actualizar item: ' + err.message); // Captura el error del backend
       showAlert('Error al actualizar item.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -188,7 +208,7 @@ const Menu = () => {
       setItems(prev => prev.filter(item => item.id !== itemId));
     } catch (err) {
       console.error("Error al eliminar item:", err);
-      setError('Error al eliminar item: ' + err.response?.data?.error || err.message);
+      setError('Error al eliminar item: ' + err.message); // Captura el error del backend
       showAlert('Error al eliminar item.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -236,7 +256,7 @@ const Menu = () => {
       setShowComboForm(false);
     } catch (err) {
       console.error("Error al agregar combo:", err);
-      setError('Error al agregar combo: ' + err.response?.data?.error || err.message);
+      setError('Error al agregar combo: ' + err.message); // Captura el error del backend
       showAlert('Error al agregar combo.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -275,7 +295,7 @@ const Menu = () => {
       setEditingCombo(null);
     } catch (err) {
       console.error("Error al actualizar combo:", err);
-      setError('Error al actualizar combo: ' + err.response?.data?.error || err.message);
+      setError('Error al actualizar combo: ' + err.message); // Captura el error del backend
       showAlert('Error al actualizar combo.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -292,7 +312,7 @@ const Menu = () => {
       setCombos(prev => prev.filter(combo => combo.id !== comboId));
     } catch (err) {
       console.error("Error al eliminar combo:", err);
-      setError('Error al eliminar combo: ' + err.response?.data?.error || err.message);
+      setError('Error al eliminar combo: ' + err.message); // Captura el error del backend
       showAlert('Error al eliminar combo.', 'error', 4000);
     } finally {
       setSaving(false);
@@ -330,8 +350,8 @@ const Menu = () => {
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <WizardCard>
-        <WizardSectionHeader title="Menú del Restaurante" subtitle="Gestiona tus items y combos" />
-        {error && <WizardErrorBox error={error} onDismiss={() => setError('')} />}
+          <WizardSectionHeader icon={Settings} title="Menú del Restaurante" subtitle="Gestiona tus items y combos" />
+          {error && <WizardErrorBox error={error} onDismiss={() => setError('')} />}  
 
         <div className="flex gap-4 mb-6">
           <button
@@ -384,7 +404,8 @@ const Menu = () => {
         <div className="mb-8">
           <h3 className="text-xl font-semibold mb-4">Items del Menú</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {items.map(item => (
+            {/* Asegurar que items sea un array antes de mapear */}
+            {Array.isArray(items) && items.map(item => (
               <MenuItemCard
                 key={item.id}
                 item={item}
@@ -399,11 +420,12 @@ const Menu = () => {
         <div>
           <h3 className="text-xl font-semibold mb-4">Combos</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {combos.map(combo => (
+            {/* Asegurar que combos sea un array antes de mapear */}
+            {Array.isArray(combos) && combos.map(combo => (
               <MenuComboCard
                 key={combo.id}
                 combo={combo}
-                items={items} // Pasamos la lista completa de items para que el card pueda mapearlos
+                items={items} // Asegúrate que items esté definido aquí también si lo usas
                 onEdit={(comboData) => { setEditingCombo(comboData); setShowComboForm(false); }}
                 onDelete={handleDeleteCombo}
               />

@@ -11,16 +11,19 @@ const authService = require('../../services/authService'); // Subimos 2 niveles:
 // Asegúrate de tener admin importado para verifyToken
 const { admin } = require('../../config/firebase'); // Subimos 2 niveles: ../.. -> backend/src/, luego bajamos a config/
 
-// Define verifyToken aquí mismo
 const verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1]; // Bearer <token>
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
+
   if (!token) {
+    console.error("No token provided in request headers.");
     return res.status(401).json({ error: 'Token no proporcionado' });
   }
 
   try {
     const decodedToken = await admin.auth().verifyIdToken(token);
     req.user = decodedToken; // Agrega los datos del usuario al request
+    console.log("Token verified for user:", decodedToken.uid); // Log para depuración
     next();
   } catch (error) {
     console.error("Error verificando token:", error);
