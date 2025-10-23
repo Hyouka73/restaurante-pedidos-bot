@@ -87,38 +87,62 @@ const handleResponse = async (res, method) => {
 
 export const api = {
   get: async (endpoint) => {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE}${endpoint}`, { headers });
-    return handleResponse(res, 'GET');
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}${endpoint}`, { headers });
+      return handleResponse(res, 'GET');
+    } catch (err) {
+      console.error('[api.get] Network or unexpected error:', err);
+      if (alertFunction) alertFunction(err.message || 'Error de red', 'error', 4000);
+      throw err;
+    }
   },
   
   post: async (endpoint, data) => {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(data)
-    });
-    return handleResponse(res, 'POST');
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data)
+      });
+      return handleResponse(res, 'POST');
+    } catch (err) {
+      console.error('[api.post] Network or unexpected error:', err);
+      if (alertFunction) alertFunction(err.message || 'Error de red', 'error', 4000);
+      throw err;
+    }
   },
   
   put: async (endpoint, data) => {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify(data)
-    });
-    return handleResponse(res, 'PUT');
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(data)
+      });
+      return handleResponse(res, 'PUT');
+    } catch (err) {
+      console.error('[api.put] Network or unexpected error:', err);
+      if (alertFunction) alertFunction(err.message || 'Error de red', 'error', 4000);
+      throw err;
+    }
   },
   
   delete: async (endpoint) => {
-    const headers = await getAuthHeaders();
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'DELETE',
-      headers
-    });
-    return handleResponse(res, 'DELETE');
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'DELETE',
+        headers
+      });
+      return handleResponse(res, 'DELETE');
+    } catch (err) {
+      console.error('[api.delete] Network or unexpected error:', err);
+      if (alertFunction) alertFunction(err.message || 'Error de red', 'error', 4000);
+      throw err;
+    }
   },
 
   // Método especial para subir archivos

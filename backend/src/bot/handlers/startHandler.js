@@ -13,15 +13,22 @@ module.exports = async (ctx) => {
     // Obtener el ID del restaurante asociado a este chat
     const restaurantId = await telegramUserService.getRestaurantIdByChat(chatId);
 
+    // Si no hay restaurante vinculado, responder y salir
+    if (!restaurantId) {
+      console.warn(`[startHandler] Chat ${chatId} no está vinculado a un restaurante`);
+      await ctx.reply('Lo siento, este chat no está vinculado a ningún restaurante.');
+      return;
+    }
+
     // --- NUEVO: Verificar si es momento de enviar un recordatorio ---
-    const shouldRemind = await reminderService.shouldSendOpeningReminder(restaurantId);
+  const shouldRemind = await reminderService.shouldSendOpeningReminder(restaurantId);
     if (shouldRemind) {
       console.log(`[startHandler] Enviando recordatorio para restaurante ${restaurantId}`);
       // Obtener la hora programada de apertura para el día de hoy
       const now = new Date();
       const dayKey = availabilityService.getDayKey(now.getDay());
-      const restaurantDoc = await require('../../config/firebase').db.collection('restaurants').doc(restaurantId).get();
-      const scheduledOpenTime = restaurantDoc.data().hours[dayKey]?.open;
+  const restaurantDoc = await require('../../config/firebase').db.collection('restaurants').doc(restaurantId).get();
+  const scheduledOpenTime = restaurantDoc.data()?.hours?.[dayKey]?.open;
       await notificationService.sendOpeningReminderToOwner(restaurantId, scheduledOpenTime);
       // No se responde al cliente aún, se continúa para verificar disponibilidad
     }

@@ -7,13 +7,14 @@ import { auth, db } from '../config/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Menu, ShoppingCart, MessageSquare, 
-  Settings, LogOut, X, Store, ChevronRight,
-    Settings2
+  Settings, LogOut, X, Store, ChevronRight, Bot,
+  Settings2
 } from 'lucide-react';
 import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
 import Loader from '../components/ui/Loader';
 import { api } from '../services/api';
 import { useRestaurant } from '../context/RestaurantContext';
+import { useBot } from '../context/BotContext';
 
 export default function Layout() {
   const [user, loadingAuth] = useAuthState(auth);
@@ -27,6 +28,7 @@ export default function Layout() {
   const [todaySchedule, setTodaySchedule] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { data: ctxData, refetch, openStore, closeStore } = useRestaurant();
+  const { status: botStatus, startBot, stopBot, loading: botLoading } = useBot();
 
   // Sistema de timeout de sesión (15 minutos de inactividad)
   useEffect(() => {
@@ -219,6 +221,20 @@ export default function Layout() {
     }
   };
 
+  const handleToggleBot = async () => {
+    try {
+      if (botStatus?.running) {
+        await stopBot();
+        showAlert('Bot detenido correctamente', 'success', 3000);
+      } else {
+        await startBot();
+        showAlert('Bot iniciado correctamente', 'success', 3000);
+      }
+    } catch (err) {
+      showAlert('Error al cambiar estado del bot: ' + err.message, 'error', 5000);
+    }
+  };
+
   const isActive = (path) => location.pathname === path;
 
 
@@ -344,6 +360,37 @@ export default function Layout() {
                   `}></div>
                 </label>
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Bot</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={botStatus?.running || false}
+                    onChange={handleToggleBot}
+                    disabled={botLoading}
+                    className="sr-only peer"
+                  />
+                  <div className={`
+                    w-11 h-6 bg-gray-200 rounded-full peer
+                    peer-focus:ring-4 peer-focus:ring-green-300
+                    dark:peer-focus:ring-green-800
+                    peer-checked:after:translate-x-full
+                    peer-checked:after:border-white
+                    after:content-['']
+                    after:absolute
+                    after:top-0.5
+                    after:left-[2px]
+                    after:bg-white
+                    after:border-gray-300
+                    after:border
+                    after:rounded-full
+                    after:h-5
+                    after:w-5
+                    after:transition-all
+                    ${botStatus?.running ? 'bg-green-600' : 'bg-gray-200'}
+                  `}></div>
+                </label>
+              </div>
               <button
                 onClick={async () => {
                   try {
@@ -425,37 +472,81 @@ export default function Layout() {
                   </div>
                 )}
 
-                <div className="mt-4 flex items-center gap-3 p-3 bg-gray-100 rounded-xl">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Tienda</span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open'}
-                        onChange={handleToggleStore}
-                        className="sr-only peer"
-                        disabled={location.pathname === '/orders' && (ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open')}
-                      />
-                      <div className={`
-                        w-11 h-6 bg-gray-200 rounded-full peer 
-                        peer-focus:ring-4 peer-focus:ring-[#ff7f50]/20
-                        dark:peer-focus:ring-[#ff7f50]/20 
-                        peer-checked:after:translate-x-full 
-                        peer-checked:after:border-white 
-                        after:content-[''] 
-                        after:absolute 
-                        after:top-0.5 
-                        after:left-[2px] 
-                        after:bg-white 
-                        after:border-gray-300 
-                        after:border 
-                        after:rounded-full 
-                        after:h-5 
-                        after:w-5 
-                        after:transition-all
-                        peer-checked:bg-[#ff7f50]
-                      `}></div>
-                    </label>
+                <div className="mt-4 space-y-2">
+                  {/* Switch de Tienda */}
+                  <div className="flex items-center gap-3 p-3 bg-gray-100 rounded-xl">
+                    <Store size={20} className={`${
+                      ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open'
+                        ? 'text-[#ff7f50]'
+                        : 'text-gray-400'
+                    }`} />
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Tienda</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open'}
+                          onChange={handleToggleStore}
+                          className="sr-only peer"
+                          disabled={location.pathname === '/orders' && (ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open')}
+                        />
+                        <div className={`
+                          w-11 h-6 bg-gray-200 rounded-full peer 
+                          peer-focus:ring-4 peer-focus:ring-[#ff7f50]/20
+                          dark:peer-focus:ring-[#ff7f50]/20 
+                          peer-checked:after:translate-x-full 
+                          peer-checked:after:border-white 
+                          after:content-[''] 
+                          after:absolute 
+                          after:top-0.5 
+                          after:left-[2px] 
+                          after:bg-white 
+                          after:border-gray-300 
+                          after:border 
+                          after:rounded-full 
+                          after:h-5 
+                          after:w-5 
+                          after:transition-all
+                          peer-checked:bg-[#ff7f50]
+                        `}></div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Switch del Bot */}
+                  <div className="flex items-center gap-3 p-3 bg-gray-100 rounded-xl">
+                    <Bot size={20} className={botStatus?.running ? 'text-green-600' : 'text-gray-400'} />
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Bot</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={botStatus?.running || false}
+                          onChange={handleToggleBot}
+                          disabled={botLoading}
+                          className="sr-only peer"
+                        />
+                        <div className={`
+                          w-11 h-6 bg-gray-200 rounded-full peer
+                          peer-focus:ring-4 peer-focus:ring-green-300
+                          dark:peer-focus:ring-green-800
+                          peer-checked:after:translate-x-full
+                          peer-checked:after:border-white
+                          after:content-['']
+                          after:absolute
+                          after:top-0.5
+                          after:left-[2px]
+                          after:bg-white
+                          after:border-gray-300
+                          after:border
+                          after:rounded-full
+                          after:h-5
+                          after:w-5
+                          after:transition-all
+                          ${botStatus?.running ? 'bg-green-600' : 'bg-gray-200'}
+                        `}></div>
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -13,7 +13,9 @@ class ReminderService {
 
     const restaurantDoc = await db.collection('restaurants').doc(restaurantId).get();
     if (!restaurantDoc.exists) {
-      throw new Error('Restaurante no encontrado');
+      console.warn(`[reminderService] Restaurante ${restaurantId} no encontrado - omitiendo recordatorio`);
+      // No lanzar excepción; simplemente no enviar recordatorio
+      return false;
     }
     const data = restaurantDoc.data();
     const { hours, availability, availabilitySettings } = data;
