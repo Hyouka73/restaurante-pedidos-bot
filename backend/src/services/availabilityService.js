@@ -2,6 +2,36 @@
 const { db } = require('../config/firebase');
 
 class AvailabilityService {
+  async getTodaySchedule(restaurantId) {
+    const restaurantDoc = await db.collection('restaurants').doc(restaurantId).get();
+    if (!restaurantDoc.exists) {
+      throw new Error('Restaurante no encontrado');
+    }
+    const { hours } = restaurantDoc.data();
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const dayKey = this.getDayKey(dayOfWeek);
+    
+    return {
+      dayName: this.getDayName(dayKey),
+      schedule: hours[dayKey],
+      currentTime: now.toTimeString().substring(0, 5)
+    };
+  }
+
+  getDayName(dayKey) {
+    const days = {
+      'sunday': 'Domingo',
+      'monday': 'Lunes',
+      'tuesday': 'Martes',
+      'wednesday': 'Miércoles',
+      'thursday': 'Jueves',
+      'friday': 'Viernes',
+      'saturday': 'Sábado'
+    };
+    return days[dayKey];
+  }
+
   async checkAvailability(restaurantId) {
     const restaurantDoc = await db.collection('restaurants').doc(restaurantId).get();
     if (!restaurantDoc.exists) {

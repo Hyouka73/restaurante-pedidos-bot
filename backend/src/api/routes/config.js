@@ -1,9 +1,21 @@
 // backend/src/api/routes/config.js
 const express = require('express');
+const availabilityService = require('../../services/availabilityService');
 const configService = require('../../services/configService'); // Importar configService
 const authService = require('../../services/authService'); // Importar authService para verificación de dueño
 const { admin } = require('../../config/firebase'); // Para verificar el token de Firebase Auth
 const router = express.Router();
+
+// GET /api/config/:restaurantId/today-schedule
+router.get('/:restaurantId/today-schedule', verifyToken, verifyOwner, async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const schedule = await availabilityService.getTodaySchedule(restaurantId);
+    res.json(schedule);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Middleware para verificar token de Firebase Auth
 const verifyToken = async (req, res, next) => {
