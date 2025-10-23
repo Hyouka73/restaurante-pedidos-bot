@@ -37,9 +37,13 @@ class ConfigService {
 
   // Método específico para actualizar solo el token de Telegram
   async updateTelegramToken(restaurantId, newToken) {
+    const cryptoUtils = require('../utils/crypto');
+    const encrypted = cryptoUtils.encryptToken(newToken);
+    const hashed = cryptoUtils.hmacToken(newToken);
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     await restaurantRef.update({
-      'info.telegramToken': newToken,
+      'info.telegramToken': encrypted,
+      'info.telegramTokenHash': hashed,
       updatedAt: new Date()
     });
     return { success: true };

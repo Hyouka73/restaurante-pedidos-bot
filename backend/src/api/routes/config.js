@@ -92,6 +92,41 @@ router.put('/:restaurantId/bot-token', verifyToken, verifyOwner, async (req, res
   }
 });
 
+// POST /api/config/:restaurantId/validate-bot-token
+router.post('/:restaurantId/validate-bot-token', verifyToken, verifyOwner, async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    // Obtener token encriptado desde Firestore
+    const doc = await require('../../config/firebase').db.collection('restaurants').doc(restaurantId).get();
+    if (!doc.exists) return res.status(404).json({ error: 'Restaurante no encontrado' });
+    const data = doc.data();
+    const enc = data?.info?.telegramToken;
+    if (!enc) return res.status(400).json({ error: 'Token no configurado' });
+
+    const cryptoUtils = require('../../utils/crypto');
+    let token;
+    try {
+      token = cryptoUtils.decryptToken(enc);
+    } catch (err) {
+      console.error('Error decrypting token:', err);
+      return res.status(500).json({ error: 'Error decrypting token' });
+    }
+
+    // Validar token con Telegram
+    const { Telegraf } = require('telegraf');
+    const bot = new Telegraf(token);
+    try {
+      const me = await bot.telegram.getMe();
+      res.json({ success: true, botInfo: me });
+    } catch (err) {
+      console.error('Error validating bot token:', err);
+      res.status(400).json({ error: 'Token inválido o no autorizado', details: err.message });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // PUT /api/config/:restaurantId/mark-setup-completed
 router.put('/:restaurantId/mark-setup-completed', verifyToken, verifyOwner, async (req, res) => {
   try {
@@ -202,6 +237,60 @@ router.get('/:restaurantId/messages', verifyToken, verifyOwner, async (req, res)
     const messages = await configService.getMessages(restaurantId);
     res.json(messages);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DEV-only: GET debug info about stored telegram token (no plaintext returned)
+router.get('/:restaurantId/_debug-telegram-token', verifyToken, verifyOwner, async (req, res) => {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({ error: 'Debug endpoint disabled in production' });
+    }
+
+    const { restaurantId } = req.params;
+    const docRef = require('../../config/firebase').db.collection('restaurants').doc(restaurantId);
+    const doc = await docRef.get();
+    if (!doc.exists) return res.status(404).json({ error: 'Restaurante no encontrado' });
+    const data = doc.data();
+    const enc = data?.info?.telegramToken;
+    if (!enc) return res.json({ present: false, message: 'No token stored' });
+
+    const isBase64 = (() => {
+      try {
+        Buffer.from(enc, 'base64');
+        return true;
+      } catch (_) {
+        return false;
+      }
+    })();
+
+    const decodedLen = isBase64 ? Buffer.from(enc, 'base64').length : null;
+
+    // Attempt decryption and capture error (but never return plaintext)
+    const cryptoUtils = require('../../utils/crypto');
+    let decryptOk = false;
+    let decryptError = null;
+    try {
+      // we do not keep or return the plaintext, only mark success
+      const plain = cryptoUtils.decryptToken(enc);
+      decryptOk = true;
+      // ensure we don't accidentally leak the token
+      void plain;
+    } catch (err) {
+      decryptError = err && err.message ? err.message : String(err);
+      console.error('[debug-telegram-token] decrypt error:', err);
+    }
+
+    return res.json({
+      present: true,
+      isBase64,
+      decodedLen,
+      decryptOk,
+      decryptError
+    });
+  } catch (error) {
+    console.error('Error in debug endpoint:', error);
     res.status(500).json({ error: error.message });
   }
 });

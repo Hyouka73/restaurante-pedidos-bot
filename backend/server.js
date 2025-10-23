@@ -7,6 +7,13 @@ const bot = require('./src/config/telegram');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Small check to help debug TOKEN_SECRET availability at startup (do NOT log the secret itself)
+if (!process.env.TOKEN_SECRET) {
+  console.warn('⚠️ TOKEN_SECRET is not set in environment. crypto operations will fail.');
+} else {
+  console.log(`🔐 TOKEN_SECRET length: ${process.env.TOKEN_SECRET.length} chars`);
+}
+
 // --- AGREGAR ESTO PARA CONFIGURAR CORS ---
 // Opción 1: Configuración básica y permisiva para desarrollo
 // const corsOptions = {

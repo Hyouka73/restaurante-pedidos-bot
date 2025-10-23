@@ -147,6 +147,7 @@ export default function ConfigGeneral() {
   // Nuevo: token de Telegram (no mostrar nunca el token actual, solo permitir actualizar)
   const [botTokenInput, setBotTokenInput] = useState('');
   const [updatingToken, setUpdatingToken] = useState(false);
+  const [validatingConnection, setValidatingConnection] = useState(false);
 
   const handleUpdateBotToken = async () => {
     if (!user) return navigate('/login');
@@ -164,6 +165,27 @@ export default function ConfigGeneral() {
       showAlert('Error actualizando token: ' + err.message, 'error', 5000);
     } finally {
       setUpdatingToken(false);
+    }
+  };
+
+  const handleValidateBotToken = async () => {
+    if (!user) return navigate('/login');
+    setValidatingConnection(true);
+    try {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const restaurantId = userDoc.data().restaurantId;
+      const res = await api.post(`/config/${restaurantId}/validate-bot-token`, {});
+      if (res && res.botInfo) {
+        const info = res.botInfo;
+        showAlert(`Conectado: @${info.username || info.first_name} (id: ${info.id})`, 'success', 4000);
+      } else {
+        showAlert('Conexión exitosa', 'success', 3000);
+      }
+    } catch (err) {
+      console.error('Error validando token:', err);
+      showAlert('Error validando token: ' + (err.message || err), 'error', 5000);
+    } finally {
+      setValidatingConnection(false);
     }
   };
 
@@ -297,14 +319,22 @@ export default function ConfigGeneral() {
                       value={botTokenInput}
                       onChange={(e) => setBotTokenInput(e.target.value)}
                     />
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      onClick={handleUpdateBotToken}
-                      disabled={updatingToken}
-                    >
-                      {updatingToken ? <ButtonLoader size="sm" /> : 'Actualizar Token'}
-                    </button>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={handleUpdateBotToken}
+                        disabled={updatingToken}
+                      >
+                        {updatingToken ? <ButtonLoader size="sm" /> : 'Actualizar Token'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={handleValidateBotToken}
+                        disabled={validatingConnection}
+                      >
+                        {validatingConnection ? <ButtonLoader size="sm" /> : 'Probar Conexión'}
+                      </button>
                   </div>
                 </div>
               </WizardCard>
