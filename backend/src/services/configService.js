@@ -59,6 +59,35 @@ class ConfigService {
     return { success: true };
   }
 
+  // --- MÉTODOS AÑADIDOS PARA HABILITAR/DESHABILITAR ---
+
+  /**
+   * Habilita el bot en la base de datos (features.botEnabled = true)
+   */
+  async enableBot(restaurantId) {
+    const restaurantRef = db.collection('restaurants').doc(restaurantId);
+    await restaurantRef.update({
+      'features.botEnabled': true,
+      updatedAt: new Date()
+    });
+    return { success: true, enabled: true };
+  }
+
+  /**
+   * Deshabilita el bot en la base de datos (features.botEnabled = false)
+   */
+  async disableBot(restaurantId) {
+    const restaurantRef = db.collection('restaurants').doc(restaurantId);
+    await restaurantRef.update({
+      'features.botEnabled': false,
+      updatedAt: new Date()
+    });
+    return { success: true, enabled: false };
+  }
+
+
+  // --- MÉTODOS EXISTENTES ---
+
   // Actualizar mensajes del bot (método existente)
   async updateMessages(restaurantId, messages) {
     await db.collection('restaurants').doc(restaurantId).update({

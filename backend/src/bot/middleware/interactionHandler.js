@@ -29,6 +29,19 @@ module.exports = async (ctx) => {
       return;
     }
 
+    // --- NUEVA VERIFICACIÓN: BOT HABILITADO ---
+    const restaurantData = await configBotService.getRestaurantData(restaurantId);
+    const messages = restaurantData.messages || {};
+    const features = restaurantData.features || {};
+
+    if (features.botEnabled === false) {
+      const disabledMessage = messages.botDisabled || 'El bot está temporalmente desactivado.';
+      await ctx.answerCbQuery(disabledMessage, { show_alert: true });
+      return; // Detener ejecución
+    }
+    // --- FIN DE LA VERIFICACIÓN ---
+
+
     // === VERIFICAR DISPONIBILIDAD PARA ACCIONES DE PEDIDO ===
     const orderActions = ['add_item_', 'view_cart', 'confirm_items', 'delivery_', 'pickup', 'payment_', 'confirm_final'];
     const involvesOrder = orderActions.some(prefix => callbackData.startsWith(prefix));
@@ -292,10 +305,10 @@ async function handleViewCart(ctx, userId, session) {
   let cartMessage = '🛒 *Tu Carrito:*\n\n';
   session.items.forEach((item, index) => {
     cartMessage += `${index + 1}. *${item.name}*\n`;
-    cartMessage += `   ${item.quantity}x $${item.price} = $${item.price * item.quantity}\n\n`;
+    cartMessage += `   ${item.quantity}x ${item.price} = ${item.price * item.quantity}\n\n`;
   });
   cartMessage += `━━━━━━━━━━━━━━━\n`;
-  cartMessage += `💰 *Subtotal: $${subtotal}*`;
+  cartMessage += `💰 *Subtotal: ${subtotal}*`;
 
   const buttons = [];
   
@@ -520,13 +533,13 @@ async function showFinalConfirmation(ctx, session, restaurantData) {
   
   confirmMessage += '🛒 *Items:*\n';
   session.items.forEach((item, i) => {
-    confirmMessage += `${i + 1}. ${item.name} (${item.quantity}x) - $${item.price * item.quantity}\n`;
+    confirmMessage += `${i + 1}. ${item.name} (${item.quantity}x) - ${item.price * item.quantity}\n`;
   });
   
-  confirmMessage += `\n💰 Subtotal: $${subtotal}\n`;
+  confirmMessage += `\n💰 Subtotal: ${subtotal}\n`;
   
   if (session.deliveryType === 'delivery') {
-    confirmMessage += `🚚 Envío: $${deliveryFee}\n`;
+    confirmMessage += `🚚 Envío: ${deliveryFee}\n`;
     if (deliveryFee === 0 && session.delivery?.distanceKm > 0) {
       confirmMessage += `   ✨ _¡Envío gratis!_\n`;
     }
@@ -534,7 +547,7 @@ async function showFinalConfirmation(ctx, session, restaurantData) {
     confirmMessage += `🏪 Recoger en tienda: $0\n`;
   }
   
-  confirmMessage += `\n*TOTAL: $${total}*\n\n`;
+  confirmMessage += `\n*TOTAL: ${total}*\n\n`;
   
   confirmMessage += `📍 *Entrega:* ${session.deliveryType === 'delivery' ? 'A domicilio' : 'Recoger en tienda'}\n`;
   
@@ -598,7 +611,7 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
     await ctx.reply(
       `✅ *¡Pedido Confirmado!*\n\n` +
       `📝 Número de pedido: *#${order.orderNumber || order.id.substring(0, 8).toUpperCase()}*\n` +
-      `💰 Total: *$${total}*\n` +
+      `💰 Total: *${total}*\n` +
       `⏱️ Tiempo estimado: 25-35 min\n\n` +
       `📍 ${session.deliveryType === 'delivery' ? '🚚 Será entregado a domicilio' : '🏪 Puedes recogerlo en tienda'}\n\n` +
       `🔔 Te notificaremos cuando tu pedido esté listo`,

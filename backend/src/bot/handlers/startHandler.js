@@ -38,7 +38,19 @@ module.exports = async (ctx) => {
     // Obtener datos del restaurante
     const restaurantData = await configBotService.getRestaurantData(restaurantId);
     const messages = restaurantData.messages || {};
+    const features = restaurantData.features || {};
     const restaurantName = restaurantData.info?.name || 'Nuestro Restaurante';
+
+    // --- NUEVA VERIFICACIÓN: BOT HABILITADO ---
+    // (Comprobamos 'false' explícitamente, si no existe 'botEnabled' (undefined), se asume habilitado)
+    if (features.botEnabled === false) {
+      const disabledMessage = messages.botDisabled || 'El bot está temporalmente desactivado. Disculpa las molestias.';
+      await ctx.reply(disabledMessage, {
+        reply_markup: { remove_keyboard: true }
+      });
+      return; // Detener ejecución
+    }
+    // --- FIN DE LA VERIFICACIÓN ---
 
     // Verificar disponibilidad
     const availability = await availabilityService.checkAvailability(restaurantId);

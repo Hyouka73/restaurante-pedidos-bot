@@ -1,4 +1,5 @@
 // frontend-pwa/src/context/BotContext.jsx
+
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { doc, getDoc } from 'firebase/firestore';
@@ -19,6 +20,8 @@ export function BotProvider({ children, showAlert }) {
     try {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       const restaurantId = userDoc.data().restaurantId;
+      // Esta ruta (bot.../status) ahora debe devolver { running: bool, enabled: bool }
+      // desde botService.js (ver Paso 5)
       const status = await api.get(`/bot/${restaurantId}/status`);
       setStatus(status);
       setError(null);
@@ -26,7 +29,6 @@ export function BotProvider({ children, showAlert }) {
       console.error('Error obteniendo estado del bot:', err);
       const msg = err?.message || 'Error desconocido al obtener estado del bot';
       setError(msg);
-      // Mostrar alerta si la función fue pasada
       if (typeof showAlert === 'function') showAlert(msg, 'error', 4000);
     } finally {
       setLoading(false);
@@ -36,23 +38,24 @@ export function BotProvider({ children, showAlert }) {
   useEffect(() => {
     if (user) {
       fetchStatus();
-      // Actualizar cada 30 segundos
       const interval = setInterval(fetchStatus, 30000);
       return () => clearInterval(interval);
     }
   }, [user]);
 
+  // 'startBot' ahora significa 'enableBot'
   const startBot = async () => {
     if (!user) return { success: false, error: 'Usuario no autenticado' };
     setLoading(true);
     try {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       const restaurantId = userDoc.data().restaurantId;
-      await api.post(`/bot/${restaurantId}/start`);
+      // CAMBIO: Llamar al nuevo endpoint de 'enable'
+      await api.post(`/config/${restaurantId}/bot-enable`);
       await fetchStatus(); // Actualizar estado
       return { success: true };
     } catch (err) {
-      const msg = err?.message || 'Error desconocido al iniciar el bot';
+      const msg = err?.message || 'Error desconocido al habilitar el bot';
       setError(msg);
       if (typeof showAlert === 'function') showAlert(msg, 'error', 4000);
       return { success: false, error: msg };
@@ -61,17 +64,19 @@ export function BotProvider({ children, showAlert }) {
     }
   };
 
+  // 'stopBot' ahora significa 'disableBot'
   const stopBot = async () => {
     if (!user) return { success: false, error: 'Usuario no autenticado' };
     setLoading(true);
     try {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       const restaurantId = userDoc.data().restaurantId;
-      await api.post(`/bot/${restaurantId}/stop`);
+      // CAMBIO: Llamar al nuevo endpoint de 'disable'
+      await api.post(`/config/${restaurantId}/bot-disable`);
       await fetchStatus(); // Actualizar estado
       return { success: true };
     } catch (err) {
-      const msg = err?.message || 'Error desconocido al detener el bot';
+      const msg = err?.message || 'Error desconocido al deshabilitar el bot';
       setError(msg);
       if (typeof showAlert === 'function') showAlert(msg, 'error', 4000);
       return { success: false, error: msg };
@@ -84,8 +89,8 @@ export function BotProvider({ children, showAlert }) {
     status,
     loading,
     error,
-    startBot,
-    stopBot,
+    startBot, // Mantenemos el nombre por compatibilidad con Layout.jsx
+    stopBot,  // Mantenemos el nombre por compatibilidad con Layout.jsx
     refetch: fetchStatus
   };
 

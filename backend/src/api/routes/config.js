@@ -308,4 +308,28 @@ router.put('/:restaurantId/messages', verifyToken, verifyOwner, async (req, res)
   }
 });
 
+// --- RUTAS AÑADIDAS PARA HABILITAR/DESHABILITAR EL BOT ---
+
+// POST /api/config/:restaurantId/bot-enable
+router.post('/:restaurantId/bot-enable', verifyToken, verifyOwner, async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const result = await configService.enableBot(restaurantId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/config/:restaurantId/bot-disable
+router.post('/:restaurantId/bot-disable', verifyToken, verifyOwner, async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const result = await configService.disableBot(restaurantId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { MessageCircle, Sparkles, Shield, CheckCircle, AlertCircle, Clock, MapPin, Truck, ChefHat, PartyPopper, HelpCircle } from 'lucide-react';
+import { MessageCircle, Sparkles, Shield, CheckCircle, AlertCircle, Clock, MapPin, Truck, ChefHat, PartyPopper, HelpCircle, ToggleRight } from 'lucide-react';
 import * as WizardComponents from '../ui/WizardComponents';
 import CustomTooltip from '../ui/CustomTooltip';
 
@@ -97,6 +97,15 @@ export default function StepMessages({ formData, setFormData, handleChange }) {
       icon: MessageCircle,
       description: 'Respuesta automática a quejas',
       tooltip: 'Respuesta automática a comentarios o quejas de los clientes. Muestra que valoras su feedback.'
+    },
+    // --- NUEVO CAMPO AÑADIDO ---
+    {
+      key: 'botDisabled',
+      label: 'Bot Desactivado',
+      placeholder: 'El bot está temporalmente desactivado. Disculpa las molestias.',
+      icon: ToggleRight, // O usa Shield
+      description: 'Mensaje si el bot está deshabilitado desde el panel',
+      tooltip: 'Este mensaje se enviará si un cliente intenta usar el bot mientras está deshabilitado en el panel de admin.'
     }
   ];
 
@@ -155,7 +164,7 @@ export default function StepMessages({ formData, setFormData, handleChange }) {
               </div>
 
               <textarea
-                value={formData.messages[field.key]}
+                value={formData.messages[field.key] || ''} 
                 onChange={(e) => handleChange('messages', field.key, e.target.value)}
                 placeholder={field.placeholder}
                 rows={2}

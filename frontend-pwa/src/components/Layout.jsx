@@ -223,12 +223,12 @@ export default function Layout() {
 
   const handleToggleBot = async () => {
     try {
-      if (botStatus?.running) {
+      if (botStatus?.enabled) {
         await stopBot();
-        showAlert('Bot detenido correctamente', 'success', 3000);
+        showAlert('Bot deshabilitado correctamente', 'success', 3000);
       } else {
         await startBot();
-        showAlert('Bot iniciado correctamente', 'success', 3000);
+        showAlert('Bot habilitado correctamente', 'success', 3000);
       }
     } catch (err) {
       showAlert('Error al cambiar estado del bot: ' + err.message, 'error', 5000);
@@ -365,7 +365,7 @@ export default function Layout() {
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={botStatus?.running || false}
+                    checked={botStatus?.enabled || false}
                     onChange={handleToggleBot}
                     disabled={botLoading}
                     className="sr-only peer"
@@ -387,7 +387,7 @@ export default function Layout() {
                     after:h-5
                     after:w-5
                     after:transition-all
-                    ${botStatus?.running ? 'bg-green-600' : 'bg-gray-200'}
+                    ${botStatus?.enabled ? 'bg-green-600' : 'bg-gray-200'}
                   `}></div>
                 </label>
               </div>
@@ -515,13 +515,13 @@ export default function Layout() {
 
                   {/* Switch del Bot */}
                   <div className="flex items-center gap-3 p-3 bg-gray-100 rounded-xl">
-                    <Bot size={20} className={botStatus?.running ? 'text-green-600' : 'text-gray-400'} />
+                    <Bot size={20} className={botStatus?.enabled ? 'text-green-600' : 'text-gray-400'} />
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">Bot</span>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={botStatus?.running || false}
+                          checked={botStatus?.enabled || false}
                           onChange={handleToggleBot}
                           disabled={botLoading}
                           className="sr-only peer"
@@ -543,7 +543,7 @@ export default function Layout() {
                           after:h-5
                           after:w-5
                           after:transition-all
-                          ${botStatus?.running ? 'bg-green-600' : 'bg-gray-200'}
+                          ${botStatus?.enabled ? 'bg-green-600' : 'bg-gray-200'}
                         `}></div>
                       </label>
                     </div>

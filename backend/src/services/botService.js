@@ -172,22 +172,51 @@ class BotService {
   }
 
   async getStatus(restaurantId) {
+    let processRunning = false;
+    let dbEnabled = false;
+    let dbError = null;
+
+    // 1. Obtener estado de la base de datos (features.botEnabled)
+    try {
+      const doc = await db.collection('restaurants').doc(restaurantId).get();
+      if (doc.exists) {
+        const data = doc.data();
+        // Default a false si 'features' o 'botEnabled' no existen
+        dbEnabled = data.features?.botEnabled ?? false;
+      } else {
+        dbError = 'Restaurant document not found';
+      }
+    } catch (err) {
+      console.error(`Error obteniendo estado DB del bot ${restaurantId}:`, err);
+      dbError = err.message;
+    }
+
+    // 2. Obtener estado del proceso (si está en el Map)
     try {
       const entry = this.bots.get(restaurantId);
-      if (!entry) return { running: false };
+      processRunning = !!entry;
 
+      if (!processRunning) {
+        // Proceso no corre, devolver estado
+        return { running: false, enabled: dbEnabled, error: dbError };
+      }
+
+      // Proceso SÍ corre, obtener info del webhook
       const bot = entry.bot;
       const webhookInfo = await bot.telegram.getWebhookInfo();
       
       return {
         running: true,
+        enabled: dbEnabled, // <-- CAMBIO: Añadir estado de la DB
         webhook: webhookInfo.url || null,
         pendingUpdates: webhookInfo.pending_update_count,
         isShared: entry.isShared
       };
+
     } catch (error) {
-      console.error(`Error obteniendo estado del bot ${restaurantId}:`, error);
-      return { running: false, error: error.message };
+      console.error(`Error obteniendo estado del proceso del bot ${restaurantId}:`, error);
+      // Devolver estado DB aunque el proceso falle
+      return { running: false, enabled: dbEnabled, error: error.message };
     }
   }
 }
