@@ -187,6 +187,79 @@ class MenuService {
     }
   }
 
+  // --- FUNCIÓN PARA EL BOT: Devuelve array plano de items y combos disponibles ---
+  async getMenuForBot(restaurantId) {
+    console.log(`[menuService.getMenuForBot] 🔍 Iniciando para restaurante ${restaurantId}`);
+    
+    try {
+      // ESTRATEGIA: Obtener TODOS y filtrar en memoria (más simple, sin índices)
+      
+      // Obtener todos los items
+      const itemsSnapshot = await db
+        .collection('restaurants')
+        .doc(restaurantId)
+        .collection('menu')
+        .doc('items')
+        .collection('items')
+        .get();
+      
+      const items = [];
+      itemsSnapshot.forEach(doc => {
+        const data = doc.data();
+        // Filtrar solo disponibles
+        if (data.available !== false) {
+          items.push({ 
+            id: doc.id, 
+            type: 'item',
+            ...data
+          });
+        }
+      });
+
+      // Obtener todos los combos
+      const combosSnapshot = await db
+        .collection('restaurants')
+        .doc(restaurantId)
+        .collection('menu')
+        .doc('combos')
+        .collection('combos')
+        .get();
+      
+      const combos = [];
+      combosSnapshot.forEach(doc => {
+        const data = doc.data();
+        // Filtrar solo disponibles
+        if (data.available !== false) {
+          combos.push({ 
+            id: doc.id, 
+            type: 'combo',
+            isCombo: true,
+            ...data
+          });
+        }
+      });
+
+      // Combinar
+      const allItems = [...items, ...combos];
+      
+      // Ordenar manualmente por order
+      allItems.sort((a, b) => {
+        const orderA = a.order || 0;
+        const orderB = b.order || 0;
+        return orderA - orderB;
+      });
+      
+      console.log(`[menuService.getMenuForBot] ✅ ${items.length} items + ${combos.length} combos = ${allItems.length} total`);
+      console.log(`[menuService.getMenuForBot] 📋 Resultado es Array:`, Array.isArray(allItems));
+      
+      return allItems;
+      
+    } catch (error) {
+      console.error('[menuService.getMenuForBot] ❌ Error:', error);
+      return [];
+    }
+  }
+
 }
 
 module.exports = new MenuService();

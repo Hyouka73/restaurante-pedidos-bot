@@ -1,4 +1,4 @@
-// backend/src/bot/middleware/interactionHandler.js
+// backend/src/bot/middleware/interactionHandler.js - CORREGIDO
 const menuService = require('../../services/menuService');
 const orderService = require('../../services/orderService');
 const telegramUserService = require('../services/telegramUserService');
@@ -17,17 +17,23 @@ module.exports = async (ctx) => {
 
   const userId = ctx.from.id;
   const callbackData = ctx.callbackQuery.data;
-  const chatId = ctx.chat.id;
 
   try {
     let session = userOrderSessions.get(userId);
-    const restaurantId = session?.restaurantId || await telegramUserService.getRestaurantIdByChat(chatId);
+    
+    // 🔑 CORRECCIÓN: Usar getRestaurantIdByBotContext en lugar de getRestaurantIdByChat
+    const restaurantId = session?.restaurantId || await telegramUserService.getRestaurantIdByBotContext(ctx);
+
+    if (!restaurantId) {
+      await ctx.answerCbQuery('⚠️ No se pudo identificar el restaurante. Usa /start primero.', { show_alert: true });
+      return;
+    }
 
     // === VERIFICAR DISPONIBILIDAD PARA ACCIONES DE PEDIDO ===
     const orderActions = ['add_item_', 'view_cart', 'confirm_items', 'delivery_', 'pickup', 'payment_', 'confirm_final'];
     const involvesOrder = orderActions.some(prefix => callbackData.startsWith(prefix));
     
-    if (involvesOrder && restaurantId) {
+    if (involvesOrder) {
       const availability = await availabilityService.checkAvailability(restaurantId);
       if (availability.status !== 'open') {
         await ctx.answerCbQuery('😔 Lo sentimos, ya no podemos aceptar pedidos. ' + (availability.reason || ''), { show_alert: true });
@@ -35,69 +41,170 @@ module.exports = async (ctx) => {
       }
     }
 
+    // === MANEJO DE BOTONES GENERALES (sin pedido activo) ===
+    
+    // Botón "Hacer Pedido" desde /start
+    if (callbackData === 'init_order') {
+      await ctx.answerCbQuery('🛒 Iniciando pedido...');
+      // Llamar al handler de pedidos
+      const orderHandler = require('../handlers/orderHandler');
+      await orderHandler(ctx);
+      return;
+    }
+
+    // Botón "Ver Menú"
+    if (callbackData === 'show_menu') {
+      await ctx.answerCbQuery();
+      const menuHandler = require('../handlers/menuHandler');
+      await menuHandler(ctx);
+      return;
+    }
+
+    // Botón "Información"
+    if (callbackData === 'show_info') {
+      await ctx.answerCbQuery();
+      const restaurantData = await configBotService.getRestaurantData(restaurantId);
+      const info = restaurantData.info || {};
+      
+      let infoMessage = `ℹ️ *Información del Restaurante*\n\n`;
+      infoMessage += `🏪 *${info.name || 'Restaurante'}*\n\n`;
+      
+      if (info.description) {
+        infoMessage += `📝 ${info.description}\n\n`;
+      }
+      
+      if (info.address) {
+        infoMessage += `📍 *Dirección:*\n${info.address}\n\n`;
+      }
+      
+      if (info.phone) {
+        infoMessage += `📞 *Teléfono:* ${info.phone}\n\n`;
+      }
+      
+      // Mostrar horarios
+      const hours = restaurantData.hours || {};
+      infoMessage += `⏰ *Horarios:*\n`;
+      const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      
+      dayKeys.forEach((key, index) => {
+        const dayHours = hours[key];
+        if (dayHours) {
+          if (dayHours.closed) {
+            infoMessage += `   ${days[index]}: Cerrado\n`;
+          } else {
+            infoMessage += `   ${days[index]}: ${dayHours.open} - ${dayHours.close}\n`;
+          }
+        }
+      });
+
+      await ctx.reply(infoMessage, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🛒 Hacer Pedido', 'init_order')],
+          [Markup.button.callback('« Volver', 'back_to_start')]
+        ])
+      });
+      return;
+    }
+
+    // Botón "Volver al inicio"
+    if (callbackData === 'back_to_start') {
+      await ctx.answerCbQuery();
+      const startHandler = require('../handlers/startHandler');
+      await startHandler(ctx);
+      return;
+    }
+
     // === AGREGAR ITEM AL CARRITO ===
     if (callbackData.startsWith('add_item_')) {
       await handleAddItem(ctx, callbackData, userId, session, restaurantId);
+      return;
     }
 
     // === MOSTRAR INFO DEL ITEM ===
-    else if (callbackData.startsWith('item_info_')) {
+    if (callbackData.startsWith('item_info_')) {
       await handleItemInfo(ctx, callbackData, restaurantId);
+      return;
     }
 
     // === VER CARRITO ===
-    else if (callbackData === 'view_cart') {
+    if (callbackData === 'view_cart') {
       await handleViewCart(ctx, userId, session);
+      return;
     }
 
     // === MODIFICAR CANTIDAD ===
-    else if (callbackData.startsWith('qty_')) {
+    if (callbackData.startsWith('qty_')) {
       await handleQuantityChange(ctx, callbackData, userId, session);
+      return;
     }
 
     // === REMOVER ITEM ===
-    else if (callbackData.startsWith('remove_')) {
+    if (callbackData.startsWith('remove_')) {
       await handleRemoveItem(ctx, callbackData, userId, session);
+      return;
     }
 
     // === CONTINUAR A DELIVERY ===
-    else if (callbackData === 'continue_to_delivery') {
+    if (callbackData === 'continue_to_delivery') {
       await handleContinueToDelivery(ctx, userId, session, restaurantId);
+      return;
     }
 
     // === SELECCIONAR DELIVERY ===
-    else if (callbackData === 'delivery_yes') {
+    if (callbackData === 'delivery_yes') {
       await handleDeliveryYes(ctx, userId, session);
+      return;
     }
 
     // === SELECCIONAR PICKUP ===
-    else if (callbackData === 'pickup' || callbackData === 'change_to_pickup') {
+    if (callbackData === 'pickup' || callbackData === 'change_to_pickup') {
       await handlePickup(ctx, userId, session, restaurantId);
+      return;
     }
 
     // === SELECCIONAR MÉTODO DE PAGO ===
-    else if (callbackData.startsWith('payment_')) {
+    if (callbackData.startsWith('payment_')) {
       await handlePaymentSelection(ctx, callbackData, userId, session, restaurantId);
+      return;
     }
 
     // === CONFIRMACIÓN FINAL ===
-    else if (callbackData === 'confirm_final') {
+    if (callbackData === 'confirm_final') {
       await handleFinalConfirmation(ctx, userId, session, restaurantId);
+      return;
     }
 
     // === CANCELAR PEDIDO ===
-    else if (callbackData === 'cancel_order') {
+    if (callbackData === 'cancel_order') {
       await handleCancelOrder(ctx, userId);
+      return;
     }
 
     // === VOLVER AL MENÚ ===
-    else if (callbackData === 'back_to_menu') {
+    if (callbackData === 'back_to_menu') {
       await handleBackToMenu(ctx, userId, session, restaurantId);
+      return;
     }
+
+    // Si llegamos aquí, el callback no fue manejado
+    console.warn(`⚠️ Callback no manejado: ${callbackData}`);
+    await ctx.answerCbQuery('⚠️ Acción no reconocida');
 
   } catch (error) {
     console.error('Error en interactionHandler:', error);
     await ctx.answerCbQuery('❌ Hubo un error al procesar tu selección.');
+    
+    // Intentar enviar mensaje de error
+    try {
+      await ctx.reply(
+        '❌ Ocurrió un error inesperado.\n\n' +
+        'Por favor intenta nuevamente o usa /start para reiniciar.'
+      );
+    } catch (replyError) {
+      console.error('Error enviando mensaje de error:', replyError);
+    }
   }
 };
 
@@ -110,8 +217,16 @@ async function handleAddItem(ctx, callbackData, userId, session, restaurantId) {
   }
 
   const itemId = callbackData.split('_')[2];
-  const menuItems = await menuService.getMenu(restaurantId);
-  const item = menuItems.find(i => i.id === itemId);
+  const menuData = await menuService.getMenuForBot(restaurantId);
+  
+  // Validar que sea un array
+  if (!Array.isArray(menuData)) {
+    console.error('[handleAddItem] menuData no es array:', typeof menuData, menuData);
+    await ctx.answerCbQuery('❌ Error al cargar el menú', { show_alert: true });
+    return;
+  }
+  
+  const item = menuData.find(i => i.id === itemId);
 
   if (!item || item.available === false) {
     await ctx.answerCbQuery('😔 Este platillo ya no está disponible.', { show_alert: true });
@@ -128,7 +243,8 @@ async function handleAddItem(ctx, callbackData, userId, session, restaurantId) {
       id: item.id,
       name: item.name,
       price: item.price,
-      quantity: 1
+      quantity: 1,
+      type: item.type || 'item' // Guardar si es item o combo
     });
     await ctx.answerCbQuery(`✅ ${item.name} agregado al carrito`);
   }
@@ -138,7 +254,7 @@ async function handleAddItem(ctx, callbackData, userId, session, restaurantId) {
 
 async function handleItemInfo(ctx, callbackData, restaurantId) {
   const itemId = callbackData.split('_')[2];
-  const menuItems = await menuService.getMenu(restaurantId);
+  const menuItems = await menuService.getMenuForBot(restaurantId);
   const item = menuItems.find(i => i.id === itemId);
 
   if (!item) {
@@ -146,10 +262,12 @@ async function handleItemInfo(ctx, callbackData, restaurantId) {
     return;
   }
 
+  const itemType = item.isCombo ? '🎁 Combo' : '🍽️ Platillo';
+  
   const info = 
-    `*${item.name}*\n\n` +
-    `${item.description || 'Delicioso platillo'}\n\n` +
-    `💰 Precio: $${item.price}\n` +
+    `${itemType}: *${item.name}*\n\n` +
+    `${item.description || 'Deliciosa opción'}\n\n` +
+    `💰 Precio: ${item.price}\n` +
     `⏱️ Tiempo de preparación: ${item.prepTime || '20-30'} min\n` +
     `${item.ingredients ? `\n🥘 Ingredientes: ${item.ingredients}` : ''}`;
 
@@ -402,13 +520,13 @@ async function showFinalConfirmation(ctx, session, restaurantData) {
   
   confirmMessage += '🛒 *Items:*\n';
   session.items.forEach((item, i) => {
-    confirmMessage += `${i + 1}. ${item.name} (${item.quantity}x) - ${item.price * item.quantity}\n`;
+    confirmMessage += `${i + 1}. ${item.name} (${item.quantity}x) - $${item.price * item.quantity}\n`;
   });
   
-  confirmMessage += `\n💰 Subtotal: ${subtotal}\n`;
+  confirmMessage += `\n💰 Subtotal: $${subtotal}\n`;
   
   if (session.deliveryType === 'delivery') {
-    confirmMessage += `🚚 Envío: ${deliveryFee}\n`;
+    confirmMessage += `🚚 Envío: $${deliveryFee}\n`;
     if (deliveryFee === 0 && session.delivery?.distanceKm > 0) {
       confirmMessage += `   ✨ _¡Envío gratis!_\n`;
     }
@@ -416,7 +534,7 @@ async function showFinalConfirmation(ctx, session, restaurantData) {
     confirmMessage += `🏪 Recoger en tienda: $0\n`;
   }
   
-  confirmMessage += `\n*TOTAL: ${total}*\n\n`;
+  confirmMessage += `\n*TOTAL: $${total}*\n\n`;
   
   confirmMessage += `📍 *Entrega:* ${session.deliveryType === 'delivery' ? 'A domicilio' : 'Recoger en tienda'}\n`;
   
@@ -480,7 +598,7 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
     await ctx.reply(
       `✅ *¡Pedido Confirmado!*\n\n` +
       `📝 Número de pedido: *#${order.orderNumber || order.id.substring(0, 8).toUpperCase()}*\n` +
-      `💰 Total: *${total}*\n` +
+      `💰 Total: *$${total}*\n` +
       `⏱️ Tiempo estimado: 25-35 min\n\n` +
       `📍 ${session.deliveryType === 'delivery' ? '🚚 Será entregado a domicilio' : '🏪 Puedes recogerlo en tienda'}\n\n` +
       `🔔 Te notificaremos cuando tu pedido esté listo`,
@@ -489,9 +607,6 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
         reply_markup: { remove_keyboard: true }
       }
     );
-
-    // Notificar al restaurante (opcional: enviar a canal o grupo de administración)
-    // await notifyRestaurant(restaurantId, order);
 
   } catch (error) {
     console.error('Error creando pedido:', error);
@@ -508,16 +623,30 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
 async function handleCancelOrder(ctx, userId) {
   userOrderSessions.delete(userId);
   await ctx.answerCbQuery('❌ Pedido cancelado');
-  await ctx.editMessageText(
-    '❌ Pedido cancelado\n\n¿Deseas iniciar un nuevo pedido?',
-    {
-      reply_markup: { remove_keyboard: true },
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('🛒 Nuevo Pedido', '/pedido')],
-        [Markup.button.callback('📋 Ver Menú', '/menu')]
-      ])
-    }
-  );
+  
+  try {
+    await ctx.editMessageText(
+      '❌ Pedido cancelado\n\n¿Deseas iniciar un nuevo pedido?',
+      {
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🛒 Nuevo Pedido', 'init_order')],
+          [Markup.button.callback('📋 Ver Menú', 'show_menu')]
+        ])
+      }
+    );
+  } catch (editError) {
+    // Si no se puede editar el mensaje, enviar uno nuevo
+    await ctx.reply(
+      '❌ Pedido cancelado\n\n¿Deseas iniciar un nuevo pedido?',
+      {
+        reply_markup: { remove_keyboard: true },
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🛒 Nuevo Pedido', 'init_order')],
+          [Markup.button.callback('📋 Ver Menú', 'show_menu')]
+        ])
+      }
+    );
+  }
 }
 
 async function handleBackToMenu(ctx, userId, session, restaurantId) {
@@ -528,7 +657,7 @@ async function handleBackToMenu(ctx, userId, session, restaurantId) {
 
   await ctx.answerCbQuery();
   
-  const menuItems = await menuService.getMenu(restaurantId);
+  const menuItems = await menuService.getMenuForBot(restaurantId);
   const restaurantData = await configBotService.getRestaurantData(restaurantId);
   const features = restaurantData.features || {};
 

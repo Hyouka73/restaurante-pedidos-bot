@@ -27,31 +27,31 @@ export default function OrdersManager() {
     const restaurantId = restaurantData.id;
     setLoading(true);
 
-    let ordersQuery;
-    
-    if (statusFilter === 'active') {
-      ordersQuery = query(
-        collection(db, 'restaurants', restaurantId, 'orders'),
-        where('status', 'in', ['pending', 'confirmed', 'preparing', 'ready']),
-        orderBy('createdAt', 'desc')
-      );
-    } else if (statusFilter === 'completed') {
-      ordersQuery = query(
-        collection(db, 'restaurants', restaurantId, 'orders'),
-        where('status', 'in', ['delivered', 'cancelled']),
-        orderBy('createdAt', 'desc')
-      );
-    } else {
-      ordersQuery = query(
-        collection(db, 'restaurants', restaurantId, 'orders'),
-        orderBy('createdAt', 'desc')
-      );
-    }
+    // SOLUCIÓN: Cargar TODOS los pedidos y filtrar en el cliente
+    // Esto evita el error de Firestore con consultas compuestas complejas
+    const ordersQuery = query(
+      collection(db, 'restaurants', restaurantId, 'orders'),
+      orderBy('createdAt', 'desc')
+    );
 
     const unsubscribe = onSnapshot(ordersQuery, (snapshot) => {
-      const list = [];
-      snapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
-      setOrders(list);
+      const allOrders = [];
+      snapshot.forEach(d => allOrders.push({ id: d.id, ...d.data() }));
+      
+      // Filtrar en el cliente según el statusFilter
+      let filteredOrders = allOrders;
+      
+      if (statusFilter === 'active') {
+        filteredOrders = allOrders.filter(order => 
+          ['pending', 'confirmed', 'preparing', 'ready'].includes(order.status)
+        );
+      } else if (statusFilter === 'completed') {
+        filteredOrders = allOrders.filter(order => 
+          ['delivered', 'cancelled'].includes(order.status)
+        );
+      }
+      
+      setOrders(filteredOrders);
       setLoading(false);
     }, (err) => {
       console.error('Error escuchando pedidos:', err);

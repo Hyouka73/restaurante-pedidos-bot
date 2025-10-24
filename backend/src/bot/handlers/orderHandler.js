@@ -1,4 +1,4 @@
-// backend/src/bot/handlers/orderHandler.js
+// backend/src/bot/handlers/orderHandler.js - CORREGIDO
 const menuService = require('../../services/menuService');
 const orderService = require('../../services/orderService');
 const configBotService = require('../services/configBotService');
@@ -26,9 +26,15 @@ const SESSION_STATES = {
 
 module.exports = async (ctx) => {
   try {
-    const chatId = ctx.chat.id;
     const userId = ctx.from.id;
-    const restaurantId = await telegramUserService.getRestaurantIdByChat(chatId);
+    
+    // 🔑 CORRECCIÓN: Usar getRestaurantIdByBotContext
+    const restaurantId = await telegramUserService.getRestaurantIdByBotContext(ctx);
+
+    if (!restaurantId) {
+      await ctx.reply('⚠️ No se pudo identificar el restaurante. Usa /start primero.');
+      return;
+    }
 
     // Obtener configuración del restaurante
     const restaurantData = await configBotService.getRestaurantData(restaurantId);
@@ -56,8 +62,12 @@ module.exports = async (ctx) => {
     }
 
     // === INICIAR NUEVO PEDIDO ===
-    const menuItems = await menuService.getMenu(restaurantId);
-    if (menuItems.length === 0) {
+    // 🔑 CORRECCIÓN: Usar getMenuForBot que devuelve array
+    const menuItems = await menuService.getMenuForBot(restaurantId);
+    
+    console.log('[orderHandler] menuItems recibidos:', menuItems?.length || 0);
+    
+    if (!menuItems || menuItems.length === 0) {
       await ctx.reply('😔 Lo sentimos, el menú aún no está disponible.');
       return;
     }
@@ -92,14 +102,22 @@ async function sendMenuWithPhotos(ctx, menuItems, features) {
     { parse_mode: 'Markdown' }
   );
 
+  // Validar que menuItems sea un array
+  if (!Array.isArray(menuItems)) {
+    console.error('[sendMenuWithPhotos] menuItems no es un array:', typeof menuItems);
+    await ctx.reply('❌ Error al cargar el menú. Por favor intenta nuevamente.');
+    return;
+  }
+
   // Enviar cada item con foto si está disponible
   for (const item of menuItems) {
-    const description = item.description || 'Delicioso platillo';
+    const itemType = item.isCombo ? '🎁' : '🍽️';
+    const description = item.description || (item.isCombo ? 'Delicioso combo' : 'Delicioso platillo');
     const price = `💰 $${item.price}`;
     const available = item.available !== false ? '✅ Disponible' : '❌ No disponible';
     
     const caption = 
-      `*${item.name}*\n\n` +
+      `${itemType} *${item.name}*\n\n` +
       `${description}\n\n` +
       `${price}\n` +
       `${available}`;
@@ -130,6 +148,9 @@ async function sendMenuWithPhotos(ctx, menuItems, features) {
         ...keyboard
       });
     }
+
+    // Pequeña pausa entre mensajes
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
 
   // Botón para finalizar selección
