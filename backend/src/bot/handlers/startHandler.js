@@ -35,6 +35,9 @@ module.exports = async (ctx) => {
     // Guardar info del usuario
     await telegramUserService.saveUserInfo(ctx.from, restaurantId);
 
+    // Actualizar comandos dinámicamente
+    await telegramUserService.updateUserCommands(ctx, restaurantId);
+
     // Obtener datos del restaurante
     const restaurantData = await configBotService.getRestaurantData(restaurantId);
     const messages = restaurantData.messages || {};

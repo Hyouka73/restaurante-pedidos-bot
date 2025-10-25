@@ -1,6 +1,7 @@
 //backend/src/bot/services/telegramUserService.js
 const { db } = require('../../config/firebase');
 const cryptoUtils = require('../../utils/crypto');
+const orderService = require('../../services/orderService');
 
 class TelegramUserService {
   
@@ -283,6 +284,32 @@ class TelegramUserService {
     } catch (error) {
       console.error(`Error obteniendo info de usuario ${telegramId}:`, error);
       return null;
+    }
+  }
+
+  /**
+   * Actualiza los comandos del bot para un usuario específico basado en si tiene pedidos activos.
+   * @param {object} ctx - El contexto de Telegraf.
+   * @param {string} restaurantId - El ID del restaurante.
+   */
+  async updateUserCommands(ctx, restaurantId) {
+    try {
+      const userId = ctx.from.id;
+      const activeOrder = await orderService.getActiveOrderByUser(restaurantId, userId);
+
+      const baseCommands = [
+        { command: 'start', description: '▶️ Iniciar el bot' },
+        { command: 'menu', description: '📋 Ver el menú' },
+        { command: 'pedido', description: '🛒 Hacer un nuevo pedido' },
+      ];
+
+      if (activeOrder) {
+        baseCommands.push({ command: 'mipedido', description: '🔎 Ver estado de mi pedido' });
+      }
+
+      await ctx.telegram.setMyCommands(baseCommands, { scope: { type: 'chat', chat_id: userId } });
+    } catch (error) {
+      console.error(`Error actualizando comandos para el usuario ${ctx.from.id}:`, error);
     }
   }
 }

@@ -1,9 +1,9 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import { auth } from '../config/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Menu, ShoppingCart, MessageSquare, 
@@ -12,212 +12,151 @@ import {
 } from 'lucide-react';
 import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
 import Loader from '../components/ui/Loader';
-import { api } from '../services/api';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useBot } from '../context/BotContext';
+import CustomTooltip from './ui/CustomTooltip';
 
 export default function Layout() {
   const [user, loadingAuth] = useAuthState(auth);
   const navigate = useNavigate();
   const location = useLocation();
-  const [restaurantData, setRestaurantData] = useState(null);
-  const [loadingRestaurant, setLoadingRestaurant] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { alerts, showAlert, hideAlert } = useAlert();
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [todaySchedule, setTodaySchedule] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { data: ctxData, refetch, openStore, closeStore } = useRestaurant();
+
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
+  const { data: restaurant, loading: loadingRestaurant, updateAvailability } = useRestaurant();
   const { status: botStatus, startBot, stopBot, loading: botLoading } = useBot();
 
-  // Sistema de timeout de sesión (15 minutos de inactividad)
+  const availabilityMode = restaurant?.availabilitySettings?.mode || 'hybrid';
+  const availabilityStatus = restaurant?.availability?.status;
+  const hours = restaurant?.hours;
+  const isOpen = availabilityStatus === 'open';
+
   useEffect(() => {
     let inactivityTimer;
-    
     const resetTimer = () => {
       clearTimeout(inactivityTimer);
       inactivityTimer = setTimeout(() => {
         if (user) {
           showAlert('Sesión cerrada por inactividad', 'warning', 3000);
-          setTimeout(() => {
-            handleLogout();
-          }, 1000);
+          setTimeout(() => handleLogout(), 1000);
         }
-      }, 15 * 60 * 1000); // 15 minutos
+      }, 15 * 60 * 1000);
     };
-
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
-    
-    events.forEach(event => {
-      document.addEventListener(event, resetTimer);
-    });
-
-    resetTimer(); // Iniciar el timer
-
+    events.forEach(event => document.addEventListener(event, resetTimer));
+    resetTimer();
     return () => {
       clearTimeout(inactivityTimer);
-      events.forEach(event => {
-        document.removeEventListener(event, resetTimer);
-      });
+      events.forEach(event => document.removeEventListener(event, resetTimer));
     };
   }, [user]);
 
-  // Manejar cambios en el estado de pantalla completa
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    
+    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Cargar datos del restaurante y verificar setup
   useEffect(() => {
-    const fetchRestaurantData = async () => {
-      if (!user) {       
-        setLoadingRestaurant(false);
-        return;
-      }
+    if (loadingRestaurant || !restaurant) return;
 
-      try {
-        console.log('[Layout] Cargando datos del restaurante...');
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          const restaurantId = userData.restaurantId;
-          
-          if (restaurantId) {
-            const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
-            
-            if (restaurantDoc.exists()) {
-              const data = restaurantDoc.data();
-              setRestaurantData(data);
-              console.log('[Layout] Datos del restaurante cargados:', data);
+    if (restaurant.setupCompleted === false && location.pathname !== '/setup') {
+      showAlert('Por favor completa la configuración inicial', 'warning', 3000);
+      navigate('/setup', { replace: true });
+    } else if (restaurant.setupCompleted === true && location.pathname === '/setup') {
+      navigate('/', { replace: true });
+    }
+  }, [restaurant, loadingRestaurant, user, navigate, location.pathname]);
 
-              // Mantener sincronía con RestaurantContext: refetch para que el contexto tenga los datos
-              refetch();
-
-              // Verificar si necesita completar el setup
-              if (data.setupCompleted === false && location.pathname !== '/setup') {
-                console.log('[Layout] Setup incompleto, redirigiendo a /setup');
-                showAlert('Por favor completa la configuración inicial', 'warning', 3000);
-                navigate('/setup', { replace: true });
-                return;
-              } else if (data.setupCompleted === true && location.pathname === '/setup') {
-                console.log('[Layout] Setup completo, redirigiendo a dashboard');
-                navigate('/', { replace: true });
-                return;
-              }
-            } else {
-              console.error(`[Layout] Documento de restaurante ${restaurantId} no encontrado.`);
-            }
-          } else {
-            console.error(`[Layout] No se encontró restaurantId en el doc de usuario ${user.uid}.`);
-          }
-        } else {
-          console.error(`[Layout] Documento de usuario ${user.uid} no encontrado.`);
-        }
-      } catch (error) {
-        console.error("[Layout] Error obteniendo datos del restaurante:", error);
-        showAlert('Error al cargar datos del restaurante', 'error', 3000);
-      } finally {
-        setLoadingRestaurant(false);
-      }
-    };
-
-    fetchRestaurantData();
-  }, [user, navigate, location.pathname]);
-
-  // Bloquear navegación cuando la tienda está abierta (usando ctxData)
   useEffect(() => {
     const handleBeforeUnload = (e) => {
-      if (ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open') {
+      if (isOpen) {
         e.preventDefault();
         e.returnValue = '¿Seguro que quieres salir? La tienda está abierta.';
       }
     };
-
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [ctxData]);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isOpen]);
 
-  // Forzar pantalla completa en /orders cuando la tienda está abierta
   useEffect(() => {
-    const isOpen = ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open';
     if (isOpen && location.pathname === '/orders') {
       const enterFullscreen = async () => {
         try {
-          if (!document.fullscreenElement) {
-            await document.documentElement.requestFullscreen();
-          }
+          if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
         } catch (err) {
           console.error('Error al activar pantalla completa:', err);
         }
       };
       enterFullscreen();
     }
-  }, [ctxData, location.pathname]);
+  }, [isOpen, location.pathname]);
 
   const handleLogout = useCallback(async () => {
     try {
       await signOut(auth);
       showAlert('Sesión cerrada exitosamente', 'success', 2000);
-      setTimeout(() => {
-        navigate('/login');
-      }, 500);
+      setTimeout(() => navigate('/login'), 500);
     } catch (error) {
-      console.error("Error al cerrar sesión:", error);
       showAlert('Error al cerrar sesión', 'error', 3000);
     }
   }, [navigate, showAlert]);
 
-  const handleToggleStore = async () => {
-    const isOpen = ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open';
-    if (!isOpen) {
-      try {
-        const response = await api.get(`/config/${user.uid}/today-schedule`);
-        setTodaySchedule(response);
-        setIsConfirmOpen(true);
-      } catch (error) {
-        showAlert('Error al obtener horario: ' + error.message, 'error', 3000);
-      }
-    } else {
-      // Cerrar tienda via context
-      try {
-        await closeStore(user.uid, 'Cerrado manualmente por el dueño');
-        refetch();
-        navigate('/');
-        if (document.fullscreenElement) {
-          document.exitFullscreen();
-        }
-        showAlert('Tienda cerrada exitosamente', 'success', 3000);
-      } catch (error) {
-        showAlert('Error al cerrar tienda: ' + error.message, 'error', 3000);
-      }
-    }
+  const isWithinSchedule = () => {
+    if (!hours) return false;
+    const now = new Date();
+    const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
+    const schedule = hours[dayKey];
+    if (!schedule || schedule.closed) return false;
+    const currentTime = now.toTimeString().substring(0, 5);
+    return currentTime >= schedule.open && currentTime < schedule.close;
   };
 
-  const handleConfirmOpen = async () => {
-    try {
-      await openStore(user.uid);
-      refetch();
-      setIsConfirmOpen(false);
-      navigate('/orders');
-      // Forzar pantalla completa
-      try {
-        await document.documentElement.requestFullscreen();
-      } catch (err) {
-        console.error('Error al activar pantalla completa:', err);
+  const handleToggleStore = async () => {
+    if (isOpen) {
+      setModalState({
+        isOpen: true,
+        title: 'Confirmar Cierre',
+        message: '¿Estás seguro de que quieres cerrar la tienda? Los clientes no podrán hacer nuevos pedidos.',
+        onConfirm: async () => {
+          const result = await updateAvailability('closed', 'Cerrado manualmente');
+          if (result.success) {
+            showAlert('Tienda cerrada exitosamente', 'success');
+            if (document.fullscreenElement) document.exitFullscreen();
+            navigate('/');
+          } else showAlert(`Error: ${result.error}`, 'error');
+          setModalState({ isOpen: false });
+        }
+      });
+    } else {
+      let modalConfig = {
+        isOpen: true,
+        title: 'Confirmar Apertura',
+        message: '¿Deseas abrir la tienda ahora para empezar a recibir pedidos?',
+        onConfirm: async () => {
+          const result = await updateAvailability('open');
+          if (result.success) {
+            showAlert('¡Tienda abierta!', 'success');
+            navigate('/orders');
+          } else showAlert(`Error: ${result.error}`, 'error');
+          setModalState({ isOpen: false });
+        }
+      };
+
+      if (availabilityMode === 'hybrid' && !isWithinSchedule()) {
+        modalConfig.title = 'Abrir Fuera de Horario';
+        modalConfig.message = 'Estás fuera del horario de atención programado. ¿Realmente deseas abrir la tienda ahora?';
       }
-      showAlert('Tienda abierta exitosamente', 'success', 3000);
-    } catch (error) {
-      showAlert('Error al abrir tienda: ' + error.message, 'error', 3000);
+      
+      setModalState(modalConfig);
     }
   };
 
@@ -235,86 +174,124 @@ export default function Layout() {
     }
   };
 
-  const isActive = (path) => location.pathname === path;
-
+  if (loadingAuth || loadingRestaurant) {
+    return <Loader variant="full" message="Cargando dashboard..." fullScreen />;
+  }
+  if (!user) return null;
 
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/menu', label: 'Menú', icon: Menu },
     { path: '/orders', label: 'Pedidos', icon: ShoppingCart },
     { type: 'divider', label: 'Configuración' },
-      { path: '/config/messages', label: 'Mensajes Bot', icon: MessageSquare },
-      { path: '/config/general', label: 'Configuración General', icon: Settings2 },
-    { path: '/setup', label: 'Setup Inicial', icon: Settings },
+    { path: '/config/messages', label: 'Mensajes Bot', icon: MessageSquare },
+    { path: '/config/general', label: 'Configuración General', icon: Settings2 },
   ];
 
   const filteredMenuItems = menuItems.filter(item => {
-    // Ocultar el botón de Setup si ya está completo
-    if (item.path === '/setup' && restaurantData?.setupCompleted) {
-      return false;
-    }
-    // No mostrar el link a /orders cuando la tienda está abierta
-    if (item.path === '/orders' && (ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open')) {
-      return false;
-    }
+    if (item.path === '/setup' && restaurant?.setupCompleted) return false;
+    if (item.path === '/orders' && isOpen) return false;
     return true;
   });
+  
+  const isActive = (path) => location.pathname === path;
 
-  // Mostrar loader mientras carga
-  if (loadingAuth || (user && loadingRestaurant)) {
-    return <Loader variant="full" message="Cargando dashboard..." fullScreen />;
-  }
+  const StoreSwitch = () => {
+    const isDisabled = availabilityMode === 'fixed' || availabilityMode === 'always_open';
+    let tooltipContent = '';
+    if (availabilityMode === 'fixed') tooltipContent = 'En modo "Horarios Fijos", la tienda abre y cierra automáticamente.';
+    if (availabilityMode === 'always_open') tooltipContent = 'Tu tienda está en modo "Siempre Abierto" 24/7.';
 
-  // Si no hay usuario, no renderizar nada (App.jsx se encarga de redirigir)
-  if (!user) {
-    return null;
-  }
+    const switchComponent = (
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium">Tienda</span>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isOpen}
+            onChange={handleToggleStore}
+            className="sr-only peer"
+            disabled={isDisabled}
+          />
+          <div className={`
+            w-11 h-6 rounded-full peer 
+            peer-focus:ring-4 peer-focus:ring-[#ff7f50]/20
+            after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
+            after:bg-white after:border-gray-300 after:border after:rounded-full 
+            after:h-5 after:w-5 after:transition-all
+            ${isDisabled 
+              ? (isOpen ? 'bg-green-400' : 'bg-gray-300')
+              : (isOpen ? 'bg-[#ff7f50]' : 'bg-gray-200')
+            }
+            ${!isDisabled && isOpen ? 'peer-checked:after:translate-x-full' : ''}
+          `}></div>
+        </label>
+      </div>
+    );
+
+    return isDisabled ? (
+      <CustomTooltip content={tooltipContent}>
+        {switchComponent}
+      </CustomTooltip>
+    ) : switchComponent;
+  };
+
+  const BotSwitch = () => (
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium">Bot</span>
+      <label className="relative inline-flex items-center cursor-pointer">
+        <input
+          type="checkbox"
+          checked={botStatus?.enabled || false}
+          onChange={handleToggleBot}
+          disabled={botLoading}
+          className="sr-only peer"
+        />
+        <div className={`
+          w-11 h-6 bg-gray-200 rounded-full peer
+          peer-focus:ring-4 peer-focus:ring-green-300
+          peer-checked:after:translate-x-full
+          peer-checked:after:border-white
+          after:content-[''] after:absolute after:top-0.5 after:left-[2px] 
+          after:bg-white after:border-gray-300 after:border after:rounded-full 
+          after:h-5 after:w-5 after:transition-all
+          ${botStatus?.enabled ? 'bg-green-600' : 'bg-gray-200'}
+        `}></div>
+      </label>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#ffe4c4] via-[#ffd3c3] to-[#ffb8a1] flex flex-col lg:flex-row">
       <AlertContainer alerts={alerts} onClose={hideAlert} />
 
-      {/* Modal de confirmación */}
-      {isConfirmOpen && (
+      {modalState.isOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4">Confirmar Apertura</h3>
-            <div className="space-y-4">
-              <p>Horario de hoy ({todaySchedule?.dayName}):</p>
-              {todaySchedule?.schedule?.closed ? (
-                <div className="bg-red-100 text-red-700 p-3 rounded-lg">
-                  El local está configurado como cerrado hoy.
-                </div>
-              ) : (
-                <div className="bg-green-100 text-green-700 p-3 rounded-lg">
-                  Abierto: {todaySchedule?.schedule?.open} - {todaySchedule?.schedule?.close}
-                </div>
-              )}
-              <p className="text-sm text-gray-600">
-                Hora actual: {todaySchedule?.currentTime}
-              </p>
-              <p>¿Deseas abrir la tienda ahora?</p>
-              <div className="flex justify-end gap-3">
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => setIsConfirmOpen(false)}
-                >
-                  Cancelar
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={handleConfirmOpen}
-                  disabled={todaySchedule?.schedule?.closed}
-                >
-                  Confirmar
-                </button>
-              </div>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl"
+          >
+            <h3 className="text-xl font-bold mb-4">{modalState.title}</h3>
+            <p className="text-gray-600 mb-6">{modalState.message}</p>
+            <div className="flex justify-end gap-3">
+              <button
+                className="btn btn-ghost"
+                onClick={() => setModalState({ isOpen: false })}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={modalState.onConfirm}
+              >
+                Confirmar
+              </button>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
-      {/* Header móvil */}
       <div className="lg:hidden sticky top-0 z-30 bg-white shadow-lg">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
@@ -323,96 +300,15 @@ export default function Layout() {
             </div>
             <div>
               <h1 className="font-bold text-gray-800 text-sm">
-                {restaurantData?.info?.name || 'RestBot'}
+                {restaurant?.info?.name || 'RestBot'}
               </h1>
               <p className="text-xs text-gray-500">Admin Panel</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Tienda</span>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open'}
-                    onChange={handleToggleStore}
-                    className="sr-only peer"
-                  />
-                  <div className={`
-                    w-11 h-6 bg-gray-200 rounded-full peer 
-                    peer-focus:ring-4 peer-focus:ring-[#ff7f50]/20
-                    dark:peer-focus:ring-[#ff7f50]/20 
-                    peer-checked:after:translate-x-full 
-                    peer-checked:after:border-white 
-                    after:content-[''] 
-                    after:absolute 
-                    after:top-0.5 
-                    after:left-[2px] 
-                    after:bg-white 
-                    after:border-gray-300 
-                    after:border 
-                    after:rounded-full 
-                    after:h-5 
-                    after:w-5 
-                    after:transition-all
-                    peer-checked:bg-[#ff7f50]
-                  `}></div>
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Bot</span>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={botStatus?.enabled || false}
-                    onChange={handleToggleBot}
-                    disabled={botLoading}
-                    className="sr-only peer"
-                  />
-                  <div className={`
-                    w-11 h-6 bg-gray-200 rounded-full peer
-                    peer-focus:ring-4 peer-focus:ring-green-300
-                    dark:peer-focus:ring-green-800
-                    peer-checked:after:translate-x-full
-                    peer-checked:after:border-white
-                    after:content-['']
-                    after:absolute
-                    after:top-0.5
-                    after:left-[2px]
-                    after:bg-white
-                    after:border-gray-300
-                    after:border
-                    after:rounded-full
-                    after:h-5
-                    after:w-5
-                    after:transition-all
-                    ${botStatus?.enabled ? 'bg-green-600' : 'bg-gray-200'}
-                  `}></div>
-                </label>
-              </div>
-              <button
-                onClick={async () => {
-                  try {
-                    if (isFullscreen) {
-                      await document.exitFullscreen();
-                    } else {
-                      await document.documentElement.requestFullscreen();
-                    }
-                  } catch (err) {
-                    console.error('Error al cambiar modo pantalla completa:', err);
-                  }
-                }}
-                className={`px-3 py-1 text-xs rounded-lg transition-colors ${
-                  isFullscreen 
-                  ? 'bg-red-100 text-red-700 hover:bg-red-200' 
-                  : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                }`}
-              >
-                {isFullscreen ? '❌ Salir Pantalla Completa' : '🔲 Hacer Pantalla Completa'}
-              </button>
-            </div>
-            {!(ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open') && (
+            <StoreSwitch />
+            <BotSwitch />
+            {!isOpen && (
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
@@ -424,11 +320,9 @@ export default function Layout() {
         </div>
       </div>
 
-      {/* Sidebar */}
       <AnimatePresence>
-        {(sidebarOpen || window.innerWidth >= 1024) && !(ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open') && (
+        {(sidebarOpen || window.innerWidth >= 1024) && !isOpen && (
           <>
-            {/* Overlay móvil */}
             {sidebarOpen && (
               <motion.div
                 initial={{ opacity: 0 }}
@@ -439,7 +333,6 @@ export default function Layout() {
               />
             )}
 
-            {/* Sidebar content */}
             <motion.div
               initial={{ x: -280 }}
               animate={{ x: 0 }}
@@ -447,7 +340,6 @@ export default function Layout() {
               transition={{ type: 'spring', damping: 25 }}
               className="fixed lg:sticky top-0 left-0 h-screen w-72 bg-white shadow-2xl z-50 flex flex-col"
             >
-              {/* Header del sidebar */}
               <div className="p-6 border-b border-gray-100">
                 <button 
                   onClick={() => navigate('/')}
@@ -458,7 +350,7 @@ export default function Layout() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h2 className="font-bold text-gray-800 truncate">
-                      {restaurantData?.info?.name || 'RestBot Admin'}
+                      {restaurant?.info?.name || 'RestBot Admin'}
                     </h2>
                     <p className="text-xs text-gray-500">Panel de Control</p>
                   </div>
@@ -473,85 +365,17 @@ export default function Layout() {
                 )}
 
                 <div className="mt-4 space-y-2">
-                  {/* Switch de Tienda */}
                   <div className="flex items-center gap-3 p-3 bg-gray-100 rounded-xl">
-                    <Store size={20} className={`${
-                      ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open'
-                        ? 'text-[#ff7f50]'
-                        : 'text-gray-400'
-                    }`} />
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Tienda</span>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open'}
-                          onChange={handleToggleStore}
-                          className="sr-only peer"
-                          disabled={location.pathname === '/orders' && (ctxData?.availabilityComputed?.status === 'open' || ctxData?.availability?.status === 'open')}
-                        />
-                        <div className={`
-                          w-11 h-6 bg-gray-200 rounded-full peer 
-                          peer-focus:ring-4 peer-focus:ring-[#ff7f50]/20
-                          dark:peer-focus:ring-[#ff7f50]/20 
-                          peer-checked:after:translate-x-full 
-                          peer-checked:after:border-white 
-                          after:content-[''] 
-                          after:absolute 
-                          after:top-0.5 
-                          after:left-[2px] 
-                          after:bg-white 
-                          after:border-gray-300 
-                          after:border 
-                          after:rounded-full 
-                          after:h-5 
-                          after:w-5 
-                          after:transition-all
-                          peer-checked:bg-[#ff7f50]
-                        `}></div>
-                      </label>
-                    </div>
+                    <Store size={20} className={isOpen ? 'text-[#ff7f50]' : 'text-gray-400'} />
+                    <StoreSwitch />
                   </div>
-
-                  {/* Switch del Bot */}
                   <div className="flex items-center gap-3 p-3 bg-gray-100 rounded-xl">
                     <Bot size={20} className={botStatus?.enabled ? 'text-green-600' : 'text-gray-400'} />
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">Bot</span>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={botStatus?.enabled || false}
-                          onChange={handleToggleBot}
-                          disabled={botLoading}
-                          className="sr-only peer"
-                        />
-                        <div className={`
-                          w-11 h-6 bg-gray-200 rounded-full peer
-                          peer-focus:ring-4 peer-focus:ring-green-300
-                          dark:peer-focus:ring-green-800
-                          peer-checked:after:translate-x-full
-                          peer-checked:after:border-white
-                          after:content-['']
-                          after:absolute
-                          after:top-0.5
-                          after:left-[2px]
-                          after:bg-white
-                          after:border-gray-300
-                          after:border
-                          after:rounded-full
-                          after:h-5
-                          after:w-5
-                          after:transition-all
-                          ${botStatus?.enabled ? 'bg-green-600' : 'bg-gray-200'}
-                        `}></div>
-                      </label>
-                    </div>
+                    <BotSwitch />
                   </div>
                 </div>
               </div>
 
-              {/* Menú de navegación */}
               <nav className="flex-1 p-4 overflow-y-auto">
                 <div className="space-y-1">
                   {filteredMenuItems.map((item, index) => {
@@ -595,7 +419,6 @@ export default function Layout() {
                 </div>
               </nav>
 
-              {/* Footer del sidebar */}
               <div className="p-4 border-t border-gray-100">
                 <motion.button
                   onClick={handleLogout}
@@ -616,7 +439,6 @@ export default function Layout() {
         )}
       </AnimatePresence>
 
-      {/* Contenido Principal */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
           <motion.div
@@ -630,8 +452,7 @@ export default function Layout() {
           </motion.div>
         </main>
 
-        {/* Footer */}
-        {!((ctxData?.availabilityComputed?.status === 'open') || (ctxData?.availability?.status === 'open')) && (
+        {!isOpen && (
           <footer className="p-4 text-center text-sm text-gray-600 bg-white/50">
             <p>© 2024 RestBot Admin. Todos los derechos reservados.</p>
           </footer>

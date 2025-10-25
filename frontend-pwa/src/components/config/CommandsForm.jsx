@@ -1,12 +1,43 @@
-// frontend-pwa/src/components/config/CommandsForm.jsx
-import { WizardCard, WizardCheckboxField } from '../ui/WizardComponents'; // Ajusta la ruta
-import { MessageSquare } from 'lucide-react';
 
-const CommandsForm = ({ config, onChange }) => {
+import { useState, useEffect } from 'react';
+import { WizardCard, WizardCheckboxField } from '../ui/WizardComponents';
+import { MessageSquare } from 'lucide-react';
+import { ButtonLoader } from '../ui/Loader';
+import { useAlert } from '../ui/CustomAlert';
+import { api } from '../../services/api';
+import { useRestaurant } from '../../context/RestaurantContext';
+
+const CommandsForm = ({ initialData }) => {
+  const [commands, setCommands] = useState(initialData.commands);
+  const [saving, setSaving] = useState(false);
+  const { data: restaurant } = useRestaurant();
+  const { showAlert } = useAlert();
+
+  useEffect(() => {
+    setCommands(initialData.commands);
+  }, [initialData]);
+
   const handleCommandChange = (id, field, value) => {
-    const updatedCommands = { ...config.commands };
-    updatedCommands[id] = { ...updatedCommands[id], [field]: value };
-    onChange('commands', updatedCommands);
+    setCommands(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: value }
+    }));
+  };
+
+  const handleSave = async () => {
+    if (!restaurant?.id) {
+      showAlert('Error: No se pudo encontrar el ID del restaurante.', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.put(`/config/${restaurant.id}/general`, { commands });
+      showAlert('Comandos guardados correctamente.', 'success');
+    } catch (error) {
+      showAlert(`Error al guardar: ${error.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -21,20 +52,25 @@ const CommandsForm = ({ config, onChange }) => {
         </div>
       </div>
       <div className="space-y-2">
-        {Object.keys(config.commands).map((cmdId) => (
+        {Object.keys(commands).map((cmdId) => (
           <div key={cmdId} className="flex items-center justify-between p-2 border-b">
             <div>
               <span className="label-text font-mono">/{cmdId}</span>
-              <span className="text-sm text-gray-500 ml-2">{config.commands[cmdId].description}</span>
+              <span className="text-sm text-gray-500 ml-2">{commands[cmdId].description}</span>
             </div>
             <WizardCheckboxField
-              label=""
-              checked={config.commands[cmdId].enabled}
+              label="Habilitado"
+              checked={commands[cmdId].enabled}
               onChange={(e) => handleCommandChange(cmdId, 'enabled', e.target.checked)}
-              className="!flex-row !items-center !justify-start !gap-2"
+              className="!flex-row-reverse !items-center !justify-start !gap-2"
             />
           </div>
         ))}
+      </div>
+      <div className="mt-6 flex justify-end">
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? <ButtonLoader size="sm"/> : 'Guardar Comandos'}
+        </button>
       </div>
     </WizardCard>
   );

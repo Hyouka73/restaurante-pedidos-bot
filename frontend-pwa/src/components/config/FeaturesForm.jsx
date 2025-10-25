@@ -1,10 +1,40 @@
-// frontend-pwa/src/components/config/FeaturesForm.jsx
-import { WizardCard, WizardCheckboxField } from '../ui/WizardComponents'; // Ajusta la ruta
-import { ShoppingBag, MapPin, Image, MessageSquare } from 'lucide-react';
 
-const FeaturesForm = ({ config, onChange }) => {
+import { useState, useEffect } from 'react';
+import { WizardCard, WizardCheckboxField } from '../ui/WizardComponents';
+import { ShoppingBag } from 'lucide-react';
+import { ButtonLoader } from '../ui/Loader';
+import { useAlert } from '../ui/CustomAlert';
+import { api } from '../../services/api';
+import { useRestaurant } from '../../context/RestaurantContext';
+
+const FeaturesForm = ({ initialData }) => {
+  const [features, setFeatures] = useState(initialData.features);
+  const [saving, setSaving] = useState(false);
+  const { data: restaurant } = useRestaurant();
+  const { showAlert } = useAlert();
+
+  useEffect(() => {
+    setFeatures(initialData.features);
+  }, [initialData]);
+
   const handleFeatureChange = (field, value) => {
-    onChange('features', field, value);
+    setFeatures(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    if (!restaurant?.id) {
+      showAlert('Error: No se pudo encontrar el ID del restaurante.', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.put(`/config/${restaurant.id}/general`, { features });
+      showAlert('Características guardadas correctamente.', 'success');
+    } catch (error) {
+      showAlert(`Error al guardar: ${error.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -21,39 +51,44 @@ const FeaturesForm = ({ config, onChange }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <WizardCheckboxField
           label="Aceptar Pedidos con Delivery"
-          checked={config.features.deliveryEnabled}
+          checked={features.deliveryEnabled}
           onChange={(e) => handleFeatureChange('deliveryEnabled', e.target.checked)}
         />
         <WizardCheckboxField
           label="Aceptar Pedidos para Recoger"
-          checked={config.features.pickupEnabled}
+          checked={features.pickupEnabled}
           onChange={(e) => handleFeatureChange('pickupEnabled', e.target.checked)}
         />
         <WizardCheckboxField
           label="Requerir ubicación si es delivery"
-          checked={config.features.requireLocationIfDelivery}
+          checked={features.requireLocationIfDelivery}
           onChange={(e) => handleFeatureChange('requireLocationIfDelivery', e.target.checked)}
         />
         <WizardCheckboxField
           label="Mostrar imágenes en el menú"
-          checked={config.features.showMenuImages}
+          checked={features.showMenuImages}
           onChange={(e) => handleFeatureChange('showMenuImages', e.target.checked)}
         />
         <WizardCheckboxField
           label="Aceptar Comentarios/Reclamos"
-          checked={config.features.acceptComplaints}
+          checked={features.acceptComplaints}
           onChange={(e) => handleFeatureChange('acceptComplaints', e.target.checked)}
         />
         <WizardCheckboxField
           label="Preguntar por Nombre"
-          checked={config.features.askForName}
+          checked={features.askForName}
           onChange={(e) => handleFeatureChange('askForName', e.target.checked)}
         />
         <WizardCheckboxField
           label="Preguntar por Teléfono"
-          checked={config.features.askForPhone}
+          checked={features.askForPhone}
           onChange={(e) => handleFeatureChange('askForPhone', e.target.checked)}
         />
+      </div>
+      <div className="mt-6 flex justify-end">
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? <ButtonLoader size="sm"/> : 'Guardar Características'}
+        </button>
       </div>
     </WizardCard>
   );

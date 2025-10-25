@@ -1,7 +1,86 @@
-//backend/src/services/availabiltyService.js
+// backend/src/services/availabilityService.js
 const { db } = require('../config/firebase');
 
 class AvailabilityService {
+
+  /**
+   * Obtiene la clave de día ('sunday', 'monday', etc.) a partir de un índice numérico.
+   * @param {number} dayIndex - Índice del día de la semana (0 para Domingo, 6 para Sábado).
+   * @returns {string}
+   */
+  getDayKey(dayIndex) {
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    return days[dayIndex];
+  }
+
+  /**
+   * Verifica la disponibilidad de un restaurante basándose en su modo de operación.
+   * @param {string} restaurantId - El ID del restaurante.
+   * @returns {Promise<object>} - Un objeto con el estado de disponibilidad.
+   */
+  async checkAvailability(restaurantId) {
+    const restaurantRef = db.collection('restaurants').doc(restaurantId);
+    const restaurantDoc = await restaurantRef.get();
+
+    if (!restaurantDoc.exists) {
+      console.error(`Restaurante no encontrado con ID: ${restaurantId}`);
+      throw new Error('Restaurante no encontrado');
+    }
+
+    const data = restaurantDoc.data();
+    const mode = data.availabilitySettings?.mode || 'hybrid'; // 'hybrid' como default
+    const manualStatus = data.availability?.status; // 'open' o 'closed'
+    const hours = data.hours || {};
+
+    // Modo 1: Siempre Abierto
+    if (mode === 'always_open') {
+      return { status: 'open', reason: 'El restaurante opera 24/7.' };
+    }
+
+    // Modo 2: Control Manual
+    if (mode === 'manual') {
+      if (manualStatus === 'open') {
+        return { status: 'open', reason: 'Abierto manualmente por el operador.' };
+      }
+      return { status: 'closed', reason: 'Cerrado manualmente por el operador.' };
+    }
+
+    // Modo 3: Horarios Fijos
+    if (mode === 'fixed') {
+      const now = new Date();
+      const dayKey = this.getDayKey(now.getDay());
+      const schedule = hours[dayKey];
+      const currentTime = now.toTimeString().substring(0, 5);
+
+      if (schedule?.closed) {
+        return { status: 'closed', reason: 'Cerrado por horario (hoy no se abre).' };
+      }
+
+      if (schedule?.open && schedule?.close && currentTime >= schedule.open && currentTime < schedule.close) {
+        return { status: 'open', reason: 'Dentro del horario de atención.' };
+      }
+      
+      const openTime = schedule?.open || 'N/A';
+      return { status: 'closed', reason: `Fuera de horario. El horario es de ${openTime} a ${schedule?.close || 'N/A'}.` };
+    }
+
+    // Modo 4: Híbrido (combina manual y horario)
+    // En este modo, el estado manual tiene prioridad. El horario es para referencia.
+    if (mode === 'hybrid') {
+      if (manualStatus === 'open') {
+        return { status: 'open', reason: 'Abierto manualmente por el operador.' };
+      }
+      // Si no está abierto manualmente, se considera cerrado, independientemente del horario.
+      // El frontend usará el horario para las sugerencias, pero el backend respeta el estado manual.
+      return { status: 'closed', reason: 'El restaurante no ha sido abierto manualmente.' };
+    }
+
+    // Default fallback
+    return { status: 'closed', reason: 'Modo de disponibilidad no configurado o desconocido.' };
+  }
+
+  // --- Funciones de ayuda existentes ---
+
   async getTodaySchedule(restaurantId) {
     const restaurantDoc = await db.collection('restaurants').doc(restaurantId).get();
     if (!restaurantDoc.exists) {
@@ -9,12 +88,11 @@ class AvailabilityService {
     }
     const { hours } = restaurantDoc.data();
     const now = new Date();
-    const dayOfWeek = now.getDay();
-    const dayKey = this.getDayKey(dayOfWeek);
+    const dayKey = this.getDayKey(now.getDay());
     
     return {
       dayName: this.getDayName(dayKey),
-      schedule: hours[dayKey],
+      schedule: hours ? hours[dayKey] : {},
       currentTime: now.toTimeString().substring(0, 5)
     };
   }
@@ -30,76 +108,6 @@ class AvailabilityService {
       'saturday': 'Sábado'
     };
     return days[dayKey];
-  }
-
-  async checkAvailability(restaurantId) {
-    const restaurantDoc = await db.collection('restaurants').doc(restaurantId).get();
-    if (!restaurantDoc.exists) {
-      throw new Error('Restaurante no encontrado');
-    }
-    const { availability, availabilitySettings, hours } = restaurantDoc.data();
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 (Domingo) a 6 (Sábado)
-    const currentTime = now.toTimeString().substring(0, 5); // "HH:MM"
-
-    const { mode, useScheduledHours } = availabilitySettings;
-
-    // 1. Si el modo es "manual_control" o "always_open", ignora horarios
-    if (mode === "manual_control") {
-      // Solo se basa en el estado 
-      return availability; // { status: "...", reason: "..." }
-    }
-    if (mode === "always_open") {
-      return { status: "open", reason: null };
-    }
-
-    // 2. Si el modo es "hybrid" o "fixed_hours", se usan los horarios
-    if (mode === "hybrid" || mode === "fixed_hours") {
-      const dayKey = this.getDayKey(dayOfWeek);
-      const scheduledOpenTime = hours[dayKey]?.open;
-      const scheduledCloseTime = hours[dayKey]?.close;
-      const isClosedToday = hours[dayKey]?.closed;
-
-      if (isClosedToday) {
-        return { status: "outside_hours", reason: "Cerrado hoy" };
-      }
-
-      // Verificar si está dentro del horario programado
-      const isOpenNow = currentTime >= scheduledOpenTime && currentTime < scheduledCloseTime;
-
-      if (isOpenNow) {
-        // Está dentro del horario programado
-        // a) Si "useScheduledHours" es true (comportamiento tipo "fixed_hours"):
-        if (useScheduledHours) {
-          if (availability.status === "closed_by_owner") {
-            return availability; // Devuelve el estado manual
-          }
-          // Si no está cerrado manualmente, y está dentro del horario, está abierto.
-          return { status: "open", reason: null };
-        }
-
-        // b) Si "useScheduledHours" es false (comportamiento tipo "hybrid" puro):
-        if (availability.status === "pending_open_reminder") {
-          // El dueño aún no ha respondido al recordatorio.
-          // Para este flujo refinado, si está en pending_open_reminder, aún no está "abierto".
-          // Se espera una acción del dueño.
-          return { status: "outside_hours", reason: "El restaurante aún no ha confirmado apertura para hoy." };
-        }
-        // Si no es ninguno de los anteriores, usar el estado actual
-        return availability;
-      } else {
-        // Está fuera del horario programado
-        return { status: "outside_hours", reason: `Fuera de horario. Abre a las ${scheduledOpenTime}.` };
-      }
-    }
-
-    // Si no coincide con nada, asumir cerrado
-    return { status: "outside_hours", reason: "No disponible." };
-  }
-
-  getDayKey(dayIndex) {
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    return days[dayIndex];
   }
 }
 

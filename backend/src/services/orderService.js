@@ -1,27 +1,48 @@
-//backend/src/services/orderService.js
-const { db, admin } = require('../config/firebase'); // Agregamos 'admin'
+const { db, admin } = require('../config/firebase');
+const telegramNotificationService = require('./telegramNotificationService');
 
 class OrderService {
-  // Crear un nuevo pedido
+
+  /**
+   * Crea un nuevo pedido en la base de datos.
+   * @param {string} restaurantId - ID del restaurante.
+   * @param {object} orderData - Datos del pedido.
+   * @returns {Promise<object>} El objeto del pedido creado.
+   */
   async createOrder(restaurantId, orderData) {
-    const orderRef = db.collection('restaurants').doc(restaurantId).collection('orders').doc();
+    const restaurantRef = db.collection('restaurants').doc(restaurantId);
+    const ordersCollection = restaurantRef.collection('orders');
+    
+    // Generar un número de pedido secuencial (podría mejorarse a futuro)
+    const restaurantDoc = await restaurantRef.get();
+    const currentCounter = restaurantDoc.data()?.orderCounter || 0;
+    const newOrderNumber = currentCounter + 1;
+    
     const newOrder = {
-      id: orderRef.id,
-      restaurantId,
-      status: 'pending', // Estados: pending, confirmed, preparing, ready, delivered, cancelled
-      statusHistory: [{
-        status: 'pending',
-        timestamp: new Date()
-      }],
       ...orderData,
+      orderNumber: newOrderNumber,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      statusHistory: [
+        {
+          status: 'pending',
+          timestamp: new Date(),
+          notes: 'Pedido creado por el cliente.'
+        }
+      ]
     };
-    await orderRef.set(newOrder);
+
+    const orderRef = await ordersCollection.add(newOrder);
+    
+    // Actualizar el contador en el documento del restaurante
+    await restaurantRef.update({ orderCounter: newOrderNumber });
+
     return { id: orderRef.id, ...newOrder };
   }
 
-  // Obtener un pedido por ID
+  /**
+   * Obtiene un pedido por su ID.
+   */
   async getOrder(restaurantId, orderId) {
     const orderDoc = await db.collection('restaurants').doc(restaurantId).collection('orders').doc(orderId).get();
     if (!orderDoc.exists) {
@@ -30,7 +51,9 @@ class OrderService {
     return { id: orderDoc.id, ...orderDoc.data() };
   }
 
-  // Actualizar el estado de un pedido
+  /**
+   * Actualiza el estado de un pedido y notifica al usuario.
+   */
   async updateOrderStatus(restaurantId, orderId, newStatus, notes = '') {
     const orderRef = db.collection('restaurants').doc(restaurantId).collection('orders').doc(orderId);
     const orderDoc = await orderRef.get();
@@ -38,32 +61,62 @@ class OrderService {
       throw new Error('Pedido no encontrado');
     }
 
+    const orderData = orderDoc.data();
+
     const newStatusEntry = {
       status: newStatus,
       timestamp: new Date(),
       notes
     };
-
     await orderRef.update({
       status: newStatus,
       'statusHistory': admin.firestore.FieldValue.arrayUnion(newStatusEntry),
       updatedAt: new Date()
     });
+
+    try {
+      const customerTelegramId = orderData.customer?.telegramId;
+      if (customerTelegramId) {
+        await telegramNotificationService.notifyUserOfStatusChange(customerTelegramId, newStatus, orderData);
+      }
+    } catch (notifyError) {
+      console.error('Error al disparar la notificación de Telegram:', notifyError);
+    }
+
     return { success: true };
   }
 
-  // Obtener pedidos de un restaurante (filtrados por estado opcionalmente)
-  async getOrders(restaurantId, statusFilter = null) {
-    let query = db.collection('restaurants').doc(restaurantId).collection('orders').orderBy('createdAt', 'desc');
-    if (statusFilter) {
-      query = query.where('status', '==', statusFilter);
+  /**
+   * Obtiene todos los pedidos de un restaurante.
+   */
+  async getOrders(restaurantId) {
+    const snapshot = await db.collection('restaurants').doc(restaurantId).collection('orders').orderBy('createdAt', 'desc').get();
+    if (snapshot.empty) {
+      return [];
     }
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  }
+
+  /**
+   * Busca el pedido activo más reciente de un usuario de Telegram.
+   */
+  async getActiveOrderByUser(restaurantId, telegramId) {
+    const activeStatuses = ['pending', 'confirmed', 'preparing', 'ready'];
+    
+    const query = db.collection('restaurants').doc(restaurantId).collection('orders')
+      .where('customer.telegramId', '==', telegramId)
+      .where('status', 'in', activeStatuses)
+      .orderBy('createdAt', 'desc')
+      .limit(1);
+      
     const snapshot = await query.get();
-    const orders = [];
-    snapshot.forEach(doc => {
-      orders.push({ id: doc.id, ...doc.data() });
-    });
-    return orders;
+
+    if (snapshot.empty) {
+      return null;
+    }
+    
+    const doc = snapshot.docs[0];
+    return { id: doc.id, ...doc.data() };
   }
 }
 

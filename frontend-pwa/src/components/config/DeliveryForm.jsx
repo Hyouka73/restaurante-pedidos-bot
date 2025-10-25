@@ -1,10 +1,47 @@
-// frontend-pwa/src/components/config/DeliveryForm.jsx
-import { WizardCard, WizardInputField, WizardSelectField, WizardCheckboxField } from '../ui/WizardComponents'; // Ajusta la ruta
-import { Truck, DollarSign, MapPin } from 'lucide-react';
 
-const DeliveryForm = ({ config, onChange }) => {
+import { useState, useEffect } from 'react';
+import { WizardCard, WizardInputField, WizardSelectField, WizardCheckboxField } from '../ui/WizardComponents';
+import { Truck, DollarSign, MapPin } from 'lucide-react';
+import { ButtonLoader } from '../ui/Loader';
+import { useAlert } from '../ui/CustomAlert';
+import { api } from '../../services/api';
+import { useRestaurant } from '../../context/RestaurantContext';
+
+const DeliveryForm = ({ initialData }) => {
+  const [delivery, setDelivery] = useState(initialData.delivery);
+  const [features, setFeatures] = useState(initialData.features);
+  const [saving, setSaving] = useState(false);
+  const { data: restaurant } = useRestaurant();
+  const { showAlert } = useAlert();
+
+  useEffect(() => {
+    setDelivery(initialData.delivery);
+    setFeatures(initialData.features);
+  }, [initialData]);
+
   const handleDeliveryChange = (field, value) => {
-    onChange('delivery', field, value);
+    setDelivery(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleFeatureChange = (field, value) => {
+    setFeatures(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    if (!restaurant?.id) {
+      showAlert('Error: No se pudo encontrar el ID del restaurante.', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = { delivery, features };
+      await api.put(`/config/${restaurant.id}/general`, payload);
+      showAlert('Configuración de delivery guardada correctamente.', 'success');
+    } catch (error) {
+      showAlert(`Error al guardar: ${error.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -21,19 +58,19 @@ const DeliveryForm = ({ config, onChange }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <WizardSelectField
           label="Tipo de Costo"
-          value={config.delivery.type}
+          value={delivery.type}
           onChange={(e) => handleDeliveryChange('type', e.target.value)}
         >
           <option value="distance_based">Por Distancia</option>
           <option value="fixed">Costo Fijo</option>
         </WizardSelectField>
-        {config.delivery.type === 'distance_based' ? (
+        {delivery.type === 'distance_based' ? (
           <>
             <WizardInputField
               label="Costo por Km ($)"
               type="number"
               step="0.01"
-              value={config.delivery.costPerKm}
+              value={delivery.costPerKm}
               onChange={(e) => handleDeliveryChange('costPerKm', parseFloat(e.target.value) || 0)}
               icon={DollarSign}
             />
@@ -41,7 +78,7 @@ const DeliveryForm = ({ config, onChange }) => {
               label="Distancia Máx (Km)"
               type="number"
               step="0.1"
-              value={config.delivery.maxDistance}
+              value={delivery.maxDistance}
               onChange={(e) => handleDeliveryChange('maxDistance', parseFloat(e.target.value) || 0)}
               icon={MapPin}
             />
@@ -51,7 +88,7 @@ const DeliveryForm = ({ config, onChange }) => {
             label="Costo de Envío Fijo ($)"
             type="number"
             step="0.01"
-            value={config.delivery.baseCost}
+            value={delivery.baseCost}
             onChange={(e) => handleDeliveryChange('baseCost', parseFloat(e.target.value) || 0)}
             icon={DollarSign}
           />
@@ -60,7 +97,7 @@ const DeliveryForm = ({ config, onChange }) => {
           label="Pedido Mínimo para Envío Gratis ($)"
           type="number"
           step="0.01"
-          value={config.delivery.freeDeliveryMinAmount}
+          value={delivery.freeDeliveryMinAmount}
           onChange={(e) => handleDeliveryChange('freeDeliveryMinAmount', parseFloat(e.target.value) || 0)}
           icon={DollarSign}
         />
@@ -68,9 +105,14 @@ const DeliveryForm = ({ config, onChange }) => {
       <div className="mt-4">
         <WizardCheckboxField
           label="Habilitar Delivery"
-          checked={config.features.deliveryEnabled}
-          onChange={(e) => onChange('features', 'deliveryEnabled', e.target.checked)}
+          checked={features.deliveryEnabled}
+          onChange={(e) => handleFeatureChange('deliveryEnabled', e.target.checked)}
         />
+      </div>
+      <div className="mt-6 flex justify-end">
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? <ButtonLoader size="sm"/> : 'Guardar Delivery'}
+        </button>
       </div>
     </WizardCard>
   );

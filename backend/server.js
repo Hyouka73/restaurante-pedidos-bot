@@ -73,12 +73,14 @@ app.get('/', (req, res) => {
 const startHandler = require('./src/bot/handlers/startHandler');
 const menuHandler = require('./src/bot/handlers/menuHandler');
 const orderHandler = require('./src/bot/handlers/orderHandler');
+const myOrderHandler = require('./src/bot/handlers/myOrderHandler');
 const interactionHandler = require('./src/bot/middleware/interactionHandler');
 
 // Registrar comandos
 bot.command('start', startHandler);
 bot.command('menu', menuHandler);
 bot.command('pedido', orderHandler);
+bot.command('mipedido', myOrderHandler);
 
 // Handler para callback queries (botones inline)
 bot.on('callback_query', interactionHandler);
@@ -140,7 +142,8 @@ async function launchBot() {
     await bot.telegram.setMyCommands([
       { command: 'start', description: 'Iniciar conversación' },
       { command: 'menu', description: 'Ver menú completo' },
-      { command: 'pedido', description: 'Hacer un pedido' }
+      { command: 'pedido', description: 'Hacer un pedido' },
+      { command: 'mipedido', description: 'Ver estado de mi pedido' }
     ]);
     console.log('✅ Comandos registrados en Telegram');
 

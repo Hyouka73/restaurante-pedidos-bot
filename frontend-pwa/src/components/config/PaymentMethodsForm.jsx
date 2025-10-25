@@ -1,13 +1,43 @@
-// frontend-pwa/src/components/config/PaymentMethodsForm.jsx
-import { WizardCard, WizardCheckboxField } from '../ui/WizardComponents'; // Ajusta la ruta
-import { CreditCard, DollarSign } from 'lucide-react';
 
-const PaymentMethodsForm = ({ config, onChange }) => {
+import { useState, useEffect } from 'react';
+import { WizardCard, WizardCheckboxField } from '../ui/WizardComponents';
+import { CreditCard } from 'lucide-react';
+import { ButtonLoader } from '../ui/Loader';
+import { useAlert } from '../ui/CustomAlert';
+import { api } from '../../services/api';
+import { useRestaurant } from '../../context/RestaurantContext';
+
+const PaymentMethodsForm = ({ initialData }) => {
+  const [paymentMethods, setPaymentMethods] = useState(initialData.paymentMethods);
+  const [saving, setSaving] = useState(false);
+  const { data: restaurant } = useRestaurant();
+  const { showAlert } = useAlert();
+
+  useEffect(() => {
+    setPaymentMethods(initialData.paymentMethods);
+  }, [initialData]);
+
   const handlePaymentMethodChange = (id, field, value) => {
-    const updatedMethods = config.paymentMethods.map(method =>
+    const updatedMethods = paymentMethods.map(method =>
       method.id === id ? { ...method, [field]: value } : method
     );
-    onChange('paymentMethods', updatedMethods);
+    setPaymentMethods(updatedMethods);
+  };
+
+  const handleSave = async () => {
+    if (!restaurant?.id) {
+      showAlert('Error: No se pudo encontrar el ID del restaurante.', 'error');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.put(`/config/${restaurant.id}/general`, { paymentMethods });
+      showAlert('Métodos de pago guardados correctamente.', 'success');
+    } catch (error) {
+      showAlert(`Error al guardar: ${error.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -22,17 +52,22 @@ const PaymentMethodsForm = ({ config, onChange }) => {
         </div>
       </div>
       <div className="space-y-2">
-        {config.paymentMethods.map((method) => (
+        {paymentMethods.map((method) => (
           <div key={method.id} className="flex items-center justify-between p-2 border-b">
             <span className="label-text">{method.name}</span>
             <WizardCheckboxField
-              label=""
+              label="Habilitado"
               checked={method.enabled}
               onChange={(e) => handlePaymentMethodChange(method.id, 'enabled', e.target.checked)}
-              className="!flex-row !items-center !justify-start !gap-2"
+              className="!flex-row-reverse !items-center !justify-start !gap-2"
             />
           </div>
         ))}
+      </div>
+      <div className="mt-6 flex justify-end">
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? <ButtonLoader size="sm"/> : 'Guardar Métodos de Pago'}
+        </button>
       </div>
     </WizardCard>
   );
