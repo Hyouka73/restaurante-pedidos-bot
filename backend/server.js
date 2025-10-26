@@ -1,4 +1,5 @@
-//backend/server.js
+
+
 require('dotenv').config();
 const cors = require('cors');
 const express = require('express');
@@ -39,6 +40,9 @@ const menuRoutes = require('./src/api/routes/menu');
 const ordersRoutes = require('./src/api/routes/orders');
 const uploadRoutes = require('./src/api/routes/upload');
 const botApiRoutes = require('./src/api/routes/bot');
+const userRoutes = require('./src/api/routes/user');
+const dashboardRoutes = require('./src/api/routes/dashboard');
+const { router: eventsRoutes } = require('./src/api/routes/events'); // Import SSE router
 
 app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
@@ -46,6 +50,9 @@ app.use('/api/menu', menuRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/bot', botApiRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/events', eventsRoutes); // Use SSE router
 
 // Health check
 app.get('/health', (req, res) => {

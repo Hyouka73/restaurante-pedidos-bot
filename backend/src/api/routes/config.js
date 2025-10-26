@@ -300,8 +300,30 @@ router.put('/:restaurantId/messages', verifyToken, verifyOwner, async (req, res)
   try {
     const { restaurantId } = req.params;
     const messages = req.body;
-    // CORREGIDO: Usar configService en lugar de authService
     await configService.updateMessages(restaurantId, messages);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/config/:restaurantId/notifications
+router.get('/:restaurantId/notifications', verifyToken, verifyOwner, async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const settings = await configService.getNotificationSettings(restaurantId);
+    res.json(settings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/config/:restaurantId/notifications
+router.put('/:restaurantId/notifications', verifyToken, verifyOwner, async (req, res) => {
+  try {
+    const { restaurantId } = req.params;
+    const settings = req.body;
+    await configService.updateNotificationSettings(restaurantId, settings);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

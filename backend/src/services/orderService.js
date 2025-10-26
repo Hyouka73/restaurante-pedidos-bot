@@ -56,31 +56,52 @@ class OrderService {
    */
   async updateOrderStatus(restaurantId, orderId, newStatus, notes = '') {
     const orderRef = db.collection('restaurants').doc(restaurantId).collection('orders').doc(orderId);
-    const orderDoc = await orderRef.get();
-    if (!orderDoc.exists) {
-      throw new Error('Pedido no encontrado');
-    }
-
-    const orderData = orderDoc.data();
-
-    const newStatusEntry = {
-      status: newStatus,
-      timestamp: new Date(),
-      notes
-    };
-    await orderRef.update({
-      status: newStatus,
-      'statusHistory': admin.firestore.FieldValue.arrayUnion(newStatusEntry),
-      updatedAt: new Date()
-    });
 
     try {
-      const customerTelegramId = orderData.customer?.telegramId;
+      await db.runTransaction(async (transaction) => {
+        const orderDoc = await transaction.get(orderRef);
+        if (!orderDoc.exists) {
+          throw new Error('Pedido no encontrado');
+        }
+
+        const newStatusEntry = {
+          status: newStatus,
+          timestamp: new Date(),
+          notes
+        };
+
+        transaction.update(orderRef, {
+          status: newStatus,
+          updatedAt: new Date(),
+          statusHistory: admin.firestore.FieldValue.arrayUnion(newStatusEntry)
+        });
+      });
+
+      console.log(`[OrderService] Transaction successful for order ${orderId} to status ${newStatus}.`);
+
+    } catch (error) {
+      console.error(`[OrderService] Transaction failed for order ${orderId}:`, error);
+      throw error; // Re-throw to be caught by the route handler
+    }
+
+    // Notifications remain outside the transaction, which is best practice.
+    try {
+      const updatedOrderData = await this.getOrder(restaurantId, orderId);
+      
+      // Verify the update post-transaction to detect external interference
+      if (updatedOrderData.status !== newStatus) {
+           console.error(`CRITICAL: Status mismatch for ${orderId} after transaction. Expected ${newStatus}, got ${updatedOrderData.status}. Possible external interference (e.g., Cloud Function).`);
+      }
+
+      const { sendSseEvent } = require('../api/routes/events');
+      sendSseEvent({ type: 'order_update', payload: updatedOrderData });
+
+      const customerTelegramId = updatedOrderData.customer?.telegramId;
       if (customerTelegramId) {
-        await telegramNotificationService.notifyUserOfStatusChange(customerTelegramId, newStatus, orderData);
+        await telegramNotificationService.notifyUserOfStatusChange(customerTelegramId, newStatus, updatedOrderData, restaurantId);
       }
     } catch (notifyError) {
-      console.error('Error al disparar la notificación de Telegram:', notifyError);
+      console.error(`[OrderService] Error during notification phase for ${orderId}:`, notifyError);
     }
 
     return { success: true };

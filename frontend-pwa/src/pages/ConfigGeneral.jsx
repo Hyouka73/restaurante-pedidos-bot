@@ -1,9 +1,8 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import { auth } from '../config/firebase';
+import { useRestaurant } from '../context/RestaurantContext'; // <-- 1. Importar hook
 import { api } from '../services/api';
 import { useAlert } from '../components/ui/CustomAlert';
 import { WizardCard, WizardSectionHeader, WizardErrorBox } from '../components/ui/WizardComponents';
@@ -19,13 +18,13 @@ import CommandsForm from '../components/config/CommandsForm';
 export default function ConfigGeneral() {
   const [user] = useAuthState(auth);
   const navigate = useNavigate();
+  const { data: restaurantData } = useRestaurant(); // <-- 2. Usar hook
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [config, setConfig] = useState(null);
   const { showAlert } = useAlert();
   const [currentTab, setCurrentTab] = useState('info');
 
-  // Estado y handlers para el token del bot, que se queda en esta página
   const [botTokenInput, setBotTokenInput] = useState('');
   const [updatingToken, setUpdatingToken] = useState(false);
   const [validatingConnection, setValidatingConnection] = useState(false);
@@ -35,16 +34,16 @@ export default function ConfigGeneral() {
       navigate('/login');
       return;
     }
+    if (!restaurantData?.id) {
+        setLoading(true);
+        return;
+    }
 
     const fetchConfig = async () => {
       try {
         setLoading(true);
         setError('');
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (!userDoc.exists()) {
-          throw new Error('Usuario no encontrado.');
-        }
-        const restaurantId = userDoc.data().restaurantId;
+        const restaurantId = restaurantData.id; // <-- 3. Usar ID del contexto
         const data = await api.get(`/config/${restaurantId}/general`);
         setConfig(data);
       } catch (err) {
@@ -57,17 +56,16 @@ export default function ConfigGeneral() {
     };
 
     fetchConfig();
-  }, [user, navigate, showAlert]);
+  }, [user, navigate, showAlert, restaurantData]); // <-- 4. Añadir dependencia
 
   const handleUpdateBotToken = async () => {
-    if (!user) return navigate('/login');
+    if (!user || !restaurantData?.id) return navigate('/login');
     if (!botTokenInput || botTokenInput.trim().length === 0) {
       return showAlert('Ingresa el token antes de actualizar', 'warning', 3000);
     }
     setUpdatingToken(true);
     try {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const restaurantId = userDoc.data().restaurantId;
+      const restaurantId = restaurantData.id; // <-- 5. Usar ID del contexto
       await api.put(`/config/${restaurantId}/bot-token`, { token: botTokenInput.trim() });
       setBotTokenInput('');
       showAlert('Token actualizado correctamente', 'success', 3000);
@@ -80,11 +78,10 @@ export default function ConfigGeneral() {
   };
 
   const handleValidateBotToken = async () => {
-    if (!user) return navigate('/login');
+    if (!user || !restaurantData?.id) return navigate('/login');
     setValidatingConnection(true);
     try {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const restaurantId = userDoc.data().restaurantId;
+      const restaurantId = restaurantData.id; // <-- 6. Usar ID del contexto
       const res = await api.post(`/config/${restaurantId}/validate-bot-token`, {});
       if (res && res.botInfo) {
         const info = res.botInfo;

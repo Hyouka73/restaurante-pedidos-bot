@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { WizardInputField, WizardTextAreaField } from '../ui/WizardComponents';
 import MapSelectorModal from '../ui/MapSelectorModal';
@@ -26,8 +25,12 @@ const BasicInfoForm = ({ initialData }) => {
   const handleSelectLocation = (location) => {
     setInfo(prev => ({
       ...prev,
-      location: { lat: location.lat, lng: location.lng },
-      address: location.formatted_address || prev.address,
+      location: {
+        ...(prev.location || {}),
+        lat: location.lat,
+        lng: location.lng,
+        formatted_address: location.formatted_address,
+      },
     }));
     setIsMapModalOpen(false);
     showAlert('Ubicación seleccionada. No olvides guardar los cambios.', 'info', 3000);
@@ -72,7 +75,7 @@ const BasicInfoForm = ({ initialData }) => {
           <input
             type="text"
             readOnly
-            value={info.address || 'No se ha seleccionado una ubicación'}
+            value={info.location?.formatted_address || 'No se ha seleccionado una ubicación'}
             className="input input-bordered w-full bg-gray-100 cursor-not-allowed"
             placeholder="Selecciona una ubicación en el mapa"
           />

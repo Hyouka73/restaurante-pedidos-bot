@@ -585,18 +585,22 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
     const total = subtotal + deliveryFee;
 
     const orderData = {
+      info: {
+        location: {
+          coordinates: session.customerLocation, // { latitude, longitude }
+          formatted_address: session.customerAddress // Manually entered address
+        }
+      },
       customer: {
         name: session.customerName,
         telegramId: userId,
         phone: session.customerPhone,
-        address: session.customerAddress
       },
       items: session.items,
       subtotal,
       deliveryFee,
       total,
       deliveryType: session.deliveryType,
-      location: session.customerLocation,
       paymentMethod: session.paymentMethod?.id,
       channel: 'telegram',
       status: 'pending'

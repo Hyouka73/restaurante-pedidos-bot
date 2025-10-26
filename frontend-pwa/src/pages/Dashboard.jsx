@@ -2,9 +2,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { doc, getDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import { auth } from '../config/firebase';
 import { useRestaurant } from '../context/RestaurantContext';
+import { api } from '../services/api'; // <-- 1. Importar api
 import { motion } from 'framer-motion';
 import { 
   Store, ShoppingCart, Clock, DollarSign, TrendingUp, 
@@ -15,7 +15,7 @@ import Loader from '../components/ui/Loader';
 export default function Dashboard() {
   const [user, loadingAuth] = useAuthState(auth);
   const navigate = useNavigate();
-  const [restaurantDoc, setRestaurantData] = useState(null);
+  const { data: restaurantData } = useRestaurant(); // <-- 2. Usar el contexto del restaurante
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState({
     totalOrders: 0,
@@ -24,66 +24,25 @@ export default function Dashboard() {
     avgOrderValue: 0,
   });
   const [recentOrders, setRecentOrders] = useState([]);
-  const { data: restaurantData } = useRestaurant();
 
   useEffect(() => {
+    // 3. Mover la lógica de carga de datos al contexto si es posible, o simplificarla aquí
     const fetchData = async () => {
-      if (!user) {
-        console.log("[Dashboard] No hay usuario autenticado, no se cargan datos.");
+      if (!user || !restaurantData?.id) {
         setLoading(false);
         return;
       }
 
       try {
-        console.log("[Dashboard] Usuario autenticado, obteniendo restaurantId...");
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        console.log("[Dashboard] Doc de usuario obtenido:", userDoc.exists());
+        setLoading(true);
+        const restaurantId = restaurantData.id;
         
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          console.log("[Dashboard] Datos de usuario:", userData);
-          const restaurantId = userData.restaurantId;
-          console.log("[Dashboard] RestaurantId obtenido:", restaurantId);
-          
-          if (restaurantId) {
-            const rDoc = await getDoc(doc(db, 'restaurants', restaurantId));
-            if (rDoc.exists()) {
-              setRestaurantData(rDoc.data());
-            }
+        // 4. Llamar al nuevo endpoint del backend
+        const response = await api.get(`/dashboard/${restaurantId}/stats`);
+        
+        setMetrics(response.metrics);
+        setRecentOrders(response.recentOrders);
 
-            const ordersQuery = query(
-              collection(db, 'restaurants', restaurantId, 'orders'),
-              orderBy('createdAt', 'desc')
-            );
-            const ordersSnapshot = await getDocs(ordersQuery);
-            const ordersList = [];
-            let totalRevenue = 0;
-            let pendingCount = 0;
-
-            ordersSnapshot.forEach((doc) => {
-              const data = doc.data();
-              ordersList.push({ id: doc.id, ...data });
-              totalRevenue += data.total || 0;
-              if (data.status === 'pending') pendingCount++;
-            });
-
-            setRecentOrders(ordersList.slice(0, 5));
-
-            const totalOrders = ordersList.length;
-            const avgOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : 0;
-
-            setMetrics({
-              totalOrders,
-              pendingOrders: pendingCount,
-              revenue: totalRevenue.toFixed(2),
-              avgOrderValue
-            });
-          } else {
-            console.error("[Dashboard] No se encontró restaurantId en el doc de usuario para UID:", user.uid);
-          }
-        } else {
-          console.error("[Dashboard] Documento de usuario no encontrado para UID:", user.uid);
-        }
       } catch (error) {
         console.error("Error al cargar datos del dashboard:", error);
       } finally {
@@ -92,7 +51,7 @@ export default function Dashboard() {
     };
 
     fetchData();
-  }, [user, navigate]);
+  }, [user, restaurantData, navigate]); // <-- 5. Depender de restaurantData
 
   if (loadingAuth || (user && loading)) {
     return <Loader variant="dots" size="lg" message="Cargando dashboard..." />;
@@ -123,7 +82,7 @@ export default function Dashboard() {
     },
     {
       title: 'Ingresos',
-      value: `$${revenue}`,
+      value: `$${revenue.toFixed(2)}`,
       desc: 'Total acumulado',
       icon: DollarSign,
       gradient: 'from-emerald-500 to-green-600',
@@ -131,7 +90,7 @@ export default function Dashboard() {
     },
     {
       title: 'Prom. Pedido',
-      value: `$${avgOrderValue}`,
+      value: `$${avgOrderValue.toFixed(2)}`,
       desc: 'Valor promedio',
       icon: TrendingUp,
       gradient: 'from-purple-500 to-pink-600',
@@ -165,7 +124,6 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#ffe4c4] via-[#ffd3c3] to-[#ffb8a1] py-6 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header de Bienvenida */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -181,7 +139,7 @@ export default function Dashboard() {
               </p>
               <p className="text-[#ff7f50] font-semibold mt-1 flex items-center gap-2">
                 <Store size={18} />
-                {restaurantDoc?.info?.name || 'Restaurante no configurado'}
+                {restaurantData?.info?.name || 'Restaurante no configurado'}
               </p>
             </div>
             
@@ -214,7 +172,6 @@ export default function Dashboard() {
           </div>
         </motion.div>
 
-        {/* Tarjetas de Métricas */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           {statCards.map((stat, index) => {
             const Icon = stat.icon;
@@ -245,9 +202,6 @@ export default function Dashboard() {
           })}
         </div>
 
-
-
-        {/* Acciones Rápidas */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

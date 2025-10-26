@@ -2,8 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth, db } from '../config/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { auth } from '../config/firebase';
+import { api } from '../services/api'; // <-- 1. Importar api
 
 export default function ConfigNotifications() {
   const [user] = useAuthState(auth);
@@ -11,12 +11,10 @@ export default function ConfigNotifications() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  // Estado para las preferencias de notificación
-  // Por ahora, solo manejamos la preferencia del usuario para recibir notificaciones push
   const [notificationPrefs, setNotificationPrefs] = useState({
-    browserNotifications: false, // Si el navegador tiene permiso y está activo
-    pushEnabled: false, // Si el usuario quiere recibir notificaciones push
-    fcmToken: null, // El token FCM del navegador, si está registrado
+    browserNotifications: false,
+    pushEnabled: false,
+    fcmToken: null,
   });
 
   useEffect(() => {
@@ -28,20 +26,15 @@ export default function ConfigNotifications() {
     const fetchNotificationPrefs = async () => {
       try {
         setLoading(true);
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (!userDoc.exists) {
-          setError('Usuario no encontrado.');
-          return;
-        }
-        const userData = userDoc.data();
-        // Suponiendo que guardaste la preferencia de notificaciones push en el doc del usuario
+        // 2. Usar el endpoint del backend
+        const prefs = await api.get('/user/notification-prefs');
+        
         setNotificationPrefs(prev => ({
           ...prev,
-          pushEnabled: userData.notificationsEnabled || false, // Nombre del campo en Firestore
-          fcmToken: userData.fcmToken || null
+          pushEnabled: prefs.notificationsEnabled || false,
+          fcmToken: prefs.fcmToken || null
         }));
 
-        // Verificar si el navegador tiene permiso para notificaciones
         if ("Notification" in window) {
           setNotificationPrefs(prev => ({
             ...prev,
@@ -68,8 +61,6 @@ export default function ConfigNotifications() {
     if (permission === "granted") {
       console.log("Permiso para notificaciones concedido.");
       setNotificationPrefs(prev => ({ ...prev, browserNotifications: true }));
-      // Aquí deberías registrar el Service Worker y obtener el FCM token si usas FCM
-      // registerServiceWorkerAndFCM();
     } else {
       console.log("Permiso para notificaciones denegado.");
       setNotificationPrefs(prev => ({ ...prev, browserNotifications: false }));
@@ -84,11 +75,11 @@ export default function ConfigNotifications() {
     setSaving(true);
     setError('');
     try {
-      // Actualizar la preferencia en Firestore
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
+      // 3. Usar el endpoint del backend para actualizar
+      await api.put('/user/notification-prefs', {
         notificationsEnabled: enabled
       });
+      
       setNotificationPrefs(prev => ({ ...prev, pushEnabled: enabled }));
       alert(`✅ Notificaciones ${enabled ? 'habilitadas' : 'deshabilitadas'}.`);
     } catch (err) {
@@ -107,7 +98,6 @@ export default function ConfigNotifications() {
       {error && <div className="alert alert-error mb-4"><span>{error}</span></div>}
 
       <div className="grid grid-cols-1 gap-6">
-        {/* Notificaciones del Navegador */}
         <div className="card bg-base-100 shadow-xl p-4">
           <h2 className="text-xl font-semibold mb-2">Notificaciones del Navegador</h2>
           <p className="text-gray-500 mb-4">Controla si el navegador puede mostrarte notificaciones.</p>
@@ -126,7 +116,6 @@ export default function ConfigNotifications() {
           </div>
         </div>
 
-        {/* Notificaciones Push */}
         <div className="card bg-base-100 shadow-xl p-4">
           <h2 className="text-xl font-semibold mb-2">Notificaciones Push</h2>
           <p className="text-gray-500 mb-4">Recibe alertas importantes en tu dispositivo (por ejemplo, recordatorios de apertura).</p>
@@ -137,7 +126,7 @@ export default function ConfigNotifications() {
                 className="checkbox checkbox-primary"
                 checked={notificationPrefs.pushEnabled}
                 onChange={(e) => togglePushNotifications(e.target.checked)}
-                disabled={saving || !notificationPrefs.browserNotifications} // No se puede habilitar sin permiso del navegador
+                disabled={saving || !notificationPrefs.browserNotifications}
               />
               <span className="label-text ml-2">Habilitar Notificaciones Push</span>
             </label>
@@ -152,13 +141,12 @@ export default function ConfigNotifications() {
           )}
         </div>
 
-        {/* Recordatorios de Apertura */}
         <div className="card bg-base-100 shadow-xl p-4">
           <h2 className="text-xl font-semibold mb-2">Recordatorios de Apertura</h2>
           <p className="text-gray-500 mb-4">Esto se configura en la sección de "Disponibilidad".</p>
           <button
             className="btn btn-outline"
-            onClick={() => navigate('/config/availability')} // Asumiendo esta ruta
+            onClick={() => navigate('/config/availability')}
           >
             Ir a Configuración de Disponibilidad
           </button>

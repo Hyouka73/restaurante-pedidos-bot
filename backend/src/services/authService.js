@@ -161,6 +161,21 @@ class AuthService {
 
     return snapshot.docs[0].id; // Devuelve el UID del usuario
   }
+  async getUserNotificationPrefs(userId) {
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      throw new Error('Usuario no encontrado');
+    }
+    const { notificationsEnabled, fcmToken } = userDoc.data();
+    return { notificationsEnabled: notificationsEnabled || false, fcmToken: fcmToken || null };
+  }
+
+  async updateUserNotificationPrefs(userId, prefs) {
+    const userRef = db.collection('users').doc(userId);
+    await userRef.update(prefs);
+    return { success: true };
+  }
+
 }
 
 module.exports = new AuthService();

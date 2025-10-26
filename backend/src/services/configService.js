@@ -175,6 +175,20 @@ class ConfigService {
     });
     return { success: true };
   }
+  async getNotificationSettings(restaurantId) {
+    const config = await this.getRestaurantConfig(restaurantId);
+    return config.notificationSettings || {};
+  }
+
+  async updateNotificationSettings(restaurantId, settings) {
+    const restaurantRef = db.collection('restaurants').doc(restaurantId);
+    await restaurantRef.update({
+      notificationSettings: settings,
+      updatedAt: new Date(),
+    });
+    return { success: true };
+  }
+
 }
 
 module.exports = new ConfigService();
