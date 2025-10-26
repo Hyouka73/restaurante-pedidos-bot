@@ -1,65 +1,84 @@
 // backend/src/bot/handlers/myOrderHandler.js
+const { Markup } = require('telegraf');
 const orderService = require('../../services/orderService');
-const telegramUserService = require('../services/telegramUserService');
 
 /**
- * Formatea el estado del pedido para el usuario.
+ * Formatea el estado de un pedido para mostrarlo al usuario.
  */
 function formatOrderStatus(order) {
-  const orderId = order.id.substring(0, 8).toUpperCase();
-  let message = `🔎 *Estado de tu Pedido Activo* (#${orderId})\n\n`;
-  
-  // Mensajes amigables + "cuanto tiempo falta" (estimado)
-  switch (order.status) {
-    case 'pending':
-      message += `⏳ *Estado:* Pendiente de confirmación.\nEl restaurante aún no ha aceptado tu pedido.`;
-      break;
-    case 'confirmed':
-      message += `✅ *Estado:* Confirmado.\nEl restaurante está por iniciar la preparación. (Estimado: 25-35 min)`;
-      break;
-    case 'preparing':
-      message += `🧑‍🍳 *Estado:* ¡En preparación!\nTu comida se está cocinando. (Estimado: 15-25 min)`;
-      break;
-    case 'ready':
-      if (order.deliveryType === 'pickup') {
-        message += `🎉 *Estado:* ¡Listo para Recoger!\nPuedes pasar por él cuando gustes.`;
-      } else {
-        message += `🚚 *Estado:* ¡Listo! En camino.\nEl repartidor debería llegar pronto.`;
-      }
-      break;
-    default:
-      message += `❓ *Estado:* ${order.status}`;
+  const orderId = order.orderNumber || order.id.substring(0, 6).toUpperCase();
+  let message = `🔎 *Estado de tu Pedido #${orderId}*
+
+`;
+
+  const statusMap = {
+    pending: '⏳ Pendiente de confirmación',
+    confirmed: '✅ Confirmado',
+    preparing: '🧑‍🍳 En preparación',
+    ready: '🎉 ¡Listo para recoger!',
+    delivering: '🚚 En camino',
+    delivered: '🏠 Entregado',
+    cancelled: '❌ Cancelado'
+  };
+
+  message += `*Estado:* ${statusMap[order.status] || order.status}\n`;
+
+  // Estimaciones de tiempo
+  if (order.status === 'confirmed') {
+    message += `_El restaurante está por iniciar la preparación (tiempo estimado: 25-35 min)._`;
+  } else if (order.status === 'preparing') {
+    message += `_Tu comida se está cocinando (tiempo estimado: 15-25 min)._`;
+  } else if (order.status === 'ready' && order.deliveryType === 'delivery') {
+    message = message.replace('¡Listo para recoger!', '¡Listo para envío!');
+    message += `_Tu pedido saldrá a reparto pronto._`;
+  } else if (order.status === 'delivering') {
+    message += `_El repartidor llegará en breve._`;
   }
-  
-  message += `\n\n💰 *Total:* ${order.total}`;
+
+  const itemsSummary = order.items.map(item => `${item.quantity}x ${item.name}`).join(', ');
+  message += `
+*Contenido:* ${itemsSummary}`;
+  message += `
+💰 *Total:* $${order.total.toFixed(2)}`;
+
   return message;
 }
 
 module.exports = async (ctx) => {
   try {
     const userId = ctx.from.id;
-    
-    // Identificar el restaurante
-    const restaurantId = await telegramUserService.getRestaurantIdByBotContext(ctx);
-    if (!restaurantId) {
-      await ctx.reply('⚠️ No se pudo identificar el restaurante. Usa /start primero.');
+
+    const activeOrders = await orderService.getAllActiveOrdersByUser(userId);
+
+    if (!activeOrders || activeOrders.length === 0) {
+      await ctx.reply('🤔 No tienes ningún pedido activo en este momento.\n\n¡Puedes iniciar uno nuevo con el comando /pedido!');
       return;
     }
 
-    // Buscar pedido activo
-    const activeOrder = await orderService.getActiveOrderByUser(restaurantId, userId);
-
-    if (!activeOrder) {
-      await ctx.reply('🤔 No tienes ningún pedido activo en este momento.\n\n¡Puedes iniciar uno nuevo con /pedido!');
+    if (activeOrders.length === 1) {
+      const order = activeOrders[0];
+      const statusMessage = formatOrderStatus(order);
+      await ctx.reply(statusMessage, { parse_mode: 'Markdown' });
       return;
     }
 
-    // Mostrar estado del pedido
-    const statusMessage = formatOrderStatus(activeOrder);
-    await ctx.reply(statusMessage, { parse_mode: 'Markdown' });
+    // Multiple active orders
+    const buttons = activeOrders.map(order => {
+      const orderId = order.orderNumber || order.id.substring(0, 6).toUpperCase();
+      const itemsSummary = order.items.map(item => item.name).join(', ').substring(0, 30);
+      return [Markup.button.callback(
+        `Pedido #${orderId} (${itemsSummary}...)`,
+        `show_order_status_${order.restaurantId}_${order.id}`
+      )];
+    });
+
+    await ctx.reply('Tienes varios pedidos activos. ¿Cuál deseas consultar?', Markup.inlineKeyboard(buttons));
 
   } catch (error) {
     console.error('Error en myOrderHandler:', error);
     await ctx.reply('❌ Hubo un error al consultar tu pedido. Por favor intenta nuevamente.');
   }
 };
+
+// Export formatOrderStatus to be used in other handlers if needed
+module.exports.formatOrderStatus = formatOrderStatus;

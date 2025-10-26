@@ -1,4 +1,5 @@
-// backend/src/bot/middleware/interactionHandler.js - CORREGIDO
+// backend/src/bot/middleware/interactionHandler.js
+const { db } = require('../../config/firebase');
 const menuService = require('../../services/menuService');
 const orderService = require('../../services/orderService');
 const telegramUserService = require('../services/telegramUserService');
@@ -11,6 +12,18 @@ const {
   sendMenuWithPhotos,
   askPaymentMethod 
 } = require('../handlers/orderHandler');
+const { formatOrderStatus } = require('../handlers/myOrderHandler');
+
+const defaultCommands = [
+    { command: 'start', description: 'Iniciar conversación' },
+    { command: 'menu', description: 'Ver menú completo' },
+    { command: 'pedido', description: 'Hacer un pedido' },
+];
+
+const commandsWithMyOrder = [
+    ...defaultCommands,
+    { command: 'mipedido', description: 'Ver estado de mi pedido' },
+];
 
 module.exports = async (ctx) => {
   if (!ctx.callbackQuery) return;
@@ -21,7 +34,6 @@ module.exports = async (ctx) => {
   try {
     let session = userOrderSessions.get(userId);
     
-    // 🔑 CORRECCIÓN: Usar getRestaurantIdByBotContext en lugar de getRestaurantIdByChat
     const restaurantId = session?.restaurantId || await telegramUserService.getRestaurantIdByBotContext(ctx);
 
     if (!restaurantId) {
@@ -29,7 +41,6 @@ module.exports = async (ctx) => {
       return;
     }
 
-    // --- NUEVA VERIFICACIÓN: BOT HABILITADO ---
     const restaurantData = await configBotService.getRestaurantData(restaurantId);
     const messages = restaurantData.messages || {};
     const features = restaurantData.features || {};
@@ -37,12 +48,9 @@ module.exports = async (ctx) => {
     if (features.botEnabled === false) {
       const disabledMessage = messages.botDisabled || 'El bot está temporalmente desactivado.';
       await ctx.answerCbQuery(disabledMessage, { show_alert: true });
-      return; // Detener ejecución
+      return;
     }
-    // --- FIN DE LA VERIFICACIÓN ---
 
-
-    // === VERIFICAR DISPONIBILIDAD PARA ACCIONES DE PEDIDO ===
     const orderActions = ['add_item_', 'view_cart', 'confirm_items', 'delivery_', 'pickup', 'payment_', 'confirm_final'];
     const involvesOrder = orderActions.some(prefix => callbackData.startsWith(prefix));
     
@@ -54,18 +62,13 @@ module.exports = async (ctx) => {
       }
     }
 
-    // === MANEJO DE BOTONES GENERALES (sin pedido activo) ===
-    
-    // Botón "Hacer Pedido" desde /start
     if (callbackData === 'init_order') {
       await ctx.answerCbQuery('🛒 Iniciando pedido...');
-      // Llamar al handler de pedidos
       const orderHandler = require('../handlers/orderHandler');
       await orderHandler(ctx);
       return;
     }
 
-    // Botón "Ver Menú"
     if (callbackData === 'show_menu') {
       await ctx.answerCbQuery();
       const menuHandler = require('../handlers/menuHandler');
@@ -73,7 +76,6 @@ module.exports = async (ctx) => {
       return;
     }
 
-    // Botón "Información"
     if (callbackData === 'show_info') {
       await ctx.answerCbQuery();
       const restaurantData = await configBotService.getRestaurantData(restaurantId);
@@ -94,7 +96,6 @@ module.exports = async (ctx) => {
         infoMessage += `📞 *Teléfono:* ${info.phone}\n\n`;
       }
       
-      // Mostrar horarios
       const hours = restaurantData.hours || {};
       infoMessage += `⏰ *Horarios:*\n`;
       const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -121,7 +122,6 @@ module.exports = async (ctx) => {
       return;
     }
 
-    // Botón "Volver al inicio"
     if (callbackData === 'back_to_start') {
       await ctx.answerCbQuery();
       const startHandler = require('../handlers/startHandler');
@@ -129,79 +129,76 @@ module.exports = async (ctx) => {
       return;
     }
 
-    // === AGREGAR ITEM AL CARRITO ===
+    if (callbackData.startsWith('notify_')) {
+      await handleNotificationPreference(ctx, callbackData);
+      return;
+    }
+
+    if (callbackData.startsWith('show_order_status_')) {
+      await handleShowOrderStatus(ctx, callbackData);
+      return;
+    }
+
     if (callbackData.startsWith('add_item_')) {
       await handleAddItem(ctx, callbackData, userId, session, restaurantId);
       return;
     }
 
-    // === MOSTRAR INFO DEL ITEM ===
     if (callbackData.startsWith('item_info_')) {
       await handleItemInfo(ctx, callbackData, restaurantId);
       return;
     }
 
-    // === VER CARRITO ===
     if (callbackData === 'view_cart') {
       await handleViewCart(ctx, userId, session);
       return;
     }
 
-    // === MODIFICAR CANTIDAD ===
     if (callbackData.startsWith('qty_')) {
       await handleQuantityChange(ctx, callbackData, userId, session);
       return;
     }
 
-    // === REMOVER ITEM ===
     if (callbackData.startsWith('remove_')) {
       await handleRemoveItem(ctx, callbackData, userId, session);
       return;
     }
 
-    // === CONTINUAR A DELIVERY ===
     if (callbackData === 'continue_to_delivery') {
       await handleContinueToDelivery(ctx, userId, session, restaurantId);
       return;
     }
 
-    // === SELECCIONAR DELIVERY ===
     if (callbackData === 'delivery_yes') {
       await handleDeliveryYes(ctx, userId, session);
       return;
     }
 
-    // === SELECCIONAR PICKUP ===
     if (callbackData === 'pickup' || callbackData === 'change_to_pickup') {
       await handlePickup(ctx, userId, session, restaurantId);
       return;
     }
 
-    // === SELECCIONAR MÉTODO DE PAGO ===
     if (callbackData.startsWith('payment_')) {
       await handlePaymentSelection(ctx, callbackData, userId, session, restaurantId);
       return;
     }
 
-    // === CONFIRMACIÓN FINAL ===
     if (callbackData === 'confirm_final') {
       await handleFinalConfirmation(ctx, userId, session, restaurantId);
       return;
     }
 
-    // === CANCELAR PEDIDO ===
     if (callbackData === 'cancel_order') {
       await handleCancelOrder(ctx, userId);
       return;
     }
 
-    // === VOLVER AL MENÚ ===
     if (callbackData === 'back_to_menu') {
       await handleBackToMenu(ctx, userId, session, restaurantId);
       return;
     }
 
-    // Si llegamos aquí, el callback no fue manejado
     console.warn(`⚠️ Callback no manejado: ${callbackData}`);
     await ctx.answerCbQuery('⚠️ Acción no reconocida');
 
@@ -209,7 +206,6 @@ module.exports = async (ctx) => {
     console.error('Error en interactionHandler:', error);
     await ctx.answerCbQuery('❌ Hubo un error al procesar tu selección.');
     
-    // Intentar enviar mensaje de error
     try {
       await ctx.reply(
         '❌ Ocurrió un error inesperado.\n\n' +
@@ -232,7 +228,6 @@ async function handleAddItem(ctx, callbackData, userId, session, restaurantId) {
   const itemId = callbackData.split('_')[2];
   const menuData = await menuService.getMenuForBot(restaurantId);
   
-  // Validar que sea un array
   if (!Array.isArray(menuData)) {
     console.error('[handleAddItem] menuData no es array:', typeof menuData, menuData);
     await ctx.answerCbQuery('❌ Error al cargar el menú', { show_alert: true });
@@ -246,7 +241,6 @@ async function handleAddItem(ctx, callbackData, userId, session, restaurantId) {
     return;
   }
 
-  // Agregar o incrementar cantidad
   const existingItem = session.items.find(i => i.id === itemId);
   if (existingItem) {
     existingItem.quantity += 1;
@@ -257,7 +251,7 @@ async function handleAddItem(ctx, callbackData, userId, session, restaurantId) {
       name: item.name,
       price: item.price,
       quantity: 1,
-      type: item.type || 'item' // Guardar si es item o combo
+      type: item.type || 'item'
     });
     await ctx.answerCbQuery(`✅ ${item.name} agregado al carrito`);
   }
@@ -312,13 +306,12 @@ async function handleViewCart(ctx, userId, session) {
 
   const buttons = [];
   
-  // Botones para modificar cantidades
   session.items.forEach((item, index) => {
     buttons.push([
-      Markup.button.callback(`➖`, `qty_decrease_${index}`),
+      Markup.button.callback('➖', `qty_decrease_${index}`),
       Markup.button.callback(`${item.name} (${item.quantity})`, `item_detail_${index}`),
-      Markup.button.callback(`➕`, `qty_increase_${index}`),
-      Markup.button.callback(`🗑️`, `remove_${index}`)
+      Markup.button.callback('➕', `qty_increase_${index}`),
+      Markup.button.callback('🗑️', `remove_${index}`)
     ]);
   });
 
@@ -482,7 +475,6 @@ async function handlePickup(ctx, userId, session, restaurantId) {
 
   await ctx.answerCbQuery('✅ Recogerás tu pedido en tienda');
 
-  // Remover teclado de ubicación si existe
   await ctx.reply('🏪 Perfecto, recogerás tu pedido en tienda', {
     reply_markup: { remove_keyboard: true }
   });
@@ -587,8 +579,8 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
     const orderData = {
       info: {
         location: {
-          coordinates: session.customerLocation, // { latitude, longitude }
-          formatted_address: session.customerAddress // Manually entered address
+          coordinates: session.customerLocation,
+          formatted_address: session.customerAddress
         }
       },
       customer: {
@@ -603,15 +595,14 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
       deliveryType: session.deliveryType,
       paymentMethod: session.paymentMethod?.id,
       channel: 'telegram',
-      status: 'pending'
+      status: 'pending',
+      notificationsEnabled: true
     };
 
     const order = await orderService.createOrder(restaurantId, orderData);
 
-    // Limpiar sesión
     userOrderSessions.delete(userId);
 
-    // Mensaje de confirmación
     await ctx.reply(
       `✅ *¡Pedido Confirmado!*\n\n` +
       `📝 Número de pedido: *#${order.orderNumber || order.id.substring(0, 8).toUpperCase()}*\n` +
@@ -623,6 +614,14 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
         parse_mode: 'Markdown',
         reply_markup: { remove_keyboard: true }
       }
+    );
+
+    await ctx.reply(
+        '¿Deseas recibir una notificación por cada cambio de estado de tu pedido?',
+        Markup.inlineKeyboard([
+            [Markup.button.callback('👍 Sí, notificarme', `notify_yes_${restaurantId}_${order.id}`)],
+            [Markup.button.callback('👎 No, yo consultaré', `notify_no_${restaurantId}_${order.id}`)]
+        ])
     );
 
   } catch (error) {
@@ -652,7 +651,6 @@ async function handleCancelOrder(ctx, userId) {
       }
     );
   } catch (editError) {
-    // Si no se puede editar el mensaje, enviar uno nuevo
     await ctx.reply(
       '❌ Pedido cancelado\n\n¿Deseas iniciar un nuevo pedido?',
       {
@@ -682,4 +680,43 @@ async function handleBackToMenu(ctx, userId, session, restaurantId) {
   userOrderSessions.set(userId, session);
 
   await sendMenuWithPhotos(ctx, menuItems, features);
+}
+
+async function handleNotificationPreference(ctx, callbackData) {
+  const [, choice, restaurantId, orderId] = callbackData.split('_');
+  const userId = ctx.from.id;
+  
+  await ctx.answerCbQuery();
+
+  try {
+    if (choice === 'yes') {
+      await ctx.telegram.setMyCommands(defaultCommands, { scope: { type: 'chat', chat_id: userId } });
+      await ctx.editMessageText('✅ ¡Perfecto! Te mantendremos informado sobre tu pedido.', { reply_markup: null });
+    } else if (choice === 'no') {
+      const orderRef = db.collection('restaurants').doc(restaurantId).collection('orders').doc(orderId);
+      await orderRef.update({ notificationsEnabled: false });
+      
+      await ctx.telegram.setMyCommands(commandsWithMyOrder, { scope: { type: 'chat', chat_id: userId } });
+
+      await ctx.editMessageText('👍 Entendido. No te enviaremos notificaciones automáticas.', { reply_markup: null });
+      await ctx.reply('Puedes consultar el estado de tu pedido en cualquier momento con el comando /mipedido.');
+    }
+  } catch (error) {
+    console.error('Error updating notification preference:', error);
+    await ctx.reply('❌ Hubo un error al guardar tu preferencia.');
+  }
+}
+
+async function handleShowOrderStatus(ctx, callbackData) {
+    const [, , restaurantId, orderId] = callbackData.split('_');
+    await ctx.answerCbQuery();
+
+    try {
+        const order = await orderService.getOrder(restaurantId, orderId);
+        const statusMessage = formatOrderStatus(order);
+        await ctx.editMessageText(statusMessage, { parse_mode: 'Markdown', reply_markup: null });
+    } catch (error) {
+        console.error('Error showing order status:', error);
+        await ctx.reply('❌ Hubo un error al consultar el estado de tu pedido.');
+    }
 }

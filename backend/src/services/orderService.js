@@ -13,7 +13,6 @@ class OrderService {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     const ordersCollection = restaurantRef.collection('orders');
     
-    // Generar un número de pedido secuencial (podría mejorarse a futuro)
     const restaurantDoc = await restaurantRef.get();
     const currentCounter = restaurantDoc.data()?.orderCounter || 0;
     const newOrderNumber = currentCounter + 1;
@@ -34,7 +33,6 @@ class OrderService {
 
     const orderRef = await ordersCollection.add(newOrder);
     
-    // Actualizar el contador en el documento del restaurante
     await restaurantRef.update({ orderCounter: newOrderNumber });
 
     return { id: orderRef.id, ...newOrder };
@@ -84,11 +82,9 @@ class OrderService {
       throw error; // Re-throw to be caught by the route handler
     }
 
-    // Notifications remain outside the transaction, which is best practice.
     try {
       const updatedOrderData = await this.getOrder(restaurantId, orderId);
       
-      // Verify the update post-transaction to detect external interference
       if (updatedOrderData.status !== newStatus) {
            console.error(`CRITICAL: Status mismatch for ${orderId} after transaction. Expected ${newStatus}, got ${updatedOrderData.status}. Possible external interference (e.g., Cloud Function).`);
       }
@@ -97,7 +93,7 @@ class OrderService {
       sendSseEvent({ type: 'order_update', payload: updatedOrderData });
 
       const customerTelegramId = updatedOrderData.customer?.telegramId;
-      if (customerTelegramId) {
+      if (customerTelegramId && updatedOrderData.notificationsEnabled !== false) {
         await telegramNotificationService.notifyUserOfStatusChange(customerTelegramId, newStatus, updatedOrderData, restaurantId);
       }
     } catch (notifyError) {
@@ -138,6 +134,33 @@ class OrderService {
     
     const doc = snapshot.docs[0];
     return { id: doc.id, ...doc.data() };
+  }
+
+  /**
+   * Busca todos los pedidos activos de un usuario de Telegram en todos los restaurantes.
+   */
+  async getAllActiveOrdersByUser(telegramId) {
+    const activeStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'delivering'];
+    const restaurantsSnapshot = await db.collection('restaurants').get();
+    
+    const allActiveOrders = [];
+
+    for (const restaurantDoc of restaurantsSnapshot.docs) {
+      const restaurantId = restaurantDoc.id;
+      const ordersQuery = db.collection('restaurants').doc(restaurantId).collection('orders')
+        .where('customer.telegramId', '==', telegramId)
+        .where('status', 'in', activeStatuses);
+        
+      const ordersSnapshot = await ordersQuery.get();
+      
+      ordersSnapshot.forEach(doc => {
+        allActiveOrders.push({ id: doc.id, restaurantId: restaurantId, ...doc.data() });
+      });
+    }
+
+    allActiveOrders.sort((a, b) => b.createdAt.toDate() - a.createdAt.toDate());
+
+    return allActiveOrders;
   }
 }
 

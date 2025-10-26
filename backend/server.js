@@ -1,5 +1,3 @@
-
-
 require('dotenv').config();
 const cors = require('cors');
 const express = require('express');
@@ -56,8 +54,8 @@ app.use('/api/events', eventsRoutes); // Use SSE router
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     timestamp: new Date(),
     botConnected: bot.botInfo ? true : false
   });
