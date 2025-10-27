@@ -38,8 +38,6 @@ export function BotProvider({ children, showAlert }) {
   useEffect(() => {
     if (user) {
       fetchStatus();
-      const interval = setInterval(fetchStatus, 30000);
-      return () => clearInterval(interval);
     }
   }, [user]);
 

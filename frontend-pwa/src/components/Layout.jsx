@@ -7,13 +7,197 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Menu, ShoppingCart, MessageSquare, 
   Settings, LogOut, X, Store, ChevronRight, Bot,
-  Settings2, ScreenShare, Power, PowerOff, Minimize
+  Settings2, ScreenShare, Power, Minimize
 } from 'lucide-react';
 import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
 import Loader from '../components/ui/Loader';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useBot } from '../context/BotContext';
 import CustomTooltip from './ui/CustomTooltip';
+
+// --- Sub-components moved out of Layout ---
+
+const StoreSwitch = ({ handleToggleStore }) => {
+  const { data: restaurant } = useRestaurant();
+  const isOpen = restaurant?.availability?.status === 'open';
+  const availabilityMode = restaurant?.availabilitySettings?.mode || 'hybrid';
+  const isDisabled = availabilityMode === 'fixed' || availabilityMode === 'always_open';
+  let tooltipContent = '';
+  if (availabilityMode === 'fixed') tooltipContent = 'En modo "Horarios Fijos", la tienda abre y cierra automáticamente.';
+  if (availabilityMode === 'always_open') tooltipContent = 'Tu tienda está en modo "Siempre Abierto" 24/7.';
+
+  const switchComponent = (
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium">Tienda</span>
+      <label className="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" checked={isOpen} onChange={handleToggleStore} className="sr-only peer" disabled={isDisabled} />
+        <div className={`w-11 h-6 rounded-full peer peer-focus:ring-4 peer-focus:ring-orange-300 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${isDisabled ? (isOpen ? 'bg-green-400' : 'bg-gray-300') : (isOpen ? 'bg-orange-500' : 'bg-gray-200')} ${!isDisabled && isOpen ? 'peer-checked:after:translate-x-full' : ''}`}></div>
+      </label>
+    </div>
+  );
+
+  return isDisabled ? <CustomTooltip content={tooltipContent}>{switchComponent}</CustomTooltip> : switchComponent;
+};
+
+const BotSwitch = ({ handleToggleBot }) => {
+  const { status: botStatus, loading: botLoading } = useBot();
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium">Bot</span>
+      <label className="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" checked={botStatus?.enabled || false} onChange={handleToggleBot} disabled={botLoading} className="sr-only peer" />
+        <div className={`w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-green-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${botStatus?.enabled ? 'bg-green-600' : 'bg-gray-200'}`}></div>
+      </label>
+    </div>
+  );
+};
+
+const OrdersViewHeader = ({ isFullscreen, toggleFullscreen, handleToggleStore, handleLogout, handleToggleBot }) => {
+    const { status: botStatus } = useBot();
+    const { data: restaurant } = useRestaurant();
+    const isOpen = restaurant?.availability?.status === 'open';
+
+    return (
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg shadow-md">
+        <div className="flex items-center justify-between p-3 sm:p-4">
+            <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
+                <ShoppingCart size={22} className="text-white" />
+            </div>
+            <div>
+                <h1 className="font-bold text-gray-800 text-sm sm:text-base">Centro de Pedidos</h1>
+                <p className="text-xs text-green-500 font-semibold">Tienda Abierta</p>
+            </div>
+            </div>
+            <div className="flex items-center gap-3 sm:gap-4">
+            <CustomTooltip content={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}>
+                <button onClick={toggleFullscreen} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                {isFullscreen ? <Minimize size={20} /> : <ScreenShare size={20} />}
+                </button>
+            </CustomTooltip>
+            <div className="hidden sm:flex items-center gap-4 bg-gray-100 p-1.5 rounded-full">
+                <div className="flex items-center gap-1.5 px-2">
+                    <Bot size={20} className={botStatus?.enabled ? 'text-green-600' : 'text-gray-400'} />
+                    <BotSwitch handleToggleBot={handleToggleBot} />
+                </div>
+                <div className="w-px h-6 bg-gray-300"></div>
+                <div className="flex items-center gap-1.5 px-2">
+                    <Store size={20} className={isOpen ? 'text-orange-500' : 'text-gray-400'} />
+                    <StoreSwitch handleToggleStore={handleToggleStore} />
+                </div>
+            </div>
+            <CustomTooltip content="Cerrar Tienda">
+                <button onClick={handleToggleStore} className="p-2 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors">
+                <Power size={20} />
+                </button>
+            </CustomTooltip>
+            <CustomTooltip content="Cerrar Sesión">
+                <button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                    <LogOut size={20} className="text-gray-600"/>
+                </button>
+            </CustomTooltip>
+            </div>
+        </div>
+        </header>
+    );
+};
+
+const DefaultLayout = ({ children, sidebarOpen, setSidebarOpen, handleLogout, handleToggleStore, handleToggleBot }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { data: restaurant } = useRestaurant();
+  const { status: botStatus } = useBot();
+  const [user] = useAuthState(auth);
+  const isOpen = restaurant?.availability?.status === 'open';
+
+  const menuItems = [
+    { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/menu', label: 'Menú', icon: Menu },
+    { path: '/orders', label: 'Pedidos', icon: ShoppingCart },
+    { type: 'divider', label: 'Configuración' },
+    { path: '/config/messages', label: 'Mensajes Bot', icon: MessageSquare },
+    { path: '/config/general', label: 'Configuración General', icon: Settings2 },
+  ];
+
+  const isActive = (path) => location.pathname === path;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-red-100 flex flex-col lg:flex-row">
+        {/* Mobile Header */}
+        <div className="lg:hidden sticky top-0 z-30 bg-white shadow-lg">
+            <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center">
+                        <span className="text-xl">🍽️</span>
+                    </div>
+                    <div>
+                        <h1 className="font-bold text-gray-800 text-sm">{restaurant?.info?.name || 'RestBot'}</h1>
+                        <p className="text-xs text-gray-500">Admin Panel</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
+                    <StoreSwitch handleToggleStore={handleToggleStore} />
+                    <BotSwitch handleToggleBot={handleToggleBot} />
+                    <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
+                        {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {/* Sidebar */}
+        <AnimatePresence>
+            {(sidebarOpen || window.innerWidth >= 1024) && (
+            <>
+                {sidebarOpen && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-40 lg:hidden" />}
+                <motion.div key="sidebar" initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ type: 'spring', damping: 25 }} className="fixed lg:sticky top-0 left-0 h-screen w-72 bg-white shadow-2xl z-50 flex flex-col">
+                    <div className="p-6 border-b border-gray-100">
+                        <button onClick={() => navigate('/')} className="flex items-center gap-3 mb-2 w-full text-left hover:opacity-80 transition-opacity">
+                            <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl flex items-center justify-center shadow-lg"><span className="text-2xl">🍽️</span></div>
+                            <div className="flex-1 min-w-0">
+                                <h2 className="font-bold text-gray-800 truncate">{restaurant?.info?.name || 'RestBot Admin'}</h2>
+                                <p className="text-xs text-gray-500">Panel de Control</p>
+                            </div>
+                        </button>
+                        {user && <div className="mt-3 p-3 bg-orange-50 rounded-xl"><p className="text-xs text-gray-600 mb-1">Usuario activo</p><p className="text-sm font-semibold text-gray-800 truncate">{user.displayName || user.email}</p></div>}
+                        <div className="mt-4 space-y-2">
+                            <div className="flex items-center gap-3 p-3 bg-gray-100 rounded-xl"><Store size={20} className={isOpen ? 'text-orange-500' : 'text-gray-400'} /><StoreSwitch handleToggleStore={handleToggleStore} /></div>
+                            <div className="flex items-center gap-3 p-3 bg-gray-100 rounded-xl"><Bot size={20} className={botStatus?.enabled ? 'text-green-600' : 'text-gray-400'} /><BotSwitch handleToggleBot={handleToggleBot} /></div>
+                        </div>
+                    </div>
+                    <nav className="flex-1 p-4 overflow-y-auto">
+                        <div className="space-y-1">
+                            {menuItems.map((item, index) => {
+                                if (item.type === 'divider') return <div key={`divider-${index}`} className="pt-4 pb-2"><p className="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{item.label}</p></div>;
+                                const Icon = item.icon;
+                                const active = isActive(item.path);
+                                return (
+                                    <motion.button key={item.path} onClick={() => { navigate(item.path); setSidebarOpen(false); }} whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${active ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg' : 'text-gray-700 hover:bg-gray-100'}`}>
+                                        <Icon size={20} />
+                                        <span className="flex-1 text-left">{item.label}</span>
+                                        {active && <ChevronRight size={16} />}
+                                    </motion.button>
+                                );
+                            })}
+                        </div>
+                    </nav>
+                    <div className="p-4 border-t border-gray-100">
+                        <motion.button onClick={handleLogout} whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 font-medium transition-all duration-200">
+                            <LogOut size={20} />
+                            <span>Cerrar Sesión</span>
+                        </motion.button>
+                    </div>
+                </motion.div>
+            </>
+            )}
+        </AnimatePresence>
+        <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+            {children}
+        </div>
+    </div>
+  );
+};
+
 
 export default function Layout() {
   const [user, loadingAuth] = useAuthState(auth);
@@ -32,12 +216,9 @@ export default function Layout() {
   });
 
   const { data: restaurant, loading: loadingRestaurant, updateAvailability } = useRestaurant();
-  const { status: botStatus, startBot, stopBot, loading: botLoading } = useBot();
+  const { status: botStatus, startBot, stopBot } = useBot();
 
-  const availabilityMode = restaurant?.availabilitySettings?.mode || 'hybrid';
-  const availabilityStatus = restaurant?.availability?.status;
-  const hours = restaurant?.hours;
-  const isOpen = availabilityStatus === 'open';
+  const isOpen = restaurant?.availability?.status === 'open';
 
   // Redirect to orders page if store is open on login
   useEffect(() => {
@@ -102,10 +283,10 @@ export default function Layout() {
   }, [navigate, showAlert]);
 
   const isWithinSchedule = () => {
-    if (!hours) return false;
+    if (!restaurant?.hours) return false;
     const now = new Date();
     const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][now.getDay()];
-    const schedule = hours[dayKey];
+    const schedule = restaurant.hours[dayKey];
     if (!schedule || schedule.closed) return false;
     const currentTime = now.toTimeString().substring(0, 5);
     return currentTime >= schedule.open && currentTime < schedule.close;
@@ -142,7 +323,7 @@ export default function Layout() {
         }
       };
 
-      if (availabilityMode === 'hybrid' && !isWithinSchedule()) {
+      if (restaurant?.availabilitySettings?.mode === 'hybrid' && !isWithinSchedule()) {
         modalConfig.title = 'Abrir Fuera de Horario';
         modalConfig.message = 'Estás fuera del horario de atención programado. ¿Realmente deseas abrir la tienda ahora?';
       }
@@ -183,168 +364,6 @@ export default function Layout() {
   }
   if (!user) return null;
 
-  const menuItems = [
-    { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/menu', label: 'Menú', icon: Menu },
-    { path: '/orders', label: 'Pedidos', icon: ShoppingCart },
-    { type: 'divider', label: 'Configuración' },
-    { path: '/config/messages', label: 'Mensajes Bot', icon: MessageSquare },
-    { path: '/config/general', label: 'Configuración General', icon: Settings2 },
-  ];
-
-  const isActive = (path) => location.pathname === path;
-
-  const StoreSwitch = () => {
-    const isDisabled = availabilityMode === 'fixed' || availabilityMode === 'always_open';
-    let tooltipContent = '';
-    if (availabilityMode === 'fixed') tooltipContent = 'En modo "Horarios Fijos", la tienda abre y cierra automáticamente.';
-    if (availabilityMode === 'always_open') tooltipContent = 'Tu tienda está en modo "Siempre Abierto" 24/7.';
-
-    const switchComponent = (
-        <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Tienda</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" checked={isOpen} onChange={handleToggleStore} className="sr-only peer" disabled={isDisabled} />
-                <div className={`w-11 h-6 rounded-full peer peer-focus:ring-4 peer-focus:ring-orange-300 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${isDisabled ? (isOpen ? 'bg-green-400' : 'bg-gray-300') : (isOpen ? 'bg-orange-500' : 'bg-gray-200')} ${!isDisabled && isOpen ? 'peer-checked:after:translate-x-full' : ''}`}></div>
-            </label>
-        </div>
-    );
-
-    return isDisabled ? <CustomTooltip content={tooltipContent}>{switchComponent}</CustomTooltip> : switchComponent;
-  };
-
-  const BotSwitch = () => (
-    <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Bot</span>
-        <label className="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" checked={botStatus?.enabled || false} onChange={handleToggleBot} disabled={botLoading} className="sr-only peer" />
-            <div className={`w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-green-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${botStatus?.enabled ? 'bg-green-600' : 'bg-gray-200'}`}></div>
-        </label>
-    </div>
-  );
-
-  // HEADER FOR ORDERS VIEW (STORE OPEN)
-  const OrdersViewHeader = () => (
-    <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg shadow-md">
-      <div className="flex items-center justify-between p-3 sm:p-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
-            <ShoppingCart size={22} className="text-white" />
-          </div>
-          <div>
-            <h1 className="font-bold text-gray-800 text-sm sm:text-base">Centro de Pedidos</h1>
-            <p className="text-xs text-green-500 font-semibold">Tienda Abierta</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 sm:gap-4">
-          <CustomTooltip content={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}>
-            <button onClick={toggleFullscreen} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
-              {isFullscreen ? <Minimize size={20} /> : <ScreenShare size={20} />}
-            </button>
-          </CustomTooltip>
-          <div className="hidden sm:flex items-center gap-4 bg-gray-100 p-1.5 rounded-full">
-            <div className="flex items-center gap-1.5 px-2">
-                <Bot size={20} className={botStatus?.enabled ? 'text-green-600' : 'text-gray-400'} />
-<BotSwitch />
-            </div>
-            <div className="w-px h-6 bg-gray-300"></div>
-            <div className="flex items-center gap-1.5 px-2">
-                <Store size={20} className={isOpen ? 'text-orange-500' : 'text-gray-400'} />
-                <StoreSwitch />
-            </div>
-          </div>
-          <CustomTooltip content="Cerrar Tienda">
-            <button onClick={handleToggleStore} className="p-2 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors">
-              <Power size={20} />
-            </button>
-          </CustomTooltip>
-          <CustomTooltip content="Cerrar Sesión">
-             <button onClick={handleLogout} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
-                <LogOut size={20} className="text-gray-600"/>
-            </button>
-          </CustomTooltip>
-        </div>
-      </div>
-    </header>
-  );
-
-  // DEFAULT LAYOUT (STORE CLOSED)
-  const DefaultLayout = ({ children }) => (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-red-100 flex flex-col lg:flex-row">
-        {/* Mobile Header */}
-        <div className="lg:hidden sticky top-0 z-30 bg-white shadow-lg">
-            <div className="flex items-center justify-between p-4">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center">
-                        <span className="text-xl">🍽️</span>
-                    </div>
-                    <div>
-                        <h1 className="font-bold text-gray-800 text-sm">{restaurant?.info?.name || 'RestBot'}</h1>
-                        <p className="text-xs text-gray-500">Admin Panel</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3">
-                    <StoreSwitch />
-                    <BotSwitch />
-                    <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
-                        {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        {/* Sidebar */}
-        <AnimatePresence>
-            {(sidebarOpen || window.innerWidth >= 1024) && (
-            <>
-                {sidebarOpen && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-black/50 z-40 lg:hidden" />}
-                <motion.div initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ type: 'spring', damping: 25 }} className="fixed lg:sticky top-0 left-0 h-screen w-72 bg-white shadow-2xl z-50 flex flex-col">
-                    <div className="p-6 border-b border-gray-100">
-                        <button onClick={() => navigate('/')} className="flex items-center gap-3 mb-2 w-full text-left hover:opacity-80 transition-opacity">
-                            <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl flex items-center justify-center shadow-lg"><span className="text-2xl">🍽️</span></div>
-                            <div className="flex-1 min-w-0">
-                                <h2 className="font-bold text-gray-800 truncate">{restaurant?.info?.name || 'RestBot Admin'}</h2>
-                                <p className="text-xs text-gray-500">Panel de Control</p>
-                            </div>
-                        </button>
-                        {user && <div className="mt-3 p-3 bg-orange-50 rounded-xl"><p className="text-xs text-gray-600 mb-1">Usuario activo</p><p className="text-sm font-semibold text-gray-800 truncate">{user.displayName || user.email}</p></div>}
-                        <div className="mt-4 space-y-2">
-                            <div className="flex items-center gap-3 p-3 bg-gray-100 rounded-xl"><Store size={20} className={isOpen ? 'text-orange-500' : 'text-gray-400'} /><StoreSwitch /></div>
-                            <div className="flex items-center gap-3 p-3 bg-gray-100 rounded-xl"><Bot size={20} className={botStatus?.enabled ? 'text-green-600' : 'text-gray-400'} /><BotSwitch /></div>
-                        </div>
-                    </div>
-                    <nav className="flex-1 p-4 overflow-y-auto">
-                        <div className="space-y-1">
-                            {menuItems.map((item, index) => {
-                                if (item.type === 'divider') return <div key={`divider-${index}`} className="pt-4 pb-2"><p className="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">{item.label}</p></div>;
-                                const Icon = item.icon;
-                                const active = isActive(item.path);
-                                return (
-                                    <motion.button key={item.path} onClick={() => { navigate(item.path); setSidebarOpen(false); }} whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${active ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg' : 'text-gray-700 hover:bg-gray-100'}`}>
-                                        <Icon size={20} />
-                                        <span className="flex-1 text-left">{item.label}</span>
-                                        {active && <ChevronRight size={16} />}
-                                    </motion.button>
-                                );
-                            })}
-                        </div>
-                    </nav>
-                    <div className="p-4 border-t border-gray-100">
-                        <motion.button onClick={handleLogout} whileHover={{ x: 4 }} whileTap={{ scale: 0.98 }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 font-medium transition-all duration-200">
-                            <LogOut size={20} />
-                            <span>Cerrar Sesión</span>
-                        </motion.button>
-                    </div>
-                </motion.div>
-            </>
-            )}
-        </AnimatePresence>
-        <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-            {children}
-        </div>
-    </div>
-  );
-
   return (
     <>
       <AlertContainer alerts={alerts} onClose={hideAlert} />
@@ -363,13 +382,25 @@ export default function Layout() {
 
       {isOpen && location.pathname === '/orders' ? (
         <div ref={ordersViewRef} className="flex flex-col h-screen bg-gray-50">
-          <OrdersViewHeader />
+          <OrdersViewHeader 
+            isFullscreen={isFullscreen}
+            toggleFullscreen={toggleFullscreen}
+            handleToggleStore={handleToggleStore}
+            handleLogout={handleLogout}
+            handleToggleBot={handleToggleBot}
+          />
           <main className="flex-1 overflow-y-auto">
             <Outlet />
           </main>
         </div>
       ) : (
-        <DefaultLayout>
+        <DefaultLayout 
+          sidebarOpen={sidebarOpen} 
+          setSidebarOpen={setSidebarOpen}
+          handleLogout={handleLogout}
+          handleToggleStore={handleToggleStore}
+          handleToggleBot={handleToggleBot}
+        >
             <main className="flex-1 p-4 sm:p-6 lg:p-8">
                 <motion.div key={location.pathname} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
                     <Outlet />
