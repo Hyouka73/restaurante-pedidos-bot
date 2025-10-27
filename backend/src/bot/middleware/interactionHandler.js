@@ -14,6 +14,9 @@ const {
 } = require('../handlers/orderHandler');
 const { formatOrderStatus } = require('../handlers/myOrderHandler');
 const { showMenuView } = require('../handlers/menuHandler');
+const { handleRecommendation } = require('../handlers/recommendationHandler');
+const { handleComboBuilder } = require('../handlers/comboBuilderHandler');
+const DiscountRuleService = require('../../services/discountRuleService');
 
 const defaultCommands = [
     { command: 'start', description: 'Iniciar conversación' },
@@ -61,6 +64,16 @@ module.exports = async (ctx) => {
         await ctx.answerCbQuery('😔 Lo sentimos, ya no podemos aceptar pedidos. ' + (availability.reason || ''), { show_alert: true });
         return;
       }
+    }
+
+    if (callbackData.startsWith('start_recommendation') || callbackData.startsWith('rec_add')) {
+      await handleRecommendation(ctx);
+      return;
+    }
+
+    if (callbackData.startsWith('build_combo') || callbackData.startsWith('combo_select')) {
+        await handleComboBuilder(ctx);
+        return;
     }
 
     if (callbackData === 'init_order') {
@@ -264,7 +277,34 @@ async function handleAddItem(ctx, callbackData, userId, session, restaurantId) {
     await ctx.answerCbQuery(`✅ ${item.name} agregado al carrito`);
   }
 
-  userOrderSessions.set(userId, session);
+  // --- LÓGICA DE COMBOS DINÁMICOS ---
+  const { cart: updatedCart, notification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
+  
+  // Actualizar la sesión con el carrito que puede tener descuentos
+  userOrderSessions.set(userId, updatedCart);
+
+  // Si se activó un combo, notificar al usuario
+  if (notification) {
+    await ctx.reply(`*${notification.title}*\n${notification.text}`, { parse_mode: 'Markdown' });
+  }
+
+  // --- LÓGICA DE VENTA CRUZADA (CROSS-SELL) ---
+  if (item.sugerir_items && item.sugerir_items.length > 0) {
+    const apiClient = require('../../services/apiClient');
+    try {
+      const crossSellResponse = await apiClient.post('/chatbot/get-cross-sell', {
+        restaurantId: restaurantId,
+        item_agregado_id: itemId
+      });
+      const suggestions = crossSellResponse.data.sugerencias;
+      if (suggestions && suggestions.length > 0) {
+        const suggestionNames = suggestions.map(s => s.nombre).join(', ');
+        await ctx.reply(`💡 Ya que llevas *${item.name}*, quizás te interese también: ${suggestionNames}.`, { parse_mode: 'Markdown' });
+      }
+    } catch (crossSellError) {
+      console.error('Error al obtener sugerencias de cross-sell:', crossSellError);
+    }
+  }
 }
 
 async function handleItemInfo(ctx, callbackData, restaurantId) {

@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Menu, ShoppingCart, MessageSquare, 
   Settings, LogOut, X, Store, ChevronRight, Bot,
-  Settings2, ScreenShare, Power, Minimize
+  Settings2, ScreenShare, Power, Minimize, BadgePercent
 } from 'lucide-react';
 import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
 import Loader from '../components/ui/Loader';
@@ -80,6 +80,7 @@ const DefaultLayout = ({ children, sidebarOpen, setSidebarOpen, handleLogout, ha
   const menuItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
     { path: '/menu', label: 'Menú', icon: Menu },
+    { path: '/discount-rules', label: 'Reglas de Descuento', icon: BadgePercent },
     { path: '/orders', label: 'Pedidos', icon: ShoppingCart },
     { type: 'divider', label: 'Configuración' },
     { path: '/config/messages', label: 'Mensajes Bot', icon: MessageSquare },

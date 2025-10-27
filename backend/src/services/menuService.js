@@ -25,7 +25,9 @@ class MenuService {
       // Accedemos al documento específico dentro de la subcolección 'items'
       const doc = await db.collection('restaurants').doc(restaurantId).collection('menu').doc('items').collection('items').doc(itemId).get();
       if (!doc.exists) {
-        throw new Error('Item no encontrado');
+        // Return null instead of throwing an error so Promise.all doesn't fail
+        console.warn(`Item con ID ${itemId} no encontrado para herencia de tags.`);
+        return null;
       }
       return { id: doc.id, ...doc.data() };
     } catch (error) {
@@ -112,12 +114,76 @@ class MenuService {
     }
   }
 
+  // Helper function for tag inheritance (CORRECTED)
+  async _getInheritedTags(restaurantId, comboData) {
+    if (!comboData.componentes || !Array.isArray(comboData.componentes)) {
+      return {}; // Return empty object
+    }
+
+    const itemIds = new Set();
+    comboData.componentes.forEach(componente => {
+      if (componente.items_opciones && Array.isArray(componente.items_opciones)) {
+        componente.items_opciones.forEach(item => {
+          if (typeof item === 'object' && item.id) {
+            itemIds.add(item.id);
+          } else if (typeof item === 'string') {
+            itemIds.add(item);
+          }
+        });
+      }
+    });
+
+    if (itemIds.size === 0) {
+      return {}; // Return empty object
+    }
+
+    // Initialize a structure to hold sets of tags for each category
+    const inheritedTags = {
+        categoria_general: new Set(),
+        tipo_plato: new Set(),
+        proteina: new Set(),
+        perfil_sabor: new Set(),
+    };
+    
+    const itemPromises = Array.from(itemIds).map(itemId => this.getMenuItem(restaurantId, itemId));
+    
+    try {
+      const items = await Promise.all(itemPromises);
+      items.forEach(item => {
+        if (item && item.tags && typeof item.tags === 'object') {
+          // For each potential tag category, add the item's tag to the corresponding set
+          for (const key in inheritedTags) {
+            if (item.tags[key]) {
+              inheritedTags[key].add(item.tags[key]);
+            }
+          }
+        }
+      });
+    } catch (error) {
+        console.error('Error fetching items for tag inheritance:', error);
+    }
+
+    // Convert sets to arrays for the final JSON object
+    const result = {};
+    for (const key in inheritedTags) {
+        if(inheritedTags[key].size > 0) {
+            result[key] = Array.from(inheritedTags[key]);
+        }
+    }
+
+    return result;
+  }
+
   async createMenuCombo(restaurantId, comboData) {
     try {
+      // Get inherited tags
+      const inheritedTags = await this._getInheritedTags(restaurantId, comboData);
+
       // Creamos un nuevo documento en la subcolección 'combos'
       const comboRef = db.collection('restaurants').doc(restaurantId).collection('menu').doc('combos').collection('combos').doc();
       const dataToSave = {
         ...comboData,
+        tags_heredados: inheritedTags, // Add inherited tags (now an object)
         createdAt: new Date(),
         updatedAt: new Date()
       };
@@ -137,8 +203,13 @@ class MenuService {
       if (!doc.exists) {
         throw new Error('Combo no encontrado');
       }
+
+      // Get inherited tags
+      const inheritedTags = await this._getInheritedTags(restaurantId, comboData);
+
       const dataToUpdate = {
         ...comboData,
+        tags_heredados: inheritedTags, // Add inherited tags (now an object)
         updatedAt: new Date()
       };
       await comboRef.update(dataToUpdate);

@@ -33,9 +33,11 @@ const menuRoutes = require('./src/api/routes/menu');
 const ordersRoutes = require('./src/api/routes/orders');
 const uploadRoutes = require('./src/api/routes/upload');
 const botApiRoutes = require('./src/api/routes/bot');
+const chatbotApiRoutes = require('./src/api/routes/chatbot');
 const userRoutes = require('./src/api/routes/user');
 const dashboardRoutes = require('./src/api/routes/dashboard');
 const { router: eventsRoutes } = require('./src/api/routes/events'); // Import SSE router
+const discountRulesRoutes = require('./src/api/routes/discountRules');
 
 app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
@@ -43,8 +45,10 @@ app.use('/api/menu', menuRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/bot', botApiRoutes);
+app.use('/api/chatbot', chatbotApiRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/discount-rules', discountRulesRoutes);
 app.use('/api/events', eventsRoutes); // Use SSE router
 
 // Health check
@@ -65,9 +69,14 @@ app.get('/', (req, res) => {
   });
 });
 
-// ============================================
+// ============================================ 
 // CONFIGURACIÓN DEL BOT DE TELEGRAM
-// ============================================
+// ============================================ 
+
+const LocalSession = require('telegraf-session-local');
+
+// Middleware de sesión. Guarda la sesión en un archivo local.
+bot.use((new LocalSession({ database: 'sessions.json' })).middleware());
 
 // Importar handlers
 const startHandler = require('./src/bot/handlers/startHandler');
@@ -117,9 +126,9 @@ bot.catch((err, ctx) => {
   }
 });
 
-// ============================================
+// ============================================ 
 // INICIAR SERVIDOR Y BOT
-// ============================================
+// ============================================ 
 
 let botLaunched = false;
 

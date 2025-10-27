@@ -1,129 +1,115 @@
 // frontend-pwa/src/components/menu/MenuComboForm.jsx
-import { WizardInputField, WizardTextAreaField, WizardCheckboxField } from '../ui/WizardComponents';
+import React, { useState } from 'react';
+import { WizardInputField, WizardTextAreaField, WizardSelectField } from '../ui/WizardComponents';
 import { ButtonLoader } from '../ui/Loader';
-import { X, Plus } from 'lucide-react';
-import ItemImageUpload from './ItemImageUpload'; // Reutilizar el componente
+import { X, Plus, Trash2 } from 'lucide-react';
+import ItemImageUpload from './ItemImageUpload';
+import Select from 'react-select';
 
-const MenuComboForm = ({ combo, availableItems, onSave, onCancel, onChange, onAddItem, onRemoveItem, saving }) => {
+const MenuComboForm = ({ combo, menuItems, onSave, onCancel, onChange, saving }) => {
   const isEditing = !!combo.id;
 
-  const handleImageUrlChange = (url) => {
-    onChange('imageUrl', url);
+  const handleComponentChange = (index, field, value) => {
+    const newComponents = [...(combo.componentes || [])];
+    newComponents[index] = { ...newComponents[index], [field]: value };
+    onChange('componentes', newComponents);
   };
 
+  const addComponent = () => {
+    const newComponents = [...(combo.componentes || []), { title: '', items_opciones: [] }];
+    onChange('componentes', newComponents);
+  };
+
+  const removeComponent = (index) => {
+    const newComponents = [...(combo.componentes || [])];
+    newComponents.splice(index, 1);
+    onChange('componentes', newComponents);
+  };
+
+  const itemOptions = menuItems.map(item => ({ value: item.id, label: `(${item.id}) ${item.name}` }));
+
   return (
-    <div className="bg-white rounded-xl p-4 shadow-md">
-      <div className="flex justify-between items-center mb-4">
+    <div className="bg-white rounded-xl p-4 shadow-md max-h-[90vh] overflow-y-auto">
+      <div className="flex justify-between items-center mb-4 sticky top-0 bg-white py-2 z-10">
         <h3 className="text-lg font-semibold">{isEditing ? 'Editar Combo' : 'Agregar Nuevo Combo'}</h3>
         <button onClick={onCancel} className="text-gray-500 hover:text-gray-700">
           <X size={20} />
         </button>
       </div>
       <form onSubmit={(e) => { e.preventDefault(); onSave(); }}>
+        {/* --- Información Básica --- */}
         <WizardInputField
-          label="Nombre"
-          value={combo.name}
+          label="Nombre del Combo"
+          value={combo.name || ''}
           onChange={(e) => onChange('name', e.target.value)}
           required
         />
         <WizardTextAreaField
           label="Descripción"
-          value={combo.description}
+          value={combo.description || ''}
           onChange={(e) => onChange('description', e.target.value)}
-          rows={3}
+          rows={2}
         />
-        
-        {/* Upload de imagen para combo */}
+        <WizardInputField
+          label="Precio Fijo ($)"
+          type="number"
+          step="0.01"
+          value={combo.price || ''}
+          onChange={(e) => onChange('price', e.target.value)}
+          required
+        />
         <ItemImageUpload
           imageUrl={combo.imageUrl}
-          onImageChange={handleImageUrlChange}
+          onImageChange={(url) => onChange('imageUrl', url)}
         />
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-          <WizardCheckboxField
-            label="Calcular precio sumando items individuales"
-            checked={combo.useItemPrices}
-            onChange={(e) => onChange('useItemPrices', e.target.checked)}
-          />
-          {!combo.useItemPrices && (
-            <WizardInputField
-              label="Precio Fijo del Combo ($)"
-              type="number"
-              step="0.01"
-              value={combo.price}
-              onChange={(e) => onChange('price', e.target.value)}
-              required={!combo.useItemPrices}
-            />
-          )}
-          {combo.useItemPrices && (
-            <div className="flex items-end">
+
+        {/* --- Componentes del Combo --- */}
+        <div className="mt-6 p-4 border border-gray-200 rounded-lg">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="text-md font-semibold text-gray-600">Componentes del Combo (Slots)</h4>
+            <button type="button" onClick={addComponent} className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800">
+              <Plus size={16} /> Añadir Componente
+            </button>
+          </div>
+
+          {(combo.componentes || []).map((component, index) => (
+            <div key={index} className="p-3 border rounded-md mb-3 bg-gray-50">
+              <div className="flex justify-between items-center mb-2">
+                <h5 className="font-semibold text-sm">Componente #{index + 1}</h5>
+                <button type="button" onClick={() => removeComponent(index)} className="text-red-500 hover:text-red-700">
+                  <Trash2 size={16} />
+                </button>
+              </div>
               <WizardInputField
-                label="Precio Calculado"
-                type="text"
-                value={availableItems.filter(item => combo.items.includes(item.id)).reduce((sum, item) => sum + item.price, 0).toFixed(2)}
-                disabled
+                label="Título del Componente (ej: Elige tu bebida)"
+                value={component.title || ''}
+                onChange={(e) => handleComponentChange(index, 'title', e.target.value)}
               />
+              <div className="mt-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Opciones de Items</label>
+                <Select
+                  isMulti
+                  options={itemOptions}
+                  value={itemOptions.filter(opt => (component.items_opciones || []).some(item => item.id === opt.value))}
+                  onChange={(selectedOptions) => {
+                    const selectedItems = selectedOptions.map(opt => ({ id: opt.value, name: opt.label.split(') ')[1] }));
+                    handleComponentChange(index, 'items_opciones', selectedItems);
+                  }}
+                  placeholder="Selecciona items del menú..."
+                  classNamePrefix="react-select"
+                />
+              </div>
             </div>
-          )}
-          <WizardInputField
-            label="Orden"
-            type="number"
-            value={combo.order}
-            onChange={(e) => onChange('order', e.target.value)}
-          />
-        </div>
-        
-        <WizardCheckboxField
-          label="Disponible"
-          checked={combo.available}
-          onChange={(e) => onChange('available', e.target.checked)}
-        />
-
-        {/* Selección de Items para el Combo */}
-        <div className="mt-4">
-          <h4 className="font-medium mb-2">Agregar Items al Combo:</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-2 border rounded-lg">
-            {availableItems.filter(item => !combo.items.includes(item.id)).map(item => (
-              <div key={item.id} className="flex items-center justify-between bg-white p-2 rounded border">
-                <span className="text-sm">{item.name} - ${item.price}</span>
-                <button
-                  type="button"
-                  onClick={() => onAddItem(item.id)}
-                  className="text-green-600 hover:text-green-800"
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Items Actuales del Combo */}
-        <div className="mt-4">
-          <h4 className="font-medium mb-2">Items en el Combo:</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto p-2 border rounded-lg">
-            {availableItems.filter(item => combo.items.includes(item.id)).map(item => (
-              <div key={item.id} className="flex items-center justify-between bg-gray-100 p-2 rounded">
-                <span className="text-sm">{item.name} - ${item.price}</span>
-                <button
-                  type="button"
-                  onClick={() => onRemoveItem(item.id)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
 
         <div className="flex gap-2 mt-4">
           <button
             type="submit"
             disabled={saving}
-            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
+            className="px-4 py-2 bg-gradient-to-r from-[#ff7f50] to-[#ff6347] text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
           >
-            {saving ? <ButtonLoader size="sm" /> : (isEditing ? 'Actualizar' : 'Agregar')}
+            {saving ? <ButtonLoader size="sm" /> : (isEditing ? 'Actualizar Combo' : 'Agregar Combo')}
           </button>
           <button
             type="button"

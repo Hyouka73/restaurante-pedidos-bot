@@ -22,7 +22,9 @@ module.exports = async (ctx) => {
         '1. Ve al panel de administración\n' +
         '2. Completa la configuración inicial\n' +
         '3. Asegúrate de guardar el token del bot\n\n' +
-        `🤖 Bot ID: \`${botInfo.id}\`\n` +
+        `🤖 Bot ID: \
+`${botInfo.id}\
+`
         `📝 Username: @${botInfo.username}`,
         { 
           parse_mode: 'Markdown',
@@ -65,17 +67,27 @@ module.exports = async (ctx) => {
       const dayKey = availabilityService.getDayKey(now.getDay());
       const todayHours = hours[dayKey];
 
-      let closedMessage = `👋 ¡Hola ${firstName}!\n\n`;
-      closedMessage += `Bienvenido a *${restaurantName}* 🍽️\n\n`;
-      closedMessage += `😔 Actualmente estamos *cerrados*\n\n`;
+      let closedMessage = `👋 ¡Hola ${firstName}!
+
+`;
+      closedMessage += `Bienvenido a *${restaurantName}* 🍽️
+
+`;
+      closedMessage += `😔 Actualmente estamos *cerrados*
+
+`;
 
       if (availability.reason) {
-        closedMessage += `📋 ${availability.reason}\n\n`;
+        closedMessage += `📋 ${availability.reason}
+
+`;
       }
 
       if (todayHours && !todayHours.closed) {
-        closedMessage += `⏰ *Horario de hoy:*\n`;
-        closedMessage += `   Abrimos: ${todayHours.open}\n`;
+        closedMessage += `⏰ *Horario de hoy:*
+`;
+        closedMessage += `   Abrimos: ${todayHours.open}
+`;
         closedMessage += `   Cerramos: ${todayHours.close}`;
       }
 
@@ -103,7 +115,10 @@ module.exports = async (ctx) => {
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [Markup.button.callback('🛒 Hacer Pedido', 'init_order')],
+          [
+            Markup.button.callback('🛒 Hacer Pedido', 'init_order'),
+            Markup.button.callback('💡 Recomendación', 'start_recommendation')
+          ],
           [
             Markup.button.callback('📋 Ver Menú', 'show_menu'),
             Markup.button.callback('📞 Info', 'show_info')

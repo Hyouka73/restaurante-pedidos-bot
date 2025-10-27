@@ -149,8 +149,8 @@ router.post('/:restaurantId/combos', verifyToken, verifyOwner, async (req, res) 
     const { restaurantId } = req.params;
     const comboData = req.body;
     // Validaciones básicas
-    if (!comboData.name || comboData.items.length === 0) {
-        return res.status(400).json({ error: 'Nombre y al menos un item son obligatorios para el combo' });
+    if (!comboData.name || !comboData.componentes || comboData.componentes.length === 0) {
+        return res.status(400).json({ error: 'Nombre y al menos un componente son obligatorios para el combo' });
     }
     const result = await menuService.createMenuCombo(restaurantId, comboData);
     res.json(result);
