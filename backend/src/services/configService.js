@@ -106,6 +106,25 @@ class ConfigService {
   // --- MÉTODOS DE DISPONIBILIDAD MOVIDOS DESDE authService ---
   // Actualizar el estado de disponibilidad manualmente (usado por el bot o el panel)
   async updateAvailability(restaurantId, status, reason, updatedBy = 'system') {
+    // Si se abre la tienda, forzar la activación del bot
+    if (status === 'open') {
+      try {
+        // Usar require aquí para evitar dependencias circulares
+        const botService = require('./botService');
+        
+        // 1. Habilitar en la DB
+        await this.enableBot(restaurantId);
+        
+        // 2. Iniciar el proceso del bot
+        await botService.initBot(restaurantId);
+
+      } catch (error) {
+        console.error(`Error forzando activación del bot para ${restaurantId}:`, error);
+        // Opcional: decidir si la falla al iniciar el bot debe impedir que la tienda abra.
+        // Por ahora, solo se loguea el error y se continúa.
+      }
+    }
+
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     await restaurantRef.update({
       'availability.status': status,
@@ -113,7 +132,8 @@ class ConfigService {
       'availability.lastUpdated': new Date(),
       'availability.lastUpdatedBy': updatedBy
     });
-    return { success: true };
+
+    return { success: true, status };
   }
 
   // Actualizar el estado de disponibilidad y el modo

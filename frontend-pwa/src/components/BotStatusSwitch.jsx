@@ -1,4 +1,5 @@
 // frontend-pwa/src/components/BotStatusSwitch.jsx
+// frontend-pwa/src/components/BotStatusSwitch.jsx
 import { useBot } from '../context/BotContext';
 import { useAlert } from './ui/CustomAlert';
 import { ButtonLoader } from './ui/Loader';

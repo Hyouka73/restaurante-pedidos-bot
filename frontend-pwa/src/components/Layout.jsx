@@ -41,15 +41,31 @@ const StoreSwitch = ({ handleToggleStore }) => {
 
 const BotSwitch = ({ handleToggleBot }) => {
   const { status: botStatus, loading: botLoading } = useBot();
-  return (
+  const { data: restaurant } = useRestaurant();
+  const isRestaurantOpen = restaurant?.availability?.status === 'open';
+  const isDisabled = botLoading || isRestaurantOpen;
+
+  const switchComponent = (
     <div className="flex items-center gap-2">
       <span className="text-sm font-medium">Bot</span>
-      <label className="relative inline-flex items-center cursor-pointer">
-        <input type="checkbox" checked={botStatus?.enabled || false} onChange={handleToggleBot} disabled={botLoading} className="sr-only peer" />
-        <div className={`w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-green-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${botStatus?.enabled ? 'bg-green-600' : 'bg-gray-200'}`}></div>
+      <label className={`relative inline-flex items-center ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+        <input 
+          type="checkbox" 
+          checked={botStatus?.enabled || false} 
+          onChange={handleToggleBot} 
+          disabled={isDisabled} 
+          className="sr-only peer" 
+        />
+        <div className={`w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-4 peer-focus:ring-green-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${botStatus?.enabled ? (isRestaurantOpen ? 'bg-green-300' : 'bg-green-600') : 'bg-gray-200'}`}></div>
       </label>
     </div>
   );
+
+  return isDisabled && isRestaurantOpen ? (
+    <CustomTooltip content="No se puede apagar el bot mientras la tienda está abierta.">
+      {switchComponent}
+    </CustomTooltip>
+  ) : switchComponent;
 };
 
 const OrdersViewHeader = ({ isFullscreen, toggleFullscreen, handleToggleStore, handleLogout, handleToggleBot }) => {
@@ -272,15 +288,25 @@ export default function Layout() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isOpen]);
 
-  const handleLogout = useCallback(async () => {
-    try {
-      await signOut(auth);
-      showAlert('Sesión cerrada exitosamente', 'success', 2000);
-      setTimeout(() => navigate('/login'), 500);
-    } catch (error) {
-      showAlert('Error al cerrar sesión', 'error', 3000);
-    }
-  }, [navigate, showAlert]);
+  const handleLogout = useCallback(() => {
+    setModalState({
+      isOpen: true,
+      title: 'Confirmar Cierre de Sesión',
+      message: '¿Estás seguro de que deseas cerrar la sesión?',
+      onConfirm: async () => {
+        try {
+          await signOut(auth);
+          showAlert('Sesión cerrada exitosamente', 'success', 2000);
+          // No es necesario cerrar el modal aquí, ya que navegaremos a otra página
+          setTimeout(() => navigate('/login'), 500);
+        } catch (error) {
+          showAlert('Error al cerrar sesión', 'error', 3000);
+          // En caso de error, sí cerramos el modal para que el usuario pueda reintentar
+          setModalState({ isOpen: false });
+        }
+      }
+    });
+  }, [navigate, showAlert, setModalState]);
 
   const isWithinSchedule = () => {
     if (!restaurant?.hours) return false;

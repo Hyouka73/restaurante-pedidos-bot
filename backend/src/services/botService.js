@@ -119,6 +119,15 @@ class BotService {
   }
 
   async stopBot(restaurantId) {
+    // Evitar dependencia circular importando aquí
+    const configService = require('./configService');
+    
+    // Verificar si la tienda está abierta antes de intentar detener el bot
+    const config = await configService.getRestaurantConfig(restaurantId);
+    if (config?.availability?.status === 'open') {
+      throw new Error('No se puede apagar el bot mientras la tienda está abierta.');
+    }
+
     const entry = this.bots.get(restaurantId);
     if (entry) {
       try {
