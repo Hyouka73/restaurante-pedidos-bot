@@ -33,10 +33,6 @@ export default function Login() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       showAlert('¡Inicio de sesión exitoso!', 'success', 2000);
-      
-      setTimeout(() => {
-        navigate('/');
-      }, 500);
     } catch (error) {
       console.error('Error en login:', error);
       
