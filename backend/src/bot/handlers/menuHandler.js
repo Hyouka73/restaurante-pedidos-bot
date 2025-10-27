@@ -1,119 +1,113 @@
-// backend/src/bot/handlers/menuHandler.js - CORREGIDO
+// backend/src/bot/handlers/menuHandler.js
 const menuService = require('../../services/menuService');
 const telegramUserService = require('../services/telegramUserService');
-const configBotService = require('../services/configBotService');
 const { Markup } = require('telegraf');
 
-module.exports = async (ctx) => {
+const ITEMS_PER_PAGE = 4; // Podemos ajustar cuántos items mostrar por página
+
+/**
+ * Muestra una vista paginada y editable del menú.
+ * @param {object} ctx El contexto de Telegraf.
+ * @param {number} page El número de página a mostrar (base 1).
+ * @param {boolean} isEdit Si es true, edita el mensaje existente.
+ */
+async function showMenuView(ctx, page = 1, isEdit = false) {
   try {
-    // 🔑 CORRECCIÓN: Usar getRestaurantIdByBotContext
     const restaurantId = await telegramUserService.getRestaurantIdByBotContext(ctx);
-
     if (!restaurantId) {
-      await ctx.reply('⚠️ No se pudo identificar el restaurante. Usa /start primero.');
-      return;
+      return ctx.reply('⚠️ No se pudo identificar el restaurante. Usa /start primero.');
     }
 
-    // Obtener configuración del restaurante
-    const restaurantData = await configBotService.getRestaurantData(restaurantId);
-    const features = restaurantData.features || {};
-    const messages = restaurantData.messages || {};
-
-    // Obtener menú para bot (devuelve array plano de items y combos disponibles)
     const menuItems = await menuService.getMenuForBot(restaurantId);
-    
-    console.log('[menuHandler] Total menuItems:', menuItems.length);
-    
     if (!menuItems || menuItems.length === 0) {
-      await ctx.reply(
-        '😔 Lo sentimos, el menú aún no está disponible.\n\n' +
-        'Por favor intenta más tarde o contacta al restaurante.'
-      );
-      return;
+      const emptyMenuText = '😔 Lo sentimos, el menú no está disponible en este momento.';
+      // Si es una edición, edita el mensaje, si no, responde.
+      return isEdit ? ctx.editMessageText(emptyMenuText) : ctx.reply(emptyMenuText);
     }
 
-    // Mensaje introductorio personalizado
-    const menuIntro = messages.menu_intro || 'Este es nuestro menú:';
-    await ctx.reply(
-      `📋 *${menuIntro}*\n\n` +
-      `Tenemos ${menuItems.length} platillos disponibles:`,
-      { parse_mode: 'Markdown' }
-    );
+    const totalPages = Math.ceil(menuItems.length / ITEMS_PER_PAGE);
+    page = Math.max(1, Math.min(page, totalPages)); // Asegurar que la página esté en el rango correcto
 
-    // Agrupar items por categoría si existen
-    const itemsByCategory = {};
-    menuItems.forEach(item => {
-      const category = item.category || 'Sin categoría';
-      if (!itemsByCategory[category]) {
-        itemsByCategory[category] = [];
-      }
-      itemsByCategory[category].push(item);
+    const startIndex = (page - 1) * ITEMS_PER_PAGE;
+    const pageItems = menuItems.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+    // --- Construir el texto del mensaje ---
+    let messageText = `📋 *Nuestro Menú* - Página ${page} de ${totalPages}\n\n`;
+    if (pageItems.length === 0 && menuItems.length > 0) {
+        messageText = '🤔 No hay más platillos por aquí. ¡Prueba la página anterior!';
+    } else {
+        pageItems.forEach(item => {
+            const itemType = item.isCombo ? '🎁' : '🍽️';
+            messageText += `${itemType} *${item.name}* - 💰 $${item.price}\n`;
+            if (item.description) {
+                // Limitar la descripción para no hacer el mensaje muy largo
+                const shortDesc = item.description.length > 50 ? item.description.substring(0, 47) + '...' : item.description;
+                messageText += `_${shortDesc}_
+`;
+            }
+            messageText += `\n`;
+        });
+    }
+    messageText += '👇 Agrega platillos a tu pedido o navega por el menú.';
+
+    // --- Construir el teclado de botones ---
+    const itemButtons = pageItems.map(item => {
+        return [Markup.button.callback(`➕ ${item.name}`, `add_item_${item.id}`)];
     });
 
-    // Enviar items por categoría
-    for (const [category, items] of Object.entries(itemsByCategory)) {
-      if (category !== 'Sin categoría') {
-        await ctx.reply(`\n🏷️ *${category}*`, { parse_mode: 'Markdown' });
-      }
-
-      for (const item of items) {
-        const description = item.description || 'Delicioso platillo';
-        const price = `💰 ${item.price}`;
-        const available = item.available !== false ? '✅ Disponible' : '❌ No disponible';
-        
-        const caption = 
-          `*${item.name}*\n\n` +
-          `${description}\n\n` +
-          `${price}\n` +
-          `${available}`;
-
-        const keyboard = Markup.inlineKeyboard([
-          [Markup.button.callback('🛒 Ordenar', `add_item_${item.id}`)],
-          [Markup.button.callback('ℹ️ Más información', `item_info_${item.id}`)]
-        ]);
-
-        try {
-          // Intentar enviar con foto si está habilitado
-          if (features.showMenuImages && item.imageUrl) {
-            await ctx.replyWithPhoto(item.imageUrl, {
-              caption,
-              parse_mode: 'Markdown',
-              ...keyboard
-            });
-          } else {
-            await ctx.reply(caption, {
-              parse_mode: 'Markdown',
-              ...keyboard
-            });
-          }
-        } catch (error) {
-          console.error(`Error enviando item ${item.id}:`, error);
-          // Fallback sin foto
-          await ctx.reply(caption, {
-            parse_mode: 'Markdown',
-            ...keyboard
-          });
-        }
-
-        // Pequeña pausa entre mensajes para no saturar
-        await new Promise(resolve => setTimeout(resolve, 300));
-      }
+    const navButtons = [];
+    if (page > 1) {
+        navButtons.push(Markup.button.callback('⬅️ Anterior', `menu_page_${page - 1}`));
+    }
+    // Botón de página (no se puede hacer clic)
+    navButtons.push(Markup.button.callback(`Pág. ${page}/${totalPages}`, 'no_action'));
+    if (page < totalPages) {
+        navButtons.push(Markup.button.callback('Siguiente ➡️', `menu_page_${page + 1}`));
     }
 
-    // Botones finales
-    await ctx.reply(
-      '👆 Puedes seleccionar cualquier platillo para ver más detalles o hacer un pedido',
-      Markup.inlineKeyboard([
-        [Markup.button.callback('🛒 Hacer Pedido Completo', 'init_order')],
-        [Markup.button.callback('« Volver al Inicio', 'back_to_start')]
-      ])
-    );
+    const actionsRow = [
+        Markup.button.callback('🛒 Ver Carrito', 'view_cart'),
+        Markup.button.callback('« Volver', 'back_to_start')
+    ];
+
+    const keyboard = Markup.inlineKeyboard([
+        ...itemButtons,
+        navButtons,
+        actionsRow
+    ]);
+
+    // --- Enviar o Editar Mensaje ---
+    if (isEdit) {
+        // Evitar error si el mensaje es idéntico
+        if (ctx.callbackQuery.message.text === messageText) {
+            return ctx.answerCbQuery('Ya estás en esta página.');
+        }
+        await ctx.editMessageText(messageText, { parse_mode: 'Markdown', ...keyboard });
+        await ctx.answerCbQuery();
+    } else {
+        await ctx.reply(messageText, { parse_mode: 'Markdown', ...keyboard });
+    }
 
   } catch (error) {
-    console.error('Error en menuHandler:', error);
-    await ctx.reply(
-      '❌ Hubo un error al cargar el menú.\n\n' +
-      'Por favor intenta nuevamente con /menu o contacta al restaurante.'
-    );
+    console.error('Error en showMenuView:', error);
+    const errorMessage = '❌ Hubo un error al mostrar el menú.';
+    try {
+        if (isEdit) {
+            await ctx.answerCbQuery(errorMessage, { show_alert: true });
+        } else {
+            await ctx.reply(errorMessage);
+        }
+    } catch (e) {
+        console.error('Error enviando mensaje de error de menú:', e);
+    }
   }
+}
+
+// El manejador principal del comando /menu ahora solo llama a la nueva función
+const menuHandler = async (ctx) => {
+    await showMenuView(ctx, 1, false);
 };
+
+// Exportar tanto el manejador como la función reutilizable
+module.exports = menuHandler;
+module.exports.showMenuView = showMenuView;

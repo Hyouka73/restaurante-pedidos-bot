@@ -6,6 +6,7 @@ const telegramUserService = require('../services/telegramUserService');
 const availabilityService = require('../../services/availabilityService');
 const deliveryService = require('../../services/deliveryService');
 const { Markup } = require('telegraf');
+const { showMenuView } = require('./menuHandler'); // Importar la nueva función
 
 // Almacenamiento temporal de sesiones (en producción usar Redis o Firestore)
 const userOrderSessions = new Map();
@@ -85,8 +86,8 @@ module.exports = async (ctx) => {
       delivery: null
     });
 
-    // Mostrar menú con fotos si están disponibles
-    await sendMenuWithPhotos(ctx, menuItems, features);
+    // Mostrar el nuevo menú paginado
+    await showMenuView(ctx, 1, false);
 
   } catch (error) {
     console.error('Error en orderHandler:', error);

@@ -13,6 +13,7 @@ const {
   askPaymentMethod 
 } = require('../handlers/orderHandler');
 const { formatOrderStatus } = require('../handlers/myOrderHandler');
+const { showMenuView } = require('../handlers/menuHandler');
 
 const defaultCommands = [
     { command: 'start', description: 'Iniciar conversación' },
@@ -129,6 +130,13 @@ module.exports = async (ctx) => {
       return;
     }
 
+    if (callbackData.startsWith('menu_page_')) {
+      const page = parseInt(callbackData.split('_')[2], 10);
+      // Llama a la vista de menú paginada, editando el mensaje actual
+      await showMenuView(ctx, page, true);
+      return;
+    }
+
     if (callbackData.startsWith('notify_')) {
       await handleNotificationPreference(ctx, callbackData);
       return;
@@ -195,7 +203,7 @@ module.exports = async (ctx) => {
     }
 
     if (callbackData === 'back_to_menu') {
-      await handleBackToMenu(ctx, userId, session, restaurantId);
+      await showMenuView(ctx, 1, true); // EDIT: Replaced old function with new view
       return;
     }
 
@@ -296,29 +304,35 @@ async function handleViewCart(ctx, userId, session) {
 
   const subtotal = session.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   
-  let cartMessage = '🛒 *Tu Carrito:*\n\n';
+  let cartMessage = '🛒 *Tu Carrito de Compras*\n';
+  cartMessage += '─'.repeat(25) + '\n\n';
+
   session.items.forEach((item, index) => {
-    cartMessage += `${index + 1}. *${item.name}*\n`;
-    cartMessage += `   ${item.quantity}x ${item.price} = ${item.price * item.quantity}\n\n`;
+    const itemType = item.type === 'combo' ? '🎁' : '🍽️';
+    cartMessage += `${itemType} *${item.name}*\n`;
+    cartMessage += `   ${item.quantity} x ${item.price} = *${item.price * item.quantity}*\n\n`;
   });
-  cartMessage += `━━━━━━━━━━━━━━━\n`;
+  cartMessage += '─'.repeat(25) + '\n';
   cartMessage += `💰 *Subtotal: ${subtotal}*`;
 
   const buttons = [];
   
   session.items.forEach((item, index) => {
+    // Fila 1: Nombre del item (puede ser un botón informativo)
+    buttons.push([Markup.button.callback(`- ${item.name} -`, `item_info_${item.id}`)]);
+    // Fila 2: Controles de cantidad y eliminación
     buttons.push([
       Markup.button.callback('➖', `qty_decrease_${index}`),
-      Markup.button.callback(`${item.name} (${item.quantity})`, `item_detail_${index}`),
+      Markup.button.callback(`${item.quantity}x', 'no_action'), // Indicador de cantidad no clickeable
       Markup.button.callback('➕', `qty_increase_${index}`),
-      Markup.button.callback('🗑️', `remove_${index}`)
+      Markup.button.callback('🗑️ Eliminar', `remove_${index}`)
     ]);
   });
 
-  buttons.push([Markup.button.callback('➕ Agregar más items', 'back_to_menu')]);
+  buttons.push([Markup.button.callback('➕ Agregar más platillos', 'back_to_menu')]);
   buttons.push([
-    Markup.button.callback('✅ Continuar', 'continue_to_delivery'),
-    Markup.button.callback('❌ Cancelar', 'cancel_order')
+    Markup.button.callback('✅ Continuar al Pago', 'continue_to_delivery'),
+    Markup.button.callback('❌ Vaciar Carrito', 'cancel_order')
   ]);
 
   await ctx.answerCbQuery();
@@ -328,6 +342,7 @@ async function handleViewCart(ctx, userId, session) {
       ...Markup.inlineKeyboard(buttons)
     });
   } catch (e) {
+    // Si falla la edición (ej. mensaje muy antiguo), envía uno nuevo.
     await ctx.reply(cartMessage, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard(buttons)
@@ -662,24 +677,6 @@ async function handleCancelOrder(ctx, userId) {
       }
     );
   }
-}
-
-async function handleBackToMenu(ctx, userId, session, restaurantId) {
-  if (!session) {
-    await ctx.answerCbQuery('⚠️ Inicia un nuevo pedido con /pedido', { show_alert: true });
-    return;
-  }
-
-  await ctx.answerCbQuery();
-  
-  const menuItems = await menuService.getMenuForBot(restaurantId);
-  const restaurantData = await configBotService.getRestaurantData(restaurantId);
-  const features = restaurantData.features || {};
-
-  session.step = SESSION_STATES.SELECTING_ITEM;
-  userOrderSessions.set(userId, session);
-
-  await sendMenuWithPhotos(ctx, menuItems, features);
 }
 
 async function handleNotificationPreference(ctx, callbackData) {
