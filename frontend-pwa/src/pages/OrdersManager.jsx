@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../config/firebase';
 import { useRestaurant } from '../context/RestaurantContext';
-import { api } from '../services/api';
+import { api, API_BASE } from '../services/api';
 import { Package, Clock, CheckCircle, XCircle, ChefHat, Store, Truck, Phone, MapPin, DollarSign, RefreshCw } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
 
 export default function OrdersManager() {
   const [user] = useAuthState(auth);
@@ -57,7 +57,7 @@ export default function OrdersManager() {
   useEffect(() => {
     if (!restaurantData?.id) return;
 
-    const eventSource = new EventSource(`${API_BASE_URL}/api/events`);
+    const eventSource = new EventSource(`${API_BASE}/events`);
     eventSource.onmessage = (event) => {
       const eventData = JSON.parse(event.data);
       if (eventData.type === 'order_update') {
