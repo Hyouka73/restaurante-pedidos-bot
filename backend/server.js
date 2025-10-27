@@ -13,11 +13,6 @@ if (!process.env.TOKEN_SECRET) {
   console.log(`🔐 TOKEN_SECRET configurado (${process.env.TOKEN_SECRET.length} chars)`);
 }
 
-if (!process.env.TELEGRAM_BOT_TOKEN) {
-  console.error('❌ TELEGRAM_BOT_TOKEN no está configurado!');
-  process.exit(1);
-}
-
 // Configuración de CORS
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 

@@ -1,6 +1,5 @@
 // backend/src/services/uploadService.js
 const { bucket } = require('../config/firebase');
-const { v4: uuidv4 } = require('uuid');
 
 class UploadService {
   /**
@@ -11,6 +10,7 @@ class UploadService {
    * @returns {Promise<string>} - URL pública de la imagen
    */
   async uploadImageToStorage(fileBuffer, originalName, folder = 'uploads') {
+    const { v4: uuidv4 } = await import('uuid');
     try {
       // Generar nombre único para el archivo
       const fileExtension = originalName.split('.').pop();

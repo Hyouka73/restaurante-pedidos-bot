@@ -323,7 +323,7 @@ async function handleViewCart(ctx, userId, session) {
     // Fila 2: Controles de cantidad y eliminación
     buttons.push([
       Markup.button.callback('➖', `qty_decrease_${index}`),
-      Markup.button.callback(`${item.quantity}x', 'no_action'), // Indicador de cantidad no clickeable
+      Markup.button.callback(`${item.quantity}x`, 'no_action'), // Indicador de cantidad no clickeable
       Markup.button.callback('➕', `qty_increase_${index}`),
       Markup.button.callback('🗑️ Eliminar', `remove_${index}`)
     ]);
