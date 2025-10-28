@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { api } from '../services/api'; // Corregido: importación nombrada
 import DiscountRuleForm from '../components/config/DiscountRuleForm';
 import Loader from '../components/ui/Loader';
 

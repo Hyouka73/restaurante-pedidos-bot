@@ -68,7 +68,7 @@ function App() {
           <Route path="config/messages" element={<ConfigMessages />} />
            <Route path="config/general" element={<ConfigGeneral />} />
           <Route path="menu" element={<Menu />} /> 
-          <Route path="discount-rules" element={<DiscountRules />} />
+          <Route path="discount-rules" element={<DiscountRules />} /> {/* Asegúrate de que este componente exista */}
           <Route path="orders" element={<OrdersManager />} />
         </Route>
 

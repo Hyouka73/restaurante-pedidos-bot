@@ -17,19 +17,26 @@ if (!process.env.TOKEN_SECRET) {
 const whitelist = [
   'http://localhost:5173', 
   'http://localhost:3000', 
-  'http://localhost:5174'
+  'http://localhost:5174',
+  'https://restbot-pwa.vercel.app' // <-- SOLUCIÓN: Añadir tu URL de producción
 ];
 
-if (process.env.FRONTEND_URL) {
+// Añadir la URL de la variable de entorno SI existe y no está ya en la lista
+if (process.env.FRONTEND_URL && whitelist.indexOf(process.env.FRONTEND_URL) === -1) {
   whitelist.push(process.env.FRONTEND_URL);
 }
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Para peticiones sin origen (como Postman) o de dominios en la lista blanca
-    if (!origin || whitelist.indexOf(origin) !== -1 || (process.env.VERCEL_ENV === 'preview' && origin.endsWith('-restbot-pwa.vercel.app'))) {
+    
+    // 1. Permitir peticiones sin origen (Postman, apps móviles)
+    // 2. Permitir orígenes en la lista blanca (localhost, producción)
+    // 3. Permitir CUALQUIER subdominio de Vercel para tu app (maneja previews)
+    if (!origin || whitelist.indexOf(origin) !== -1 || origin.endsWith('-restbot-pwa.vercel.app')) {
       callback(null, true);
     } else {
+      // Loguear el origen bloqueado para depuración
+      console.error('CORS Bloqueado para el origen:', origin); 
       callback(new Error('Not allowed by CORS'));
     }
   },
