@@ -80,18 +80,21 @@ class DiscountRuleService {
   }
 
   async applyDynamicCombos(cart, restaurantId) {
+    // 1. Almacenar el descuento antiguo para comparar
+    const oldDiscount = cart.discount; // Puede ser undefined o un objeto
+    const oldDiscountAmount = oldDiscount?.amount || 0;
+
     const rules = await this.getDiscountRules(restaurantId);
     const cartItemIds = new Set(cart.items.map(item => item.id));
 
     let appliedRule = null;
     let bestDiscount = 0;
-
     for (const rule of rules) {
       const ruleConditions = rule.condiciones || [];
       if (ruleConditions.length === 0) continue;
 
       const isMatch = ruleConditions.every(requiredItemId => cartItemIds.has(requiredItemId));
-
+      
       if (isMatch) {
         const comboItemsInCart = cart.items.filter(item => ruleConditions.includes(item.id));
         const comboBasePrice = comboItemsInCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -100,7 +103,9 @@ class DiscountRuleService {
         if (rule.accion.tipo === 'descuento_porcentual') {
           currentDiscount = comboBasePrice * (rule.accion.valor / 100);
         } else if (rule.accion.tipo === 'precio_paquete_fijo') {
-          currentDiscount = comboBasePrice - rule.accion.valor;
+          // El descuento es la diferencia entre el precio base y el precio fijo
+          const fixedPrice = rule.accion.valor;
+          currentDiscount = comboBasePrice - fixedPrice;
         }
 
         if (currentDiscount > bestDiscount) {
@@ -110,27 +115,44 @@ class DiscountRuleService {
       }
     }
 
+    // *** INICIO DE LÓGICA DE NOTIFICACIÓN MEJORADA ***
+    let notification = null;
+    cart.subtotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
     if (appliedRule && bestDiscount > 0) {
-      const notification = {
-        title: '¡Combo Detectado!',
-        text: `¡Felicidades! Activaste la promo "${appliedRule.nombre_regla}" y ahorraste ${bestDiscount.toFixed(2)}.`
-      };
+      // Caso 1: Se aplica un descuento
       
-      cart.subtotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      // Solo notificar si el descuento es NUEVO o DIFERENTE al anterior
+      if (bestDiscount.toFixed(2) !== oldDiscountAmount.toFixed(2)) {
+          notification = {
+            titulo: '¡Combo Detectado!',
+            texto: `¡Felicidades! Activaste la promo "${appliedRule.nombre_regla}" y ahorraste $${bestDiscount.toFixed(2)}.`
+          };
+      }
+      
       cart.discount = {
         amount: bestDiscount,
         ruleName: appliedRule.nombre_regla
       };
       cart.total = cart.subtotal - bestDiscount + (cart.deliveryFee || 0);
 
-      return { cart, notification };
+    } else if (!appliedRule && oldDiscountAmount > 0) {
+      // Caso 2: NO hay regla aplicable, PERO HABÍA un descuento antes
+      notification = {
+        titulo: 'Promo Desactivada',
+        texto: `Se modificó un ítem de tu combo. El descuento de $${oldDiscountAmount.toFixed(2)} ("${oldDiscount.ruleName}") ha sido removido.`
+      };
+      delete cart.discount;
+      cart.total = cart.subtotal + (cart.deliveryFee || 0);
+    
+    } else {
+      // Caso 3: Sin descuento nuevo y sin descuento antiguo
+      delete cart.discount;
+      cart.total = cart.subtotal + (cart.deliveryFee || 0);
     }
 
-    // No rule applied, return original cart but ensure total is calculated
-    cart.subtotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    delete cart.discount;
-    cart.total = cart.subtotal + (cart.deliveryFee || 0);
-    return { cart, notification: null };
+    return { cart, notification };
+    // *** FIN DE LÓGICA DE NOTIFICACIÓN MEJORADA ***
   }
 }
 

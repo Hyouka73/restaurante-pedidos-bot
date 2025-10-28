@@ -10,14 +10,29 @@ const PORT = process.env.PORT || 3000;
 if (!process.env.TOKEN_SECRET) {
   console.warn('⚠️ TOKEN_SECRET is not set in environment. crypto operations will fail.');
 } else {
-  console.log(`🔐 TOKEN_SECRET configurado (${process.env.TOKEN_SECRET.length} chars)`);
+  console.log('🔐 TOKEN_SECRET configurado (${process.env.TOKEN_SECRET.length} chars)');
 }
 
 // Configuración de CORS
+const whitelist = [
+  'http://localhost:5173', 
+  'http://localhost:3000', 
+  'http://localhost:5174'
+];
+
+if (process.env.FRONTEND_URL) {
+  whitelist.push(process.env.FRONTEND_URL);
+}
+
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL 
-    : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5174'],
+  origin: function (origin, callback) {
+    // Para peticiones sin origen (como Postman) o de dominios en la lista blanca
+    if (!origin || whitelist.indexOf(origin) !== -1 || (process.env.VERCEL_ENV === 'preview' && origin.endsWith('-restbot-pwa.vercel.app'))) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
