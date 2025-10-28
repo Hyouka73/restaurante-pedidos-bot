@@ -46,7 +46,6 @@ const corsOptions = {
 };
 
 // SOLUCIÓN: Aplicar CORS a nivel de aplicación y manejar preflight requests
-app.options('*', cors(corsOptions)); // Habilita pre-flight para todas las rutas
 app.use(cors(corsOptions));
 app.use(express.json());
 
