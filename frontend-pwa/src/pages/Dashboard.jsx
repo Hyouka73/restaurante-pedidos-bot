@@ -16,7 +16,7 @@ export default function Dashboard() {
   const [user, loadingAuth] = useAuthState(auth);
   const navigate = useNavigate();
   const { data: restaurantData } = useRestaurant(); // <-- 2. Usar el contexto del restaurante
-  const [loading, setLoading] = useState(true);
+  const [loadingStats, setLoadingStats] = useState(true);
   const [metrics, setMetrics] = useState({
     totalOrders: 0,
     pendingOrders: 0,
@@ -28,13 +28,13 @@ export default function Dashboard() {
   useEffect(() => {
     // 3. Mover la lógica de carga de datos al contexto si es posible, o simplificarla aquí
     const fetchData = async () => {
-      if (!user || !restaurantData?.id) {
-        setLoading(false);
+      if (!restaurantData?.id) {
+        // Si no hay ID de restaurante, no podemos pedir estadísticas.
         return;
       }
 
       try {
-        setLoading(true);
+        setLoadingStats(true);
         const restaurantId = restaurantData.id;
         
         // 4. Llamar al nuevo endpoint del backend
@@ -46,14 +46,14 @@ export default function Dashboard() {
       } catch (error) {
         console.error("Error al cargar datos del dashboard:", error);
       } finally {
-        setLoading(false);
+        setLoadingStats(false);
       }
     };
 
     fetchData();
   }, [user, restaurantData, navigate]); // <-- 5. Depender de restaurantData
 
-  if (loadingAuth || (user && loading)) {
+  if (loadingAuth || (user && !restaurantData)) {
     return <Loader variant="dots" size="lg" message="Cargando dashboard..." />;
   }
 

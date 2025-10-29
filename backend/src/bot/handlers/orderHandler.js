@@ -1,4 +1,5 @@
-// backend/src/bot/handlers/orderHandler.js - CORREGIDO
+// backend/src/bot/handlers/orderHandler.js - CORREGIDO PARA REDIS SESSION
+
 const menuService = require('../../services/menuService');
 const orderService = require('../../services/orderService');
 const configBotService = require('../services/configBotService');
@@ -6,12 +7,9 @@ const telegramUserService = require('../services/telegramUserService');
 const availabilityService = require('../../services/availabilityService');
 const deliveryService = require('../../services/deliveryService');
 const { Markup } = require('telegraf');
-const { showMenuView } = require('./menuHandler'); // Importar la nueva función
+const { showMenuView } = require('./menuHandler');
 
-// Almacenamiento temporal de sesiones (en producción usar Redis o Firestore)
-const userOrderSessions = new Map();
-
-// Constantes para estados de sesión
+// Estados de sesión
 const SESSION_STATES = {
   SELECTING_ITEM: 'selecting_item',
   SELECTING_QUANTITY: 'selecting_quantity',
@@ -25,35 +23,46 @@ const SESSION_STATES = {
   FINAL_CONFIRMATION: 'final_confirmation'
 };
 
-module.exports = async (ctx) => {
+const mainOrderHandler = async (ctx) => {
   try {
-    const userId = ctx.from.id;
+    console.log('🛒 [orderHandler] Iniciando...');
     
-    // 🔑 CORRECCIÓN: Usar getRestaurantIdByBotContext
+    const userId = ctx.from.id;
     const restaurantId = await telegramUserService.getRestaurantIdByBotContext(ctx);
-
+    
     if (!restaurantId) {
+      console.log('❌ [orderHandler] No se pudo identificar restaurante');
       await ctx.reply('⚠️ No se pudo identificar el restaurante. Usa /start primero.');
       return;
     }
 
-    // Obtener configuración del restaurante
+    console.log(`✅ [orderHandler] RestaurantId: ${restaurantId}`);
+
+    // ✅ CRÍTICO: Inicializar sesión si no existe
+    if (!ctx.session) {
+      console.log('⚠️ [orderHandler] Sesión no existía, creando...');
+      ctx.session = {};
+    }
+
     const restaurantData = await configBotService.getRestaurantData(restaurantId);
     const features = restaurantData.features || {};
 
     // === MANEJO DE UBICACIÓN ===
     if (ctx.message && ctx.message.location) {
+      console.log('📍 [orderHandler] Procesando ubicación');
       return await handleLocationMessage(ctx, userId, restaurantId, restaurantData);
     }
 
-    // === MANEJO DE TEXTO (dirección, teléfono, nombre) ===
+    // === MANEJO DE TEXTO ===
     if (ctx.message && ctx.message.text && !ctx.message.text.startsWith('/')) {
+      console.log('📝 [orderHandler] Procesando texto:', ctx.message.text.substring(0, 50));
       return await handleTextMessage(ctx, userId, restaurantId, features);
     }
 
     // === VERIFICAR DISPONIBILIDAD ===
     const availability = await availabilityService.checkAvailability(restaurantId);
     if (availability.status !== 'open') {
+      console.log('🔒 [orderHandler] Restaurante cerrado:', availability.reason);
       let messageToSend = '😔 Lo sentimos, no podemos aceptar pedidos en este momento.';
       if (availability.reason) {
         messageToSend += `\n\n📋 Motivo: ${availability.reason}`;
@@ -63,18 +72,18 @@ module.exports = async (ctx) => {
     }
 
     // === INICIAR NUEVO PEDIDO ===
-    // 🔑 CORRECCIÓN: Usar getMenuForBot que devuelve array
+    console.log('📋 [orderHandler] Obteniendo menú...');
     const menuItems = await menuService.getMenuForBot(restaurantId);
-    
-    console.log('[orderHandler] menuItems recibidos:', menuItems?.length || 0);
+    console.log(`📋 [orderHandler] Items obtenidos: ${menuItems?.length || 0}`);
     
     if (!menuItems || menuItems.length === 0) {
       await ctx.reply('😔 Lo sentimos, el menú aún no está disponible.');
       return;
     }
 
-    // Crear nueva sesión
-    userOrderSessions.set(userId, {
+    // ✅ Crear carrito en sesión (Redis lo persistirá automáticamente)
+    console.log('🛒 [orderHandler] Creando carrito en sesión...');
+    ctx.session.cart = {
       restaurantId,
       items: [],
       step: SESSION_STATES.SELECTING_ITEM,
@@ -83,105 +92,51 @@ module.exports = async (ctx) => {
       customerAddress: null,
       customerPhone: null,
       customerName: ctx.from.first_name,
-      delivery: null
-    });
+      delivery: null,
+      createdAt: new Date().toISOString()
+    };
 
-    // Mostrar el nuevo menú paginado
+    console.log('✅ [orderHandler] Carrito creado, mostrando menú...');
+    
+    // Mostrar menú paginado
     await showMenuView(ctx, 1, false);
 
   } catch (error) {
-    console.error('Error en orderHandler:', error);
-    await ctx.reply('❌ Hubo un error al iniciar tu pedido. Por favor intenta nuevamente.');
+    console.error('❌ [orderHandler] Error:', error);
+    await ctx.reply('❌ Hubo un error. Por favor intenta nuevamente.').catch(console.error);
   }
 };
 
-// === FUNCIÓN PARA ENVIAR MENÚ CON FOTOS ===
-async function sendMenuWithPhotos(ctx, menuItems, features) {
-  await ctx.reply(
-    '🛒 *¡Perfecto! Comencemos tu pedido*\n\n' +
-    '👇 Selecciona los platillos que deseas ordenar:',
-    { parse_mode: 'Markdown' }
-  );
-
-  // Validar que menuItems sea un array
-  if (!Array.isArray(menuItems)) {
-    console.error('[sendMenuWithPhotos] menuItems no es un array:', typeof menuItems);
-    await ctx.reply('❌ Error al cargar el menú. Por favor intenta nuevamente.');
-    return;
-  }
-
-  // Enviar cada item con foto si está disponible
-  for (const item of menuItems) {
-    const itemType = item.isCombo ? '🎁' : '🍽️';
-    const description = item.description || (item.isCombo ? 'Delicioso combo' : 'Delicioso platillo');
-    const price = `💰 $${item.price}`;
-    const available = item.available !== false ? '✅ Disponible' : '❌ No disponible';
-    
-    const caption = 
-      `${itemType} *${item.name}*\n\n` +
-      `${description}\n\n` +
-      `${price}\n` +
-      `${available}`;
-
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback('🛒 Agregar al pedido', `add_item_${item.id}`)],
-      [Markup.button.callback('ℹ️ Más información', `item_info_${item.id}`)]
-    ]);
-
-    try {
-      if (features.showMenuImages && item.imageUrl) {
-        await ctx.replyWithPhoto(item.imageUrl, {
-          caption,
-          parse_mode: 'Markdown',
-          ...keyboard
-        });
-      } else {
-        await ctx.reply(caption, {
-          parse_mode: 'Markdown',
-          ...keyboard
-        });
-      }
-    } catch (error) {
-      console.error(`Error enviando item ${item.id}:`, error);
-      // Fallback sin foto
-      await ctx.reply(caption, {
-        parse_mode: 'Markdown',
-        ...keyboard
-      });
-    }
-
-    // Pequeña pausa entre mensajes
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-
-  // Botón para finalizar selección
-  await ctx.reply(
-    '➡️ Cuando termines de seleccionar, presiona "Ver Carrito"',
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🛒 Ver Carrito', 'view_cart')],
-      [Markup.button.callback('❌ Cancelar Pedido', 'cancel_order')]
-    ])
-  );
-}
-
 // === MANEJO DE UBICACIÓN ===
 async function handleLocationMessage(ctx, userId, restaurantId, restaurantData) {
-  const session = userOrderSessions.get(userId);
+  console.log('📍 [handleLocationMessage] Procesando ubicación...');
   
-  if (!session || session.step !== SESSION_STATES.WAITING_LOCATION) {
+  const session = ctx.session?.cart;
+  
+  if (!session) {
+    console.log('⚠️ [handleLocationMessage] No hay sesión activa');
+    await ctx.reply('🤔 No hay un pedido activo. Usa /pedido para comenzar.');
+    return;
+  }
+  
+  if (session.step !== SESSION_STATES.WAITING_LOCATION) {
+    console.log('⚠️ [handleLocationMessage] No se esperaba ubicación, estado:', session.step);
     await ctx.reply('🤔 No estoy esperando una ubicación en este momento.');
     return;
   }
 
   const { latitude, longitude } = ctx.message.location;
   session.customerLocation = { latitude, longitude };
-
+  
+  console.log(`📍 [handleLocationMessage] Ubicación: ${latitude}, ${longitude}`);
   await ctx.reply('📍 Ubicación recibida, calculando costo de envío...');
 
   try {
     const result = await deliveryService.calculateFee(restaurantId, session.customerLocation);
+    console.log(`📏 [handleLocationMessage] Distancia: ${result.distanceKm}km, Tarifa: $${result.fee}`);
     
     if (!result.withinMaxDistance) {
+      console.log('❌ [handleLocationMessage] Fuera de rango de entrega');
       await ctx.reply(
         '😔 Lo sentimos, tu ubicación está fuera de nuestra zona de entrega.\n\n' +
         `📏 Distancia: ${result.distanceKm.toFixed(2)} km\n` +
@@ -203,49 +158,49 @@ async function handleLocationMessage(ctx, userId, restaurantId, restaurantData) 
       distanceKm: result.distanceKm 
     };
     
-    // Verificar si aplica envío gratis
     const subtotal = session.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const freeDeliveryMin = restaurantData.delivery?.freeDeliveryMinAmount || 0;
     
     if (freeDeliveryMin > 0 && subtotal >= freeDeliveryMin) {
       session.delivery.fee = 0;
+      console.log('🎉 [handleLocationMessage] Envío gratis aplicado');
       await ctx.reply(
         `🎉 ¡Felicidades! Tu pedido califica para *envío gratis*\n\n` +
         `📏 Distancia: ${result.distanceKm.toFixed(2)} km\n` +
         `💰 Costo de envío: ~$${result.fee}~ ¡GRATIS!\n\n` +
-        `✨ Subtotal: $${subtotal} (mínimo para envío gratis: $${freeDeliveryMin})`,
+        `✨ Subtotal: $${subtotal.toFixed(2)} (mínimo: $${freeDeliveryMin})`,
         { parse_mode: 'Markdown' }
       );
     } else {
       await ctx.reply(
         `📍 *Ubicación confirmada*\n\n` +
-        `📏 Distancia al restaurante: ${result.distanceKm.toFixed(2)} km\n` +
-        `💰 Costo de envío: $${result.fee}\n\n` +
+        `📏 Distancia: ${result.distanceKm.toFixed(2)} km\n` +
+        `💰 Costo de envío: $${result.fee.toFixed(2)}\n\n` +
         `💡 _Envío gratis en pedidos mayores a $${freeDeliveryMin}_`,
         { parse_mode: 'Markdown' }
       );
     }
 
-    // Pedir dirección si está habilitado
     const features = restaurantData.features || {};
+    
     if (features.requireLocationIfDelivery) {
       session.step = SESSION_STATES.WAITING_ADDRESS;
+      console.log('📝 [handleLocationMessage] Pidiendo dirección');
       await ctx.reply(
-        '📝 Por favor, escribe tu dirección completa para la entrega:\n\n' +
-        '_(Ejemplo: Calle 5 de Mayo #123, Col. Centro, entre Juárez e Hidalgo)_',
+        '📝 Por favor, escribe tu dirección completa:\n\n' +
+        '_(Ejemplo: Calle 5 de Mayo #123, Col. Centro)_',
         { parse_mode: 'Markdown' }
       );
     } else {
       session.step = SESSION_STATES.WAITING_PHONE;
+      console.log('📞 [handleLocationMessage] Pidiendo teléfono');
       await ctx.reply('📞 Por favor, escribe tu número de teléfono:');
     }
-    
-    userOrderSessions.set(userId, session);
 
   } catch (err) {
-    console.error('Error calculando tarifa:', err);
+    console.error('❌ [handleLocationMessage] Error calculando tarifa:', err);
     await ctx.reply(
-      '❌ Error calculando tarifa de envío. Por favor intenta nuevamente o selecciona "Recoger en tienda".',
+      '❌ Error calculando envío. Por favor intenta nuevamente.',
       Markup.inlineKeyboard([
         [Markup.button.callback('🏪 Recoger en tienda', 'change_to_pickup')],
         [Markup.button.callback('❌ Cancelar pedido', 'cancel_order')]
@@ -254,12 +209,19 @@ async function handleLocationMessage(ctx, userId, restaurantId, restaurantData) 
   }
 }
 
-// === MANEJO DE MENSAJES DE TEXTO ===
+// === MANEJO DE TEXTO ===
 async function handleTextMessage(ctx, userId, restaurantId, features) {
-  const session = userOrderSessions.get(userId);
-  if (!session) return;
+  console.log('📝 [handleTextMessage] Procesando texto...');
+  
+  const session = ctx.session?.cart;
+  
+  if (!session) {
+    console.log('⚠️ [handleTextMessage] No hay sesión activa');
+    return; // No hacer nada si no hay pedido activo
+  }
 
   const text = ctx.message.text.trim();
+  console.log(`📝 [handleTextMessage] Estado: ${session.step}, Texto: "${text.substring(0, 50)}"`);
 
   switch (session.step) {
     case SESSION_STATES.WAITING_ADDRESS:
@@ -268,6 +230,7 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
         return;
       }
       session.customerAddress = text;
+      console.log('✅ [handleTextMessage] Dirección guardada');
       
       if (features.askForPhone) {
         session.step = SESSION_STATES.WAITING_PHONE;
@@ -277,7 +240,7 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
         await askPaymentMethod(ctx, session, restaurantId);
       }
       break;
-
+      
     case SESSION_STATES.WAITING_PHONE:
       const phoneRegex = /^[\d\s\-\+\(\)]{8,}$/;
       if (!phoneRegex.test(text)) {
@@ -285,6 +248,7 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
         return;
       }
       session.customerPhone = text;
+      console.log('✅ [handleTextMessage] Teléfono guardado');
       
       if (features.askForName && !session.customerName) {
         session.step = SESSION_STATES.WAITING_NAME;
@@ -294,32 +258,34 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
         await askPaymentMethod(ctx, session, restaurantId);
       }
       break;
-
+      
     case SESSION_STATES.WAITING_NAME:
       if (text.length < 2) {
         await ctx.reply('👤 Por favor proporciona un nombre válido.');
         return;
       }
       session.customerName = text;
+      console.log('✅ [handleTextMessage] Nombre guardado');
       session.step = SESSION_STATES.SELECTING_PAYMENT;
       await askPaymentMethod(ctx, session, restaurantId);
       break;
-
+      
     default:
-      // Ignorar mensajes de texto en otros estados
+      console.log(`⚠️ [handleTextMessage] Estado no manejado: ${session.step}`);
       break;
   }
-
-  userOrderSessions.set(userId, session);
 }
 
-// === MOSTRAR MÉTODOS DE PAGO ===
+// === MÉTODOS DE PAGO ===
 async function askPaymentMethod(ctx, session, restaurantId) {
+  console.log('💳 [askPaymentMethod] Mostrando métodos de pago...');
+  
   const restaurantData = await configBotService.getRestaurantData(restaurantId);
   const paymentMethods = restaurantData.paymentMethods || [];
   const enabledMethods = paymentMethods.filter(pm => pm.enabled);
-
+  
   if (enabledMethods.length === 0) {
+    console.log('⚠️ [askPaymentMethod] No hay métodos de pago configurados');
     await ctx.reply('⚠️ No hay métodos de pago configurados. Por favor contacta al restaurante.');
     return;
   }
@@ -327,7 +293,9 @@ async function askPaymentMethod(ctx, session, restaurantId) {
   const buttons = enabledMethods.map(pm => 
     [Markup.button.callback(`💳 ${pm.name}`, `payment_${pm.id}`)]
   );
-
+  
+  console.log(`✅ [askPaymentMethod] Mostrando ${enabledMethods.length} métodos de pago`);
+  
   await ctx.reply(
     '💳 *Selecciona tu método de pago:*',
     {
@@ -337,10 +305,9 @@ async function askPaymentMethod(ctx, session, restaurantId) {
   );
 }
 
-// Exportar funciones auxiliares para interactionHandler
-module.exports.userOrderSessions = userOrderSessions;
+// Exportar
+module.exports = mainOrderHandler;
 module.exports.SESSION_STATES = SESSION_STATES;
-module.exports.sendMenuWithPhotos = sendMenuWithPhotos;
 module.exports.handleLocationMessage = handleLocationMessage;
 module.exports.handleTextMessage = handleTextMessage;
 module.exports.askPaymentMethod = askPaymentMethod;

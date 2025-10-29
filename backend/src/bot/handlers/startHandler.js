@@ -1,38 +1,34 @@
-// backend/src/bot/handlers/startHandler.js - ACTUALIZADO
+// backend/src/bot/handlers/startHandler.js - ACTUALIZADO Y LIMPIO
 const configBotService = require('../services/configBotService');
 const telegramUserService = require('../services/telegramUserService');
 const availabilityService = require('../../services/availabilityService');
 const { Markup } = require('telegraf');
 
 module.exports = async (ctx) => {
+  console.log(`[StartHandler] Recibido comando /start del usuario: ${ctx.from.id} a las ${new Date().toLocaleTimeString()}`);
   try {
     const firstName = ctx.from.first_name;
+    let restaurantId = null;
+    
+    // --- LÓGICA DE DEEP LINKING Y OBTENCIÓN DE ID ---
+    const startPayload = ctx.startPayload; // Telegraf nos da el parámetro aquí
 
-    // 🔑 CLAVE: Usar el contexto para identificar el restaurante
-    const restaurantId = await telegramUserService.getRestaurantIdByBotContext(ctx);
-
-    if (!restaurantId) {
-      const botInfo = await ctx.telegram.getMe();
-      console.error(`❌ No se encontró restaurante para bot @${botInfo.username}`);
-      
+    if (startPayload) {
+      // ¡El usuario viene de un QR o un enlace! El payload es nuestro ID de restaurante.
+      console.log(`[StartHandler] Deep link detectado con payload: ${startPayload}`);
+      restaurantId = startPayload;
+      await telegramUserService.linkChatToRestaurant(ctx.chat.id, restaurantId);
+    } else {
+      // El usuario escribió /start manualmente. NO se le permite continuar.
+      console.log(`[StartHandler] /start manual sin payload. Acceso denegado.`);
       await ctx.reply(
-        '⚠️ *Configuración Incompleta*\n\n' +
-        'Este bot aún no está vinculado a un restaurante.\n\n' +
-        '👨‍💼 Si eres el administrador:\n' +
-        '1. Ve al panel de administración\n' +
-        '2. Completa la configuración inicial\n' +
-        '3. Asegúrate de guardar el token del bot\n\n' +
-        `🤖 Bot ID: \
-`${botInfo.id}\
-`
-        `📝 Username: @${botInfo.username}`,
-        { 
-          parse_mode: 'Markdown',
-          reply_markup: { remove_keyboard: true }
-        }
+        `👋 ¡Hola!\n\nPara usar este bot y hacer pedidos, necesitas escanear el código QR que se encuentra en el restaurante.\n\nEsto nos ayuda a saber exactamente desde dónde nos contactas. ¡Gracias!`,
+        { reply_markup: { remove_keyboard: true } }
       );
-      return;
+      return; // Detener la ejecución
     }
+    
+    // --- El bloque 'if (!restaurantId)' se eliminó porque era redundante ---
 
     // Guardar info del usuario
     await telegramUserService.saveUserInfo(ctx.from, restaurantId);
@@ -47,7 +43,6 @@ module.exports = async (ctx) => {
     const restaurantName = restaurantData.info?.name || 'Nuestro Restaurante';
 
     // --- NUEVA VERIFICACIÓN: BOT HABILITADO ---
-    // (Comprobamos 'false' explícitamente, si no existe 'botEnabled' (undefined), se asume habilitado)
     if (features.botEnabled === false) {
       const disabledMessage = messages.botDisabled || 'El bot está temporalmente desactivado. Disculpa las molestias.';
       await ctx.reply(disabledMessage, {
@@ -67,27 +62,17 @@ module.exports = async (ctx) => {
       const dayKey = availabilityService.getDayKey(now.getDay());
       const todayHours = hours[dayKey];
 
-      let closedMessage = `👋 ¡Hola ${firstName}!
-
-`;
-      closedMessage += `Bienvenido a *${restaurantName}* 🍽️
-
-`;
-      closedMessage += `😔 Actualmente estamos *cerrados*
-
-`;
+      let closedMessage = `👋 ¡Hola ${firstName}!\n\n`;
+      closedMessage += `Bienvenido a *${restaurantName}* 🍽️\n\n`;
+      closedMessage += `😔 Actualmente estamos *cerrados*\n\n`;
 
       if (availability.reason) {
-        closedMessage += `📋 ${availability.reason}
-
-`;
+        closedMessage += `📋 ${availability.reason}\n\n`;
       }
 
       if (todayHours && !todayHours.closed) {
-        closedMessage += `⏰ *Horario de hoy:*
-`;
-        closedMessage += `   Abrimos: ${todayHours.open}
-`;
+        closedMessage += `⏰ *Horario de hoy:*\n`;
+        closedMessage += `   Abrimos: ${todayHours.open}\n`;
         closedMessage += `   Cerramos: ${todayHours.close}`;
       }
 
@@ -106,6 +91,7 @@ module.exports = async (ctx) => {
       .replace('{nombre}', firstName)
       .replace('{restaurante}', restaurantName);
 
+      console.log(`[StartHandler] Enviando respuesta de bienvenida a ${ctx.from.id}...`);
     await ctx.reply(`${welcomeMessage}\n\n✨ Estamos *abiertos* y listos para atenderte`, {
       parse_mode: 'Markdown'
     });
@@ -128,7 +114,7 @@ module.exports = async (ctx) => {
     );
 
   } catch (error) {
-    console.error('Error en startHandler:', error);
+    console.error(`[StartHandler] 💥 Error procesando /start para ${ctx.from.id}:`, error);
     await ctx.reply(
       '❌ Hubo un error al procesar tu solicitud.\n\n' +
       'Por favor intenta nuevamente con /start'

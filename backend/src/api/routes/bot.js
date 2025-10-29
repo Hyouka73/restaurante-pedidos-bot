@@ -2,14 +2,15 @@
 const express = require('express');
 const router = express.Router();
 const botService = require('../../services/botService');
-const { verifyToken, verifyOwner } = require('../middleware/auth');
+const { verifyTokenAndOwner } = require('../middleware/auth');
 
 // POST /api/bot/:restaurantId/start
-router.post('/:restaurantId/start', verifyToken, verifyOwner, async (req, res) => {
+router.post('/:restaurantId/start', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const { webhook_url } = req.body; // opcional
 
+    console.log(`[API - bot] Solicitud para iniciar bot ${restaurantId}`);
     await botService.initBot(restaurantId);
     
     if (webhook_url) {
@@ -25,7 +26,7 @@ router.post('/:restaurantId/start', verifyToken, verifyOwner, async (req, res) =
 });
 
 // POST /api/bot/:restaurantId/stop
-router.post('/:restaurantId/stop', verifyToken, verifyOwner, async (req, res) => {
+router.post('/:restaurantId/stop', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const stopped = await botService.stopBot(restaurantId);
@@ -37,7 +38,7 @@ router.post('/:restaurantId/stop', verifyToken, verifyOwner, async (req, res) =>
 });
 
 // GET /api/bot/:restaurantId/status
-router.get('/:restaurantId/status', verifyToken, verifyOwner, async (req, res) => {
+router.get('/:restaurantId/status', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const status = await botService.getStatus(restaurantId);
@@ -49,7 +50,7 @@ router.get('/:restaurantId/status', verifyToken, verifyOwner, async (req, res) =
 });
 
 // POST /api/bot/:restaurantId/webhook
-router.post('/:restaurantId/webhook', verifyToken, verifyOwner, async (req, res) => {
+router.post('/:restaurantId/webhook', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const { url } = req.body;

@@ -2,14 +2,21 @@
 const express = require('express');
 const router = express.Router();
 const discountRuleController = require('../controllers/discountRuleController');
-const authMiddleware = require('../middleware/auth'); // Proteger las rutas
+const { verifyTokenAndOwner } = require('../middleware/auth');
 
-// Todas las rutas aquí están protegidas y requieren autenticación
-router.use(authMiddleware);
+// ✅ CORRECCIÓN: Todas las rutas ahora incluyen restaurantId
+// y usan verifyTokenAndOwner para verificar permisos
 
-router.get('/', discountRuleController.getRules);
-router.post('/', discountRuleController.createRule);
-router.put('/:ruleId', discountRuleController.updateRule);
-router.delete('/:ruleId', discountRuleController.deleteRule);
+// GET /api/discount-rules/:restaurantId
+router.get('/:restaurantId', verifyTokenAndOwner, discountRuleController.getRules);
+
+// POST /api/discount-rules/:restaurantId
+router.post('/:restaurantId', verifyTokenAndOwner, discountRuleController.createRule);
+
+// PUT /api/discount-rules/:restaurantId/:ruleId
+router.put('/:restaurantId/:ruleId', verifyTokenAndOwner, discountRuleController.updateRule);
+
+// DELETE /api/discount-rules/:restaurantId/:ruleId
+router.delete('/:restaurantId/:ruleId', verifyTokenAndOwner, discountRuleController.deleteRule);
 
 module.exports = router;

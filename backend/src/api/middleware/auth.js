@@ -1,45 +1,76 @@
 // backend/src/api/middleware/auth.js
-const { admin } = require('../../config/firebase');
-const authService = require('../../services/authService');
+const { admin, db } = require('../../config/firebase');
 
-// Middleware para verificar token de Firebase Auth
-const verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1]; // Bearer <token>
+/**
+ * Middleware para verificar el token de Firebase y el perfil del usuario en Firestore.
+ * Obtiene el token, lo verifica con Firebase Auth, y luego busca el perfil
+ * del usuario y su restaurante en Firestore.
+ * 
+ * Si todo es correcto, adjunta `req.user` y `req.restaurant` al objeto de solicitud.
+ */
+const verifyTokenAndGetProfile = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
+
   if (!token) {
-    return res.status(401).json({ error: 'Token no proporcionado' });
+    return res.status(401).json({ error: 'Token no proporcionado.' });
   }
 
   try {
+    // 1. Verificar el token JWT con Firebase Auth
     const decodedToken = await admin.auth().verifyIdToken(token);
-    req.user = decodedToken; // Agrega los datos del usuario al request
-    next();
-  } catch (error) {
-    console.error("Error verificando token:", error);
-    res.status(401).json({ error: 'Token inválido' });
-  }
-};
+    req.user = decodedToken; // Adjuntar info del token (uid, email, etc.)
 
-// Middleware para verificar que el usuario es dueño del restaurante
-const verifyOwner = async (req, res, next) => {
-  try {
-    const restaurantData = await authService.getRestaurantByUserUid(req.user.uid);
-    console.log('[verifyOwner] Comparando IDs:', {
-      fromURL: req.params.restaurantId,
-      fromDB: restaurantData.restaurantId,
-      userUID: req.user.uid
-    });
-    if (restaurantData.restaurantId !== req.params.restaurantId) {
-      return res.status(403).json({ error: 'No autorizado para acceder a este restaurante' });
+    // 2. Obtener el perfil del usuario desde Firestore
+    const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+    if (!userDoc.exists) {
+      return res.status(403).json({ error: 'Perfil de usuario no encontrado en la base de datos.' });
     }
-    req.restaurantId = restaurantData.restaurantId; // Pasar el ID a los handlers
-    next();
+    const userData = userDoc.data();
+    req.restaurantId = userData.restaurantId; // Adjuntar el ID del restaurante
+
+    next(); // Todo correcto, continuar a la ruta
   } catch (error) {
-    console.error('Error en middleware verifyOwner:', error);
-    return res.status(500).json({ error: 'Error interno del servidor' });
+    console.error("Error en middleware de autenticación (getProfile):", error);
+    res.status(401).json({ error: 'Token inválido o expirado.' });
   }
 };
 
-module.exports = {
-  verifyToken,
-  verifyOwner
+/**
+ * Middleware para verificar el token de Firebase y que el usuario sea dueño
+ * del restaurante especificado en `req.params.restaurantId`.
+ * Es una versión más estricta que `verifyTokenAndGetProfile`.
+ */
+const verifyTokenAndOwner = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
+
+  if (!token) {
+    return res.status(401).json({ error: 'Token no proporcionado.' });
+  }
+
+  try {
+    // 1. Verificar el token JWT con Firebase Auth
+    const decodedToken = await admin.auth().verifyIdToken(token);
+    req.user = decodedToken; // Adjuntar info del token (uid, email, etc.)
+
+    // 2. Obtener el perfil del usuario desde Firestore
+    const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+    if (!userDoc.exists) {
+      return res.status(403).json({ error: 'Perfil de usuario no encontrado en la base de datos.' });
+    }
+    const userData = userDoc.data();
+
+    // 3. Verificar que el usuario es dueño del restaurante solicitado
+    if (userData.restaurantId !== req.params.restaurantId) {
+      return res.status(403).json({ error: 'No autorizado para acceder a este recurso.' });
+    }
+
+    next(); // Todo correcto, continuar a la ruta
+  } catch (error) {
+    console.error("Error en middleware de autenticación:", error);
+    res.status(401).json({ error: 'Token inválido o expirado.' });
+  }
 };
+
+module.exports = { verifyTokenAndOwner, verifyTokenAndGetProfile };

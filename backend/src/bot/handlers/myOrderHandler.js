@@ -44,7 +44,8 @@ function formatOrderStatus(order) {
   return message;
 }
 
-module.exports = async (ctx) => {
+// Renombramos la función principal
+const mainMyOrderHandler = async (ctx) => {
   try {
     const userId = ctx.from.id;
 
@@ -80,5 +81,8 @@ module.exports = async (ctx) => {
   }
 };
 
-// Export formatOrderStatus to be used in other handlers if needed
+// Exporta el handler principal por defecto
+module.exports = mainMyOrderHandler; 
+
+// Exporta la función de formato de forma nombrada
 module.exports.formatOrderStatus = formatOrderStatus;

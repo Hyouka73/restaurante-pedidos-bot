@@ -1,27 +1,12 @@
 // backend/src/api/routes/user.js
 const express = require('express');
 const authService = require('../../services/authService');
-const { admin } = require('../../config/firebase');
+const { verifyTokenAndGetProfile } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Middleware para verificar token de Firebase Auth
-const verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ error: 'Token no proporcionado' });
-  }
-  try {
-    const decodedToken = await admin.auth().verifyIdToken(token);
-    req.user = decodedToken;
-    next();
-  } catch (error) {
-    res.status(401).json({ error: 'Token inválido' });
-  }
-};
-
 // GET /api/user/notification-prefs
-router.get('/notification-prefs', verifyToken, async (req, res) => {
+router.get('/notification-prefs', verifyTokenAndGetProfile, async (req, res) => {
   try {
     const { uid } = req.user;
     const prefs = await authService.getUserNotificationPrefs(uid);
@@ -32,7 +17,7 @@ router.get('/notification-prefs', verifyToken, async (req, res) => {
 });
 
 // PUT /api/user/notification-prefs
-router.put('/notification-prefs', verifyToken, async (req, res) => {
+router.put('/notification-prefs', verifyTokenAndGetProfile, async (req, res) => {
   try {
     const { uid } = req.user;
     const prefs = req.body;

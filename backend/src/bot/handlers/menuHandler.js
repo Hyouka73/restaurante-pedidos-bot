@@ -105,9 +105,8 @@ async function showMenuView(ctx, page = 1, isEdit = false) {
 
 // El manejador principal del comando /menu ahora solo llama a la nueva función
 const menuHandler = async (ctx) => {
-    await showMenuView(ctx, 1, false);
+  await showMenuView(ctx, 1, false);
 };
 
 // Exportar tanto el manejador como la función reutilizable
-module.exports = menuHandler;
-module.exports.showMenuView = showMenuView;
+module.exports = { menuHandler, showMenuView };

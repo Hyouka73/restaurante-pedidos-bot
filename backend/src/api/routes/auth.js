@@ -40,10 +40,18 @@ const verifyTokenAndProfile = async (req, res, next) => {
     if (!userDoc.exists) {
       return res.status(404).json({ error: 'Usuario no encontrado en la base de datos (verifyTokenAndProfile).' });
     }
+    
     const userData = userDoc.data();
-    req.restaurantId = userData.restaurantId;
+    const restaurantId = userData.restaurantId;
+    req.restaurantId = restaurantId; // Adjuntar ID para compatibilidad
 
-    // Opcional: Verificar restaurantDoc.exists también
+    // Obtener y adjuntar los datos completos del restaurante
+    const restaurantDoc = await admin.firestore().collection('restaurants').doc(restaurantId).get();
+    if (!restaurantDoc.exists) {
+      return res.status(404).json({ error: 'Restaurante asociado no encontrado (verifyTokenAndProfile).' });
+    }
+    req.restaurant = { id: restaurantDoc.id, ...restaurantDoc.data() };
+
     next();
   } catch (error) {
     console.error("Error verificando token o perfil:", error);
@@ -92,14 +100,14 @@ router.post('/ensure-profile', verifyFirebaseToken, async (req, res) => {
 // Esta ruta SÍ requiere que el perfil exista.
 router.get('/profile', verifyTokenAndProfile, async (req, res) => {
   try {
-    const profile = await authService.getRestaurantByUserUid(req.user.uid);
+    // La información ya fue cargada por el middleware verifyTokenAndProfile
     res.json({
       user: {
         uid: req.user.uid,
         email: req.user.email,
         displayName: req.user.displayName,
       },
-      restaurant: profile
+      restaurant: req.restaurant // Usar los datos adjuntos
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

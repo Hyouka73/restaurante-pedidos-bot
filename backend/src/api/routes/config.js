@@ -2,49 +2,11 @@
 const express = require('express');
 const availabilityService = require('../../services/availabilityService');
 const configService = require('../../services/configService'); // Importar configService
-const authService = require('../../services/authService'); // Importar authService para verificación de dueño
-const { admin } = require('../../config/firebase'); // Para verificar el token de Firebase Auth
+const { verifyTokenAndOwner } = require('../middleware/auth');
 const router = express.Router();
 
-// Middleware para verificar token de Firebase Auth
-const verifyToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1]; // Bearer <token>
-  if (!token) {
-    return res.status(401).json({ error: 'Token no proporcionado' });
-  }
-
-  try {
-    const decodedToken = await admin.auth().verifyIdToken(token);
-    req.user = decodedToken; // Agrega los datos del usuario al request
-    next();
-  } catch (error) {
-    console.error("Error verificando token:", error);
-    res.status(401).json({ error: 'Token inválido' });
-  }
-};
-
-// Middleware para verificar que el usuario es dueño del restaurante
-const verifyOwner = async (req, res, next) => {
-  try {
-    const restaurantData = await authService.getRestaurantByUserUid(req.user.uid);
-    console.log('[verifyOwner] Comparando IDs:', {
-      fromURL: req.params.restaurantId,
-      fromDB: restaurantData.restaurantId,
-      userUID: req.user.uid
-    });
-    if (restaurantData.restaurantId !== req.params.restaurantId) {
-      return res.status(403).json({ error: 'No autorizado para acceder a este restaurante' });
-    }
-    req.restaurantId = restaurantData.restaurantId; // Pasar el ID a los handlers
-    next();
-  } catch (error) {
-    console.error('Error en middleware verifyOwner:', error);
-    return res.status(500).json({ error: 'Error interno del servidor' });
-  }
-};
-
 // GET /api/config/:restaurantId/general
-router.get('/:restaurantId/general', verifyToken, verifyOwner, async (req, res) => {
+router.get('/:restaurantId/general', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     // CORREGIDO: Usar configService en lugar de authService
@@ -56,7 +18,7 @@ router.get('/:restaurantId/general', verifyToken, verifyOwner, async (req, res) 
 });
 
 // GET /api/config/:restaurantId/today-schedule
-router.get('/:restaurantId/today-schedule', verifyToken, verifyOwner, async (req, res) => {
+router.get('/:restaurantId/today-schedule', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const schedule = await availabilityService.getTodaySchedule(restaurantId);
@@ -67,7 +29,7 @@ router.get('/:restaurantId/today-schedule', verifyToken, verifyOwner, async (req
 });
 
 // PUT /api/config/:restaurantId/general
-router.put('/:restaurantId/general', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/general', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const updateData = req.body;
@@ -80,7 +42,7 @@ router.put('/:restaurantId/general', verifyToken, verifyOwner, async (req, res) 
 });
 
 // PUT /api/config/:restaurantId/bot-token
-router.put('/:restaurantId/bot-token', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/bot-token', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const { token } = req.body;
@@ -93,7 +55,7 @@ router.put('/:restaurantId/bot-token', verifyToken, verifyOwner, async (req, res
 });
 
 // POST /api/config/:restaurantId/validate-bot-token
-router.post('/:restaurantId/validate-bot-token', verifyToken, verifyOwner, async (req, res) => {
+router.post('/:restaurantId/validate-bot-token', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     // Obtener token encriptado desde Firestore
@@ -128,7 +90,7 @@ router.post('/:restaurantId/validate-bot-token', verifyToken, verifyOwner, async
 });
 
 // PUT /api/config/:restaurantId/mark-setup-completed
-router.put('/:restaurantId/mark-setup-completed', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/mark-setup-completed', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     // CORREGIDO: Usar configService en lugar de authService
@@ -140,7 +102,7 @@ router.put('/:restaurantId/mark-setup-completed', verifyToken, verifyOwner, asyn
 });
 
 // PUT /api/config/:restaurantId/availability (Ejemplo para actualizar disponibilidad manual)
-router.put('/:restaurantId/availability', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/availability', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const { status, reason } = req.body;
@@ -153,7 +115,7 @@ router.put('/:restaurantId/availability', verifyToken, verifyOwner, async (req, 
 });
 
 // PUT /api/config/:restaurantId/availability-settings (Ejemplo)
-router.put('/:restaurantId/availability-settings', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/availability-settings', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const settings = req.body;
@@ -166,7 +128,7 @@ router.put('/:restaurantId/availability-settings', verifyToken, verifyOwner, asy
 });
 
 // PUT /api/config/:restaurantId/hours (Ejemplo)
-router.put('/:restaurantId/hours', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/hours', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const hours = req.body;
@@ -179,7 +141,7 @@ router.put('/:restaurantId/hours', verifyToken, verifyOwner, async (req, res) =>
 });
 
 // PUT /api/config/:restaurantId/delivery (Ejemplo)
-router.put('/:restaurantId/delivery', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/delivery', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const delivery = req.body;
@@ -192,7 +154,7 @@ router.put('/:restaurantId/delivery', verifyToken, verifyOwner, async (req, res)
 });
 
 // PUT /api/config/:restaurantId/payment-methods (Ejemplo)
-router.put('/:restaurantId/payment-methods', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/payment-methods', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const paymentMethods = req.body;
@@ -205,7 +167,7 @@ router.put('/:restaurantId/payment-methods', verifyToken, verifyOwner, async (re
 });
 
 // PUT /api/config/:restaurantId/features (Ejemplo)
-router.put('/:restaurantId/features', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/features', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const features = req.body;
@@ -218,7 +180,7 @@ router.put('/:restaurantId/features', verifyToken, verifyOwner, async (req, res)
 });
 
 // PUT /api/config/:restaurantId/commands (Ejemplo)
-router.put('/:restaurantId/commands', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/commands', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const commands = req.body;
@@ -231,7 +193,7 @@ router.put('/:restaurantId/commands', verifyToken, verifyOwner, async (req, res)
 });
 
 // GET /api/config/:restaurantId/messages
-router.get('/:restaurantId/messages', verifyToken, verifyOwner, async (req, res) => {
+router.get('/:restaurantId/messages', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const messages = await configService.getMessages(restaurantId);
@@ -242,7 +204,7 @@ router.get('/:restaurantId/messages', verifyToken, verifyOwner, async (req, res)
 });
 
 // DEV-only: GET debug info about stored telegram token (no plaintext returned)
-router.get('/:restaurantId/_debug-telegram-token', verifyToken, verifyOwner, async (req, res) => {
+router.get('/:restaurantId/_debug-telegram-token', verifyTokenAndOwner, async (req, res) => {
   try {
     if (process.env.NODE_ENV === 'production') {
       return res.status(403).json({ error: 'Debug endpoint disabled in production' });
@@ -296,7 +258,7 @@ router.get('/:restaurantId/_debug-telegram-token', verifyToken, verifyOwner, asy
 });
 
 // PUT /api/config/:restaurantId/messages
-router.put('/:restaurantId/messages', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/messages', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const messages = req.body;
@@ -308,7 +270,7 @@ router.put('/:restaurantId/messages', verifyToken, verifyOwner, async (req, res)
 });
 
 // GET /api/config/:restaurantId/notifications
-router.get('/:restaurantId/notifications', verifyToken, verifyOwner, async (req, res) => {
+router.get('/:restaurantId/notifications', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const settings = await configService.getNotificationSettings(restaurantId);
@@ -319,7 +281,7 @@ router.get('/:restaurantId/notifications', verifyToken, verifyOwner, async (req,
 });
 
 // PUT /api/config/:restaurantId/notifications
-router.put('/:restaurantId/notifications', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/notifications', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const settings = req.body;
@@ -333,7 +295,7 @@ router.put('/:restaurantId/notifications', verifyToken, verifyOwner, async (req,
 // --- RUTAS AÑADIDAS PARA HABILITAR/DESHABILITAR EL BOT ---
 
 // POST /api/config/:restaurantId/bot-enable
-router.post('/:restaurantId/bot-enable', verifyToken, verifyOwner, async (req, res) => {
+router.post('/:restaurantId/bot-enable', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const result = await configService.enableBot(restaurantId);
@@ -344,7 +306,7 @@ router.post('/:restaurantId/bot-enable', verifyToken, verifyOwner, async (req, r
 });
 
 // POST /api/config/:restaurantId/bot-disable
-router.post('/:restaurantId/bot-disable', verifyToken, verifyOwner, async (req, res) => {
+router.post('/:restaurantId/bot-disable', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const result = await configService.disableBot(restaurantId);

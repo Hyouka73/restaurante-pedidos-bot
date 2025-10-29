@@ -1,55 +1,132 @@
+// backend/server.js - VERSIÓN PARA VERCEL SERVERLESS
+console.log("🚀 [server.js] Iniciando...");
+
 require('dotenv').config();
-const cors = require('cors');
 const express = require('express');
-const bot = require('./src/config/telegram');
+const cors = require('cors');
+const { Telegraf } = require('telegraf');
+const { session } = require('telegraf');
+const { Redis } = require('@telegraf/session/redis');
 
+// ===== CONFIGURACIÓN EXPRESS =====
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Verificar variables de entorno críticas
-if (!process.env.TOKEN_SECRET) {
-  console.warn('⚠️ TOKEN_SECRET is not set in environment. crypto operations will fail.');
-} else {
-  console.log('🔐 TOKEN_SECRET configurado (${process.env.TOKEN_SECRET.length} chars)');
-}
+// Middleware JSON (ANTES de las rutas)
+app.use(express.json());
 
-// Configuración de CORS
-const whitelist = [
-  'http://localhost:5173', 
-  'http://localhost:3000', 
-  'http://localhost:5174',
-  'https://restbot-pwa.vercel.app' // <-- SOLUCIÓN: Añadir tu URL de producción
-];
-
-// Añadir la URL de la variable de entorno SI existe y no está ya en la lista
-if (process.env.FRONTEND_URL && whitelist.indexOf(process.env.FRONTEND_URL) === -1) {
-  whitelist.push(process.env.FRONTEND_URL);
-}
-
+// CORS
 const corsOptions = {
-  origin: function (origin, callback) {
-    
-    // 1. Permitir peticiones sin origen (Postman, apps móviles)
-    // 2. Permitir orígenes en la lista blanca (localhost, producción)
-    // 3. Permitir CUALQUIER subdominio de Vercel para tu app (maneja previews)
-    if (!origin || whitelist.indexOf(origin) !== -1 || origin.endsWith('-restbot-pwa.vercel.app')) {
-      callback(null, true);
-    } else {
-      // Loguear el origen bloqueado para depuración
-      console.error('CORS Bloqueado para el origen:', origin); 
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: process.env.NODE_ENV === 'production' 
+    ? process.env.FRONTEND_URL 
+    : ['http://localhost:5173', 'http://localhost:3001', 'http://localhost:5174'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
-
-// SOLUCIÓN: Aplicar CORS a nivel de aplicación y manejar preflight requests
 app.use(cors(corsOptions));
-app.use(express.json());
 
-// Rutas de API
+// ===== CONFIGURACIÓN BOT =====
+console.log("🤖 [server.js] Configurando bot...");
+
+const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+
+// ✅ CONFIGURAR SESIÓN REDIS (ANTES DE HANDLERS)
+const redisUrl = process.env.KV_URL;
+if (!redisUrl) {
+  console.error('❌ [server.js] KV_URL no encontrado en variables de entorno');
+  throw new Error('KV_URL es requerido para sesiones');
+}
+
+console.log("📦 [server.js] Conectando a Redis...");
+const store = Redis({ 
+  url: redisUrl,
+  connectTimeout: 10000,
+  commandTimeout: 5000,
+  lazyConnect: false
+});
+
+// Middleware de sesión (CRÍTICO: ANTES de handlers)
+bot.use(session({ 
+  store: store, 
+  ttl: 60 * 60 * 24 * 3, // 3 días
+  getSessionKey: (ctx) => {
+    if (ctx.chat && ctx.from) {
+      return `${ctx.chat.id}:${ctx.from.id}`;
+    }
+    return null;
+  }
+}));
+
+console.log("✅ [server.js] Sesión Redis configurada");
+
+// ===== IMPORTAR HANDLERS =====
+const startHandler = require('./src/bot/handlers/startHandler');
+const { menuHandler } = require('./src/bot/handlers/menuHandler');
+const orderHandler = require('./src/bot/handlers/orderHandler');
+const myOrderHandler = require('./src/bot/handlers/myOrderHandler');
+const interactionHandler = require('./src/bot/middleware/interactionHandler');
+
+// ===== REGISTRAR HANDLERS =====
+console.log("🔧 [server.js] Registrando handlers...");
+
+bot.command('start', startHandler);
+bot.command('menu', menuHandler);
+bot.command('pedido', orderHandler);
+bot.command('mipedido', myOrderHandler);
+
+// Callback queries (botones inline)
+bot.on('callback_query', interactionHandler);
+
+// Mensajes de texto
+bot.on('text', async (ctx) => {
+  if (!ctx.message.text.startsWith('/')) {
+    await orderHandler(ctx);
+  }
+});
+
+// Ubicaciones
+bot.on('location', orderHandler);
+
+// Contactos
+bot.on('contact', async (ctx) => {
+  const contact = ctx.message.contact;
+  console.log('📞 [server.js] Contacto recibido:', contact.phone_number);
+  
+  if (!ctx.session || !ctx.session.cart) {
+    await ctx.reply('No hay un pedido activo. Usa /pedido para comenzar.');
+    return;
+  }
+  
+  ctx.session.cart.customerPhone = contact.phone_number;
+  ctx.session.cart.customerName = `${contact.first_name} ${contact.last_name || ''}`.trim();
+  
+  await ctx.reply('✅ Información de contacto guardada.');
+  await orderHandler(ctx);
+});
+
+// Error handler
+bot.catch((err, ctx) => {
+  console.error('❌ [server.js] Error en bot:', err);
+  ctx.reply('Ocurrió un error. Por favor intenta de nuevo o usa /start').catch(console.error);
+});
+
+console.log("✅ [server.js] Handlers registrados");
+
+// ===== RUTA WEBHOOK (CRÍTICA PARA VERCEL) =====
+app.post('/api/webhook', async (req, res) => {
+  console.log('📨 [webhook] Recibido:', JSON.stringify(req.body).substring(0, 100));
+  
+  try {
+    await bot.handleUpdate(req.body);
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('❌ [webhook] Error:', error);
+    // Siempre responder 200 para evitar reintentos de Telegram
+    res.status(200).json({ ok: false, error: error.message });
+  }
+});
+
+// ===== RUTAS API =====
 const configRoutes = require('./src/api/routes/config');
 const authRoutes = require('./src/api/routes/auth');
 const menuRoutes = require('./src/api/routes/menu');
@@ -59,8 +136,9 @@ const botApiRoutes = require('./src/api/routes/bot');
 const chatbotApiRoutes = require('./src/api/routes/chatbot');
 const userRoutes = require('./src/api/routes/user');
 const dashboardRoutes = require('./src/api/routes/dashboard');
-const { router: eventsRoutes } = require('./src/api/routes/events'); // Import SSE router
+const { router: eventsRoutes } = require('./src/api/routes/events');
 const discountRulesRoutes = require('./src/api/routes/discountRules');
+const qrRoutes = require('./src/api/routes/qr');
 
 app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
@@ -72,171 +150,75 @@ app.use('/api/chatbot', chatbotApiRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/discount-rules', discountRulesRoutes);
-app.use('/api/events', eventsRoutes); // Use SSE router
+app.use('/api/qr', qrRoutes);
+app.use('/api/events', eventsRoutes);
 
-// Health check
+// ===== RUTAS AUXILIARES =====
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date(),
-    botConnected: bot.botInfo ? true : false
+    botConfigured: !!process.env.TELEGRAM_BOT_TOKEN,
+    redisConfigured: !!process.env.KV_URL
   });
 });
 
-// Ruta raíz
+app.get('/api', (req, res) => {
+  res.json({
+    message: 'RestBot API',
+    version: '1.0.0',
+    status: 'running',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 app.get('/', (req, res) => {
   res.json({
-    message: 'RestBot API - Sistema de Pedidos',
-    version: '1.0.0',
-    status: 'running'
+    message: 'RestBot - Sistema de Pedidos',
+    webhook: '/api/webhook',
+    api: '/api',
+    health: '/health'
   });
 });
 
-// ============================================ 
-// CONFIGURACIÓN DEL BOT DE TELEGRAM
-// ============================================ 
-
-const LocalSession = require('telegraf-session-local');
-
-// Middleware de sesión. Guarda la sesión en un archivo local.
-bot.use((new LocalSession({ database: 'sessions.json' })).middleware());
-
-// Importar handlers
-const startHandler = require('./src/bot/handlers/startHandler');
-const menuHandler = require('./src/bot/handlers/menuHandler');
-const orderHandler = require('./src/bot/handlers/orderHandler');
-const myOrderHandler = require('./src/bot/handlers/myOrderHandler');
-const interactionHandler = require('./src/bot/middleware/interactionHandler');
-
-// Registrar comandos
-bot.command('start', startHandler);
-bot.command('menu', menuHandler);
-bot.command('pedido', orderHandler);
-bot.command('mipedido', myOrderHandler);
-
-// Handler para callback queries (botones inline)
-bot.on('callback_query', interactionHandler);
-
-// Handler para mensajes de texto (no comandos)
-bot.on('text', async (ctx) => {
-  if (!ctx.message.text.startsWith('/')) {
-    await orderHandler(ctx);
-  }
+// ===== MANEJO DE ERRORES =====
+app.use((err, req, res, next) => {
+  console.error('❌ [server.js] Error Express:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: err.message 
+  });
 });
 
-// Handler para ubicaciones
-bot.on('location', orderHandler);
+// ===== INICIO DIFERENCIAL =====
+if (process.env.NODE_ENV !== 'production') {
+  // MODO LOCAL: Usar polling
+  console.log("🔧 [server.js] MODO DESARROLLO - Iniciando polling...");
+  
+  bot.launch().then(() => {
+    console.log("✅ [server.js] Bot iniciado en modo polling");
+  }).catch(err => {
+    console.error("❌ [server.js] Error iniciando bot:", err);
+  });
 
-// Handler para contactos (opcional)
-bot.on('contact', async (ctx) => {
-  const phoneNumber = ctx.message.contact.phone_number;
-  await ctx.reply(
-    `📞 Teléfono recibido: ${phoneNumber}\n\n` +
-    'Gracias por compartir tu información.'
-  );
-});
+  // Limpiar webhook si existe
+  bot.telegram.deleteWebhook().catch(console.error);
 
-// Manejo de errores del bot
-bot.catch((err, ctx) => {
-  console.error(`❌ [Bot Error] Update ${ctx.update.update_id}:`, err);
-  try {
-    ctx.reply(
-      '❌ Ocurrió un error inesperado.\n\n' +
-      'Por favor intenta nuevamente o contacta al restaurante.'
-    ).catch(e => console.error('Error enviando mensaje de error:', e));
-  } catch (replyError) {
-    console.error('No se pudo enviar mensaje de error:', replyError);
-  }
-});
+  // Iniciar servidor Express
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`✅ [server.js] Servidor escuchando en http://localhost:${PORT}`);
+  });
 
-// ============================================ 
-// INICIAR SERVIDOR Y BOT
-// ============================================ 
+  // Graceful shutdown
+  process.once('SIGINT', () => bot.stop('SIGINT'));
+  process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-let botLaunched = false;
-
-async function launchBot() {
-  if (botLaunched) {
-    console.log('⚠️ Bot ya está en ejecución');
-    return;
-  }
-
-  try {
-    // Eliminar webhook y usar polling
-    await bot.telegram.deleteWebhook();
-    console.log('🗑️ Webhook eliminado (usando polling)');
-
-    // Verificar conexión
-    const botInfo = await bot.telegram.getMe();
-    console.log(`✅ Bot conectado: @${botInfo.username} (ID: ${botInfo.id})`);
-
-    // Configurar comandos en Telegram
-    await bot.telegram.setMyCommands([
-      { command: 'start', description: 'Iniciar conversación' },
-      { command: 'menu', description: 'Ver menú completo' },
-      { command: 'pedido', description: 'Hacer un pedido' },
-      { command: 'mipedido', description: 'Ver estado de mi pedido' }
-    ]);
-    console.log('✅ Comandos registrados en Telegram');
-
-    // Lanzar bot
-    await bot.launch({
-      dropPendingUpdates: true,
-      allowedUpdates: ['message', 'callback_query', 'edited_message']
-    });
-
-    botLaunched = true;
-    console.log('🤖 Bot iniciado correctamente en modo polling');
-
-  } catch (error) {
-    console.error('❌ Error al iniciar el bot:', error.message);
-    
-    if (error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
-      console.log('🔄 Problema de conexión. Reintentando en 10 segundos...');
-      setTimeout(launchBot, 10000);
-    } else if (error.response?.error_code === 409) {
-      console.error('⚠️ Conflicto: el bot ya está corriendo en otro proceso o con webhook activo');
-      console.log('Solución: Detén otros procesos del bot o espera 5 minutos');
-    } else {
-      throw error;
-    }
-  }
+} else {
+  // MODO PRODUCCIÓN: Webhook (Vercel)
+  console.log("🚀 [server.js] MODO PRODUCCIÓN - Configurado para webhook");
 }
 
-// Manejo de cierre graceful
-process.once('SIGINT', () => {
-  console.log('📴 Deteniendo bot (SIGINT)...');
-  bot.stop('SIGINT');
-  process.exit(0);
-});
-
-process.once('SIGTERM', () => {
-  console.log('📴 Deteniendo bot (SIGTERM)...');
-  bot.stop('SIGTERM');
-  process.exit(0);
-});
-
-// Manejo de errores no capturados
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  // En producción, podrías querer reiniciar el proceso aquí
-});
-
-// Iniciar servidor
-app.listen(PORT, async () => {
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-  console.log(`📍 API: http://localhost:${PORT}`);
-  console.log(`🏥 Health: http://localhost:${PORT}/health`);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  
-  // Iniciar bot
-  console.log('🤖 Iniciando bot de Telegram...');
-  await launchBot();
-});
-
+// ===== EXPORTAR PARA VERCEL =====
+console.log("✅ [server.js] Configuración completa");
 module.exports = app;

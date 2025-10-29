@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import DiscountRuleForm from '../components/config/DiscountRuleForm';
+import { useRestaurant } from '../context/RestaurantContext';
 import Loader from '../components/ui/Loader';
-
 import { Plus, Edit, Trash2 } from 'lucide-react';
 
 const DiscountRules = () => {
@@ -13,20 +13,33 @@ const DiscountRules = () => {
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [selectedRule, setSelectedRule] = useState(null);
   const [saving, setSaving] = useState(false);
+  
+  // ✅ CORRECCIÓN: Usar el hook correctamente
+  const { data: restaurantData, loading: loadingRestaurant } = useRestaurant();
+  const restaurantId = restaurantData?.id;
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!restaurantId) {
+      setLoading(loadingRestaurant);
+      return;
+    }
+    fetchData(restaurantId);
+  }, [restaurantId, loadingRestaurant]);
 
-  const fetchData = async () => {
+  const fetchData = async (currentRestaurantId) => {
+    if (!currentRestaurantId) return;
+
     try {
       setLoading(true);
+      
+      // ✅ CORRECCIÓN: Incluir restaurantId en las rutas
       const [rulesRes, itemsRes] = await Promise.all([
-        api.get('/discount-rules'),
-        api.get('/menu/items')
+        api.get(`/discount-rules/${currentRestaurantId}`),
+        api.get(`/menu/${currentRestaurantId}/items`)
       ]);
-      setRules(rulesRes.data);
-      setMenuItems(itemsRes.data);
+      
+      setRules(Array.isArray(rulesRes) ? rulesRes : []);
+      setMenuItems(Array.isArray(itemsRes) ? itemsRes : []);
       setError(null);
     } catch (err) {
       setError('Error al cargar los datos. Por favor, intenta de nuevo.');
@@ -38,13 +51,21 @@ const DiscountRules = () => {
 
   const handleSave = async (ruleData) => {
     try {
-      setSaving(true);
-      if (ruleData.id) {
-        await api.put(`/discount-rules/${ruleData.id}`, ruleData);
-      } else {
-        await api.post('/discount-rules', ruleData);
+      if (!restaurantId) {
+        setError('No se pudo guardar la regla: ID de restaurante no disponible.');
+        return;
       }
-      await fetchData();
+      
+      setSaving(true);
+      
+      // ✅ CORRECCIÓN: Incluir restaurantId en las rutas
+      if (ruleData.id) {
+        await api.put(`/discount-rules/${restaurantId}/${ruleData.id}`, ruleData);
+      } else {
+        await api.post(`/discount-rules/${restaurantId}`, ruleData);
+      }
+      
+      await fetchData(restaurantId);
       setIsFormVisible(false);
       setSelectedRule(null);
     } catch (err) {
@@ -56,9 +77,15 @@ const DiscountRules = () => {
 
   const handleDelete = async (ruleId) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar esta regla?')) {
+      if (!restaurantId) {
+        setError('No se pudo eliminar la regla: ID de restaurante no disponible.');
+        return;
+      }
+      
       try {
-        await api.delete(`/discount-rules/${ruleId}`);
-        await fetchData();
+        // ✅ CORRECCIÓN: Incluir restaurantId en la ruta
+        await api.delete(`/discount-rules/${restaurantId}/${ruleId}`);
+        await fetchData(restaurantId);
       } catch (err) {
         setError('Error al eliminar la regla.');
       }
@@ -66,7 +93,7 @@ const DiscountRules = () => {
   };
 
   const handleAddNew = () => {
-    setSelectedRule({}); // New empty rule
+    setSelectedRule({});
     setIsFormVisible(true);
   };
 
@@ -80,7 +107,7 @@ const DiscountRules = () => {
     setSelectedRule(null);
   };
 
-  if (loading) return <Loader />;
+  if (loading || loadingRestaurant) return <Loader />;
   if (error) return <div className="text-red-500">{error}</div>;
 
   return (
@@ -88,7 +115,10 @@ const DiscountRules = () => {
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Reglas de Descuento (Combos Dinámicos)</h1>
         {!isFormVisible && (
-          <button onClick={handleAddNew} className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+          <button 
+            onClick={handleAddNew} 
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
             <Plus size={18} /> Crear Regla
           </button>
         )}
@@ -108,10 +138,16 @@ const DiscountRules = () => {
             <div key={rule.id} className="bg-white p-4 rounded-lg shadow-md">
               <h3 className="font-bold text-lg">{rule.nombre_regla}</h3>
               <div className="mt-4 flex gap-2">
-                <button onClick={() => handleEdit(rule)} className="flex items-center gap-1 text-sm text-blue-500 hover:underline">
+                <button 
+                  onClick={() => handleEdit(rule)} 
+                  className="flex items-center gap-1 text-sm text-blue-500 hover:underline"
+                >
                   <Edit size={14} /> Editar
                 </button>
-                <button onClick={() => handleDelete(rule.id)} className="flex items-center gap-1 text-sm text-red-500 hover:underline">
+                <button 
+                  onClick={() => handleDelete(rule.id)} 
+                  className="flex items-center gap-1 text-sm text-red-500 hover:underline"
+                >
                   <Trash2 size={14} /> Eliminar
                 </button>
               </div>

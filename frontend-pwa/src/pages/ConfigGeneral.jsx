@@ -18,13 +18,13 @@ import CommandsForm from '../components/config/CommandsForm';
 export default function ConfigGeneral() {
   const [user] = useAuthState(auth);
   const navigate = useNavigate();
-  const { data: restaurantData } = useRestaurant(); // <-- 2. Usar hook
-  const [loading, setLoading] = useState(true);
+  // ✅ Usamos el estado de carga y los datos directamente del contexto
+  const { data: config, loading: loadingConfig } = useRestaurant(); 
   const [error, setError] = useState('');
-  const [config, setConfig] = useState(null);
   const { showAlert } = useAlert();
   const [currentTab, setCurrentTab] = useState('info');
 
+  // ❌ El estado local y el fetch son redundantes, se eliminan.
   const [botTokenInput, setBotTokenInput] = useState('');
   const [updatingToken, setUpdatingToken] = useState(false);
   const [validatingConnection, setValidatingConnection] = useState(false);
@@ -34,38 +34,21 @@ export default function ConfigGeneral() {
       navigate('/login');
       return;
     }
-    if (!restaurantData?.id) {
-        setLoading(true);
-        return;
+    // La lógica de carga ahora es manejada por RestaurantContext.
+    // Si no hay datos después de cargar, podría ser un error real.
+    if (!loadingConfig && !config) {
+      setError('No se pudieron cargar los datos del restaurante. Revisa la consola.');
     }
-
-    const fetchConfig = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        const restaurantId = restaurantData.id; // <-- 3. Usar ID del contexto
-        const data = await api.get(`/config/${restaurantId}/general`);
-        setConfig(data);
-      } catch (err) {
-        console.error('Error al cargar la configuración:', err);
-        setError('Error al cargar la configuración: ' + err.message);
-        showAlert('Error al cargar la configuración.', 'error', 4000);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchConfig();
-  }, [user, navigate, showAlert, restaurantData]); // <-- 4. Añadir dependencia
+  }, [user, navigate, config, loadingConfig]);
 
   const handleUpdateBotToken = async () => {
-    if (!user || !restaurantData?.id) return navigate('/login');
+    if (!user || !config?.id) return navigate('/login');
     if (!botTokenInput || botTokenInput.trim().length === 0) {
       return showAlert('Ingresa el token antes de actualizar', 'warning', 3000);
     }
     setUpdatingToken(true);
     try {
-      const restaurantId = restaurantData.id; // <-- 5. Usar ID del contexto
+      const restaurantId = config.id;
       await api.put(`/config/${restaurantId}/bot-token`, { token: botTokenInput.trim() });
       setBotTokenInput('');
       showAlert('Token actualizado correctamente', 'success', 3000);
@@ -78,10 +61,10 @@ export default function ConfigGeneral() {
   };
 
   const handleValidateBotToken = async () => {
-    if (!user || !restaurantData?.id) return navigate('/login');
+    if (!user || !config?.id) return navigate('/login');
     setValidatingConnection(true);
     try {
-      const restaurantId = restaurantData.id; // <-- 6. Usar ID del contexto
+      const restaurantId = config.id;
       const res = await api.post(`/config/${restaurantId}/validate-bot-token`, {});
       if (res && res.botInfo) {
         const info = res.botInfo;
@@ -97,7 +80,8 @@ export default function ConfigGeneral() {
     }
   };
 
-  if (loading || !config) {
+  // ✅ Usar el estado de carga del contexto
+  if (loadingConfig || !config) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <ButtonLoader size="lg" message="Cargando configuración..." />

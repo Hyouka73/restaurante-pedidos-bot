@@ -1,7 +1,8 @@
 // frontend-pwa/src/services/api.js
-import { getAuth, getIdToken } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+export const API_BASE = import.meta.env.VITE_API_BASE;
+console.log("🚀 API_BASE está usando:", API_BASE);
 
 // Variable para almacenar la función showAlert
 let alertFunction = null;
@@ -23,7 +24,7 @@ const getAuthHeaders = async () => {
   }
 
   try {
-    const token = await getIdToken(user);
+    const token = await user.getIdToken();
     return {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
@@ -36,7 +37,7 @@ const getAuthHeaders = async () => {
   }
 };
 
-// Función helper para manejar la respuesta y mostrar alertas
+// Función helper para manejar la respuesta
 const handleResponse = async (res, method) => {
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ message: 'Error desconocido' }));
@@ -51,6 +52,7 @@ const handleResponse = async (res, method) => {
 
   const data = await res.json();
   
+  // Solo mostrar alertas de éxito para POST, PUT, DELETE
   let message = '';
   if (method === 'POST') {
     message = 'Creado exitosamente';
@@ -71,9 +73,13 @@ export const api = {
   get: async (endpoint) => {
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`${API_BASE}${endpoint}`, { headers });
+      const res = await fetch(`${API_BASE}${endpoint}`, { 
+        method: 'GET',
+        headers 
+      });
       return handleResponse(res, 'GET');
     } catch (err) {
+      console.error('[API] GET Error:', err);
       if (alertFunction) alertFunction(err.message || 'Error de red', 'error', 4000);
       throw err;
     }
@@ -89,6 +95,7 @@ export const api = {
       });
       return handleResponse(res, 'POST');
     } catch (err) {
+      console.error('[API] POST Error:', err);
       if (alertFunction) alertFunction(err.message || 'Error de red', 'error', 4000);
       throw err;
     }
@@ -104,6 +111,7 @@ export const api = {
       });
       return handleResponse(res, 'PUT');
     } catch (err) {
+      console.error('[API] PUT Error:', err);
       if (alertFunction) alertFunction(err.message || 'Error de red', 'error', 4000);
       throw err;
     }
@@ -118,6 +126,7 @@ export const api = {
       });
       return handleResponse(res, 'DELETE');
     } catch (err) {
+      console.error('[API] DELETE Error:', err);
       if (alertFunction) alertFunction(err.message || 'Error de red', 'error', 4000);
       throw err;
     }
@@ -132,36 +141,41 @@ export const api = {
       throw new Error('No hay usuario autenticado');
     }
 
-    const token = await getIdToken(user);
-    const formData = new FormData();
-    formData.append('image', file);
+    try {
+      const token = await user.getIdToken();
+      const formData = new FormData();
+      formData.append('image', file);
 
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-        // NO incluir Content-Type para que el navegador lo establezca con el boundary
-      },
-      body: formData
-    });
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+          // NO incluir Content-Type para que el navegador lo establezca con el boundary
+        },
+        body: formData
+      });
 
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({ message: 'Error desconocido' }));
-      const errorMessage = errorData.error || errorData.message || 'Error al subir imagen';
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: 'Error desconocido' }));
+        const errorMessage = errorData.error || errorData.message || 'Error al subir imagen';
+        
+        if (alertFunction) {
+          alertFunction(errorMessage, 'error', 4000);
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      const data = await res.json();
       
       if (alertFunction) {
-        alertFunction(errorMessage, 'error', 4000);
+        alertFunction('Imagen subida exitosamente', 'success', 2000);
       }
       
-      throw new Error(errorMessage);
+      return data;
+    } catch (err) {
+      console.error('[API] UPLOAD Error:', err);
+      throw err;
     }
-
-    const data = await res.json();
-    
-    if (alertFunction) {
-      alertFunction('Imagen subida exitosamente', 'success', 2000);
-    }
-    
-    return data;
   }
 };

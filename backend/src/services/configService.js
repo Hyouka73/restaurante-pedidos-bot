@@ -9,30 +9,54 @@ class ConfigService {
     if (!doc.exists) {
       throw new Error('Restaurant not found');
     }
-    return doc.data();
+    // ✅ CORRECCIÓN: Incluir el ID en la respuesta
+    return { id: doc.id, ...doc.data() };
   }
 
-  // Obtener solo la información general (info, horarios, availabilitySettings, delivery, paymentMethods, features, commands)
+  // Obtener solo la información general
   async getGeneralInfo(restaurantId) {
     const config = await this.getRestaurantConfig(restaurantId);
-    const { info, hours, availabilitySettings, delivery, paymentMethods, features, commands } = config;
-    return { info, hours, availabilitySettings, delivery, paymentMethods, features, commands };
+    const { info, hours, availabilitySettings, availability, delivery, paymentMethods, features, commands } = config;
+    
+    // ✅ CORRECCIÓN CRÍTICA: Siempre incluir el ID explícitamente
+    // El ID del documento de Firestore ES el restaurantId (que es el uid del usuario)
+    return { 
+      id: restaurantId, // ✅ ESTO ES LO MÁS IMPORTANTE
+      info, 
+      hours, 
+      availabilitySettings, 
+      availability,
+      delivery, 
+      paymentMethods, 
+      features, 
+      commands 
+    };
   }
 
-  // Actualizar información general (info, horarios, etc.) - Combina varios métodos anteriores
+  // Actualizar información general
   async updateGeneralInfo(restaurantId, updateData) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
-    // Usar update para permitir actualizaciones parciales por sección
     await restaurantRef.update({
       ...updateData,
       updatedAt: new Date()
     });
 
-    // Devolver la configuración actualizada (solo la parte general)
     const updatedDoc = await restaurantRef.get();
     const data = updatedDoc.exists ? updatedDoc.data() : {};
-    const { info, hours, availabilitySettings, delivery, paymentMethods, features, commands } = data;
-    return { info, hours, availabilitySettings, delivery, paymentMethods, features, commands };
+    const { info, hours, availabilitySettings, availability, delivery, paymentMethods, features, commands } = data;
+    
+    // ✅ CORRECCIÓN: Incluir el ID en la respuesta
+    return { 
+      id: restaurantId, 
+      info, 
+      hours, 
+      availabilitySettings, 
+      availability,
+      delivery, 
+      paymentMethods, 
+      features, 
+      commands 
+    };
   }
 
   // Método específico para actualizar solo el token de Telegram
@@ -59,11 +83,7 @@ class ConfigService {
     return { success: true };
   }
 
-  // --- MÉTODOS AÑADIDOS PARA HABILITAR/DESHABILITAR ---
-
-  /**
-   * Habilita el bot en la base de datos (features.botEnabled = true)
-   */
+  // --- MÉTODOS PARA HABILITAR/DESHABILITAR BOT ---
   async enableBot(restaurantId) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     await restaurantRef.update({
@@ -73,9 +93,6 @@ class ConfigService {
     return { success: true, enabled: true };
   }
 
-  /**
-   * Deshabilita el bot en la base de datos (features.botEnabled = false)
-   */
   async disableBot(restaurantId) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     await restaurantRef.update({
@@ -85,10 +102,7 @@ class ConfigService {
     return { success: true, enabled: false };
   }
 
-
   // --- MÉTODOS EXISTENTES ---
-
-  // Actualizar mensajes del bot (método existente)
   async updateMessages(restaurantId, messages) {
     await db.collection('restaurants').doc(restaurantId).update({
       messages,
@@ -97,31 +111,21 @@ class ConfigService {
     return { success: true };
   }
 
-  // Obtener mensajes del bot (método existente)
   async getMessages(restaurantId) {
     const config = await this.getRestaurantConfig(restaurantId);
-    return config.messages;
+    return config.messages || {};
   }
 
-  // --- MÉTODOS DE DISPONIBILIDAD MOVIDOS DESDE authService ---
-  // Actualizar el estado de disponibilidad manualmente (usado por el bot o el panel)
+  // --- MÉTODOS DE DISPONIBILIDAD ---
   async updateAvailability(restaurantId, status, reason, updatedBy = 'system') {
-    // Si se abre la tienda, forzar la activación del bot
     if (status === 'open') {
       try {
-        // Usar require aquí para evitar dependencias circulares
         const botService = require('./botService');
-        
-        // 1. Habilitar en la DB
         await this.enableBot(restaurantId);
-        
-        // 2. Iniciar el proceso del bot
+        console.log(`[configService] Iniciando bot para ${restaurantId}`);
         await botService.initBot(restaurantId);
-
       } catch (error) {
         console.error(`Error forzando activación del bot para ${restaurantId}:`, error);
-        // Opcional: decidir si la falla al iniciar el bot debe impedir que la tienda abra.
-        // Por ahora, solo se loguea el error y se continúa.
       }
     }
 
@@ -136,7 +140,6 @@ class ConfigService {
     return { success: true, status };
   }
 
-  // Actualizar el estado de disponibilidad y el modo
   async updateAvailabilitySettings(restaurantId, settings) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     await restaurantRef.update({
@@ -146,7 +149,6 @@ class ConfigService {
     return { success: true };
   }
 
-  // Actualizar el horario
   async updateHours(restaurantId, hours) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     await restaurantRef.update({
@@ -156,7 +158,6 @@ class ConfigService {
     return { success: true };
   }
 
-  // Actualizar la configuración de entrega
   async updateDeliverySettings(restaurantId, delivery) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     await restaurantRef.update({
@@ -166,7 +167,6 @@ class ConfigService {
     return { success: true };
   }
 
-  // Actualizar los métodos de pago
   async updatePaymentMethods(restaurantId, paymentMethods) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     await restaurantRef.update({
@@ -176,7 +176,6 @@ class ConfigService {
     return { success: true };
   }
 
-  // Actualizar las características
   async updateFeatures(restaurantId, features) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     await restaurantRef.update({
@@ -186,7 +185,6 @@ class ConfigService {
     return { success: true };
   }
 
-  // Actualizar los comandos
   async updateCommands(restaurantId, commands) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
     await restaurantRef.update({
@@ -195,6 +193,7 @@ class ConfigService {
     });
     return { success: true };
   }
+
   async getNotificationSettings(restaurantId) {
     const config = await this.getRestaurantConfig(restaurantId);
     return config.notificationSettings || {};
@@ -208,7 +207,6 @@ class ConfigService {
     });
     return { success: true };
   }
-
 }
 
 module.exports = new ConfigService();

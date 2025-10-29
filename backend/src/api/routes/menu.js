@@ -1,53 +1,12 @@
 // backend/src/api/routes/menu.js
 const express = require('express');
 const router = express.Router();
-// CORREGIDO: Ruta para menuService (relativa a backend/src/api/routes/)
-const menuService = require('../../services/menuService'); // Subimos 2 niveles: ../.. -> backend/src/, luego bajamos a services/
-// CORREGIDO: Ruta para authService (relativa a backend/src/api/routes/)
-const authService = require('../../services/authService'); // Subimos 2 niveles: ../.. -> backend/src/, luego bajamos a services/
-// CORREGIDO: Ruta para verifyToken (definido localmente)
-// QUITADO: const { verifyToken } = require('../middleware/auth');
-
-// Asegúrate de tener admin importado para verifyToken
-const { admin } = require('../../config/firebase'); // Subimos 2 niveles: ../.. -> backend/src/, luego bajamos a config/
-
-const verifyToken = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer <token>
-
-  if (!token) {
-    console.error("No token provided in request headers.");
-    return res.status(401).json({ error: 'Token no proporcionado' });
-  }
-
-  try {
-    const decodedToken = await admin.auth().verifyIdToken(token);
-    req.user = decodedToken; // Agrega los datos del usuario al request
-    console.log("Token verified for user:", decodedToken.uid); // Log para depuración
-    next();
-  } catch (error) {
-    console.error("Error verificando token:", error);
-    res.status(401).json({ error: 'Token inválido' });
-  }
-};
-
-// Middleware para verificar que el usuario es dueño del restaurante
-const verifyOwner = async (req, res, next) => {
-  try {
-    const restaurantData = await authService.getRestaurantByUserUid(req.user.uid);
-    if (restaurantData.restaurantId !== req.params.restaurantId) {
-      return res.status(403).json({ error: 'No autorizado para acceder a este menú' });
-    }
-    next();
-  } catch (error) {
-    console.error('Error en middleware verifyOwner:', error);
-    return res.status(500).json({ error: 'Error interno del servidor' });
-  }
-};
+const menuService = require('../../services/menuService');
+const { verifyTokenAndOwner } = require('../middleware/auth');
 
 // --- RUTAS PARA ITEMS ---
 // GET /api/menu/:restaurantId/items
-router.get('/:restaurantId/items', verifyToken, verifyOwner, async (req, res) => {
+router.get('/:restaurantId/items', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const items = await menuService.getMenuItems(restaurantId);
@@ -59,7 +18,7 @@ router.get('/:restaurantId/items', verifyToken, verifyOwner, async (req, res) =>
 });
 
 // GET /api/menu/:restaurantId/items/:itemId
-router.get('/:restaurantId/items/:itemId', verifyToken, verifyOwner, async (req, res) => {
+router.get('/:restaurantId/items/:itemId', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId, itemId } = req.params;
     const item = await menuService.getMenuItem(restaurantId, itemId);
@@ -71,7 +30,7 @@ router.get('/:restaurantId/items/:itemId', verifyToken, verifyOwner, async (req,
 });
 
 // POST /api/menu/:restaurantId/items
-router.post('/:restaurantId/items', verifyToken, verifyOwner, async (req, res) => {
+router.post('/:restaurantId/items', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const itemData = req.body;
@@ -88,7 +47,7 @@ router.post('/:restaurantId/items', verifyToken, verifyOwner, async (req, res) =
 });
 
 // PUT /api/menu/:restaurantId/items/:itemId
-router.put('/:restaurantId/items/:itemId', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/items/:itemId', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId, itemId } = req.params;
     const itemData = req.body;
@@ -107,7 +66,7 @@ router.put('/:restaurantId/items/:itemId', verifyToken, verifyOwner, async (req,
 });
 
 // DELETE /api/menu/:restaurantId/items/:itemId
-router.delete('/:restaurantId/items/:itemId', verifyToken, verifyOwner, async (req, res) => {
+router.delete('/:restaurantId/items/:itemId', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId, itemId } = req.params;
     const result = await menuService.deleteMenuItem(restaurantId, itemId);
@@ -120,7 +79,7 @@ router.delete('/:restaurantId/items/:itemId', verifyToken, verifyOwner, async (r
 
 // --- RUTAS PARA COMBOS ---
 // GET /api/menu/:restaurantId/combos
-router.get('/:restaurantId/combos', verifyToken, verifyOwner, async (req, res) => {
+router.get('/:restaurantId/combos', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const combos = await menuService.getMenuCombos(restaurantId);
@@ -132,7 +91,7 @@ router.get('/:restaurantId/combos', verifyToken, verifyOwner, async (req, res) =
 });
 
 // GET /api/menu/:restaurantId/combos/:comboId
-router.get('/:restaurantId/combos/:comboId', verifyToken, verifyOwner, async (req, res) => {
+router.get('/:restaurantId/combos/:comboId', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId, comboId } = req.params;
     const combo = await menuService.getMenuCombo(restaurantId, comboId);
@@ -144,7 +103,7 @@ router.get('/:restaurantId/combos/:comboId', verifyToken, verifyOwner, async (re
 });
 
 // POST /api/menu/:restaurantId/combos
-router.post('/:restaurantId/combos', verifyToken, verifyOwner, async (req, res) => {
+router.post('/:restaurantId/combos', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
     const comboData = req.body;
@@ -161,7 +120,7 @@ router.post('/:restaurantId/combos', verifyToken, verifyOwner, async (req, res) 
 });
 
 // PUT /api/menu/:restaurantId/combos/:comboId
-router.put('/:restaurantId/combos/:comboId', verifyToken, verifyOwner, async (req, res) => {
+router.put('/:restaurantId/combos/:comboId', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId, comboId } = req.params;
     const comboData = req.body;
@@ -180,7 +139,7 @@ router.put('/:restaurantId/combos/:comboId', verifyToken, verifyOwner, async (re
 });
 
 // DELETE /api/menu/:restaurantId/combos/:comboId
-router.delete('/:restaurantId/combos/:comboId', verifyToken, verifyOwner, async (req, res) => {
+router.delete('/:restaurantId/combos/:comboId', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId, comboId } = req.params;
     const result = await menuService.deleteMenuCombo(restaurantId, comboId);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../config/firebase';
@@ -6,88 +6,147 @@ import { useRestaurant } from '../context/RestaurantContext';
 import { api, API_BASE } from '../services/api';
 import { Package, Clock, CheckCircle, XCircle, ChefHat, Store, Truck, Phone, MapPin, DollarSign, RefreshCw } from 'lucide-react';
 
-
-
 export default function OrdersManager() {
   const [user] = useAuthState(auth);
   const navigate = useNavigate();
-  const [orders, setOrders] = useState([]);
+  const { data: restaurantData } = useRestaurant();
+  
+  // ✅ CAMBIO: allOrders contiene TODOS los pedidos (se carga 1 sola vez)
+  const [allOrders, setAllOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('active');
   const [updatingOrder, setUpdatingOrder] = useState(null);
-  const { data: restaurantData } = useRestaurant();
 
-  const filterAndSortOrders = useCallback((allOrders) => {
-    let filteredOrders = allOrders;
+  console.log('[OrdersManager] 🔄 Render:', {
+    hasUser: !!user,
+    hasRestaurant: !!restaurantData?.id,
+    allOrdersCount: allOrders.length,
+    statusFilter,
+    loading
+  });
+
+  // ✅ OPTIMIZACIÓN: Filtrar en memoria sin recargar
+  const filteredOrders = useMemo(() => {
+    console.log('[OrdersManager] 🔍 Filtrando pedidos...', { 
+      total: allOrders.length, 
+      filter: statusFilter 
+    });
+    
+    let filtered = allOrders;
+    
     if (statusFilter === 'active') {
-      filteredOrders = allOrders.filter(order => 
+      filtered = allOrders.filter(order => 
         ['pending', 'confirmed', 'preparing', 'ready', 'delivering'].includes(order.status)
       );
     } else if (statusFilter === 'completed') {
-      filteredOrders = allOrders.filter(order => 
+      filtered = allOrders.filter(order => 
         ['delivered', 'cancelled'].includes(order.status)
       );
     }
-    return filteredOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  }, [statusFilter]);
+    
+    // Ordenar por fecha (más recientes primero)
+    const sorted = [...filtered].sort((a, b) => {
+      const dateA = a.createdAt?.seconds || a.createdAt?.toDate?.() || new Date(a.createdAt);
+      const dateB = b.createdAt?.seconds || b.createdAt?.toDate?.() || new Date(b.createdAt);
+      return new Date(dateB) - new Date(dateA);
+    });
+    
+    console.log('[OrdersManager] ✅ Filtrados:', sorted.length);
+    return sorted;
+  }, [allOrders, statusFilter]);
 
+  // ✅ Cargar pedidos 1 sola vez
   const fetchOrders = useCallback(async () => {
-    if (!restaurantData?.id) return;
-    try {
-      const allOrders = await api.get(`/orders/${restaurantData.id}`);
-      setOrders(filterAndSortOrders(allOrders));
-    } catch (error) {
-      console.error('Error fetching orders:', error);
+    if (!restaurantData?.id) {
+      console.log('[OrdersManager] ⚠️ No hay restaurantId, esperando...');
+      return;
     }
-  }, [restaurantData, filterAndSortOrders]);
+    
+    console.log('[OrdersManager] 📡 Cargando pedidos para:', restaurantData.id);
+    
+    try {
+      setLoading(true);
+      const orders = await api.get(`/orders/${restaurantData.id}`);
+      console.log('[OrdersManager] ✅ Pedidos recibidos:', orders.length);
+      setAllOrders(orders);
+    } catch (error) {
+      console.error('[OrdersManager] ❌ Error cargando pedidos:', error);
+      setAllOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [restaurantData?.id]);
 
-  // Effect for fetching initial data
+  // ✅ Cargar pedidos al montar (solo si hay restaurantId)
   useEffect(() => {
     if (!user) {
+      console.log('[OrdersManager] ⚠️ No hay usuario, redirigiendo...');
       navigate('/login');
       return;
     }
+    
     if (restaurantData?.id) {
-        setLoading(true);
-        fetchOrders().finally(() => setLoading(false));
+      console.log('[OrdersManager] 🎯 Usuario y restaurante listos, cargando pedidos...');
+      fetchOrders();
+    } else {
+      console.log('[OrdersManager] ⏳ Esperando restaurantId...');
     }
-  }, [user, navigate, restaurantData, fetchOrders]);
+  }, [user, navigate, restaurantData?.id, fetchOrders]);
 
-  // Effect for Server-Sent Events (for background updates)
+  // ✅ SSE para actualizaciones en tiempo real
   useEffect(() => {
     if (!restaurantData?.id) return;
 
+    console.log('[OrdersManager] 📡 Conectando SSE...');
     const eventSource = new EventSource(`${API_BASE}/events`);
+    
+    eventSource.onopen = () => {
+      console.log('[OrdersManager] ✅ SSE conectado');
+    };
+    
     eventSource.onmessage = (event) => {
-      const eventData = JSON.parse(event.data);
-      if (eventData.type === 'order_update') {
-        // Refetch all data to ensure consistency
-        fetchOrders();
+      try {
+        const eventData = JSON.parse(event.data);
+        console.log('[OrdersManager] 📨 Evento SSE recibido:', eventData.type);
+        
+        if (eventData.type === 'order_update') {
+          console.log('[OrdersManager] 🔄 Actualizando pedidos por SSE...');
+          fetchOrders();
+        } else if (eventData.type === 'connected') {
+          console.log('[OrdersManager] 🎉 Conexión SSE establecida, clientId:', eventData.clientId);
+        }
+      } catch (err) {
+        console.error('[OrdersManager] ❌ Error parseando evento SSE:', err);
       }
     };
 
     eventSource.onerror = (err) => {
-      console.error('[SSE] Connection error:', err);
+      console.error('[OrdersManager] ❌ Error en SSE:', err);
       eventSource.close();
     };
 
     return () => {
+      console.log('[OrdersManager] 🔌 Cerrando conexión SSE');
       eventSource.close();
     };
-  }, [restaurantData, fetchOrders]);
+  }, [restaurantData?.id, fetchOrders]);
 
+  // ✅ Actualizar estado de pedido
   const updateOrderStatus = async (orderId, newStatus) => {
     if (!user || !restaurantData?.id) return;
     
+    console.log('[OrdersManager] 📝 Actualizando pedido:', orderId, '→', newStatus);
     setUpdatingOrder(orderId);
+    
     try {
       await api.put(`/orders/${restaurantData.id}/${orderId}/status`, {
         newStatus: newStatus
       });
-      // On success, manually refetch to guarantee UI update
-      await fetchOrders(); 
+      
+      console.log('[OrdersManager] ✅ Pedido actualizado, recargando...');
+      await fetchOrders();
     } catch (err) {
-      console.error('Error updating order:', err);
+      console.error('[OrdersManager] ❌ Error actualizando pedido:', err);
     } finally {
       setUpdatingOrder(null);
     }
@@ -106,8 +165,8 @@ export default function OrdersManager() {
     };
 
     if (status === 'ready' && deliveryType === 'pickup') {
-        configs.ready.nextStatus = 'delivered';
-        configs.ready.nextLabel = 'Marcar como Recogido';
+      configs.ready.nextStatus = 'delivered';
+      configs.ready.nextLabel = 'Marcar como Recogido';
     }
     
     return configs[status] || configs.pending;
@@ -115,7 +174,17 @@ export default function OrdersManager() {
 
   const formatTime = (timestamp) => {
     if (!timestamp) return 'N/A';
-    const date = new Date(timestamp);
+    
+    // Manejar diferentes formatos de timestamp
+    let date;
+    if (timestamp?.toDate) {
+      date = timestamp.toDate();
+    } else if (timestamp?.seconds) {
+      date = new Date(timestamp.seconds * 1000);
+    } else {
+      date = new Date(timestamp);
+    }
+    
     const now = new Date();
     const diff = Math.floor((now - date) / 1000 / 60);
     
@@ -146,9 +215,11 @@ export default function OrdersManager() {
               Pedidos
             </h1>
             <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm font-semibold">
-              {orders.length}
+              {filteredOrders.length}
             </span>
           </div>
+          
+          {/* ✅ Filtros: Solo cambian el estado, NO recargan datos */}
           <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
             {[
               { value: 'active', label: 'Activos', icon: Clock },
@@ -159,7 +230,10 @@ export default function OrdersManager() {
               return (
                 <button
                   key={filter.value}
-                  onClick={() => setStatusFilter(filter.value)}
+                  onClick={() => {
+                    console.log('[OrdersManager] 🔄 Cambiando filtro a:', filter.value);
+                    setStatusFilter(filter.value);
+                  }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap transition-all ${
                     statusFilter === filter.value
                       ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg'
@@ -176,7 +250,7 @@ export default function OrdersManager() {
       </div>
 
       <div className="px-4 py-4 space-y-4">
-        {orders.length === 0 ? (
+        {filteredOrders.length === 0 ? (
           <div className="text-center py-16">
             <Package className="w-24 h-24 text-gray-300 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-gray-600 mb-2">
@@ -185,7 +259,7 @@ export default function OrdersManager() {
             <p className="text-gray-500">Los nuevos pedidos aparecerán aquí automáticamente</p>
           </div>
         ) : (
-          orders.map(order => {
+          filteredOrders.map(order => {
             const statusConfig = getStatusConfig(order);
             const StatusIcon = statusConfig.icon;
 
