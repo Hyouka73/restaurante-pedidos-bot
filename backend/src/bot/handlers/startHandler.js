@@ -1,4 +1,4 @@
-// backend/src/bot/handlers/startHandler.js - ACTUALIZADO Y LIMPIO
+// backend/src/bot/handlers/startHandler.js
 const configBotService = require('../services/configBotService');
 const telegramUserService = require('../services/telegramUserService');
 const availabilityService = require('../../services/availabilityService');
@@ -10,27 +10,65 @@ module.exports = async (ctx) => {
     const firstName = ctx.from.first_name;
     let restaurantId = null;
     
-    // --- LÓGICA DE DEEP LINKING Y OBTENCIÓN DE ID ---
-    const startPayload = ctx.startPayload; // Telegraf nos da el parámetro aquí
+    // --- LÓGICA DEEP LINKING Y COMPROBACIÓN DE USUARIO ---
+    
+    // 1. Buscar el payload (Prioridad #1: Usuario nuevo o escaneo de QR)
+    const startPayload = ctx.startPayload || ctx.payload;
 
     if (startPayload) {
-      // ¡El usuario viene de un QR o un enlace! El payload es nuestro ID de restaurante.
+      // ¡Viene de un QR! Esta es la prioridad.
       console.log(`[StartHandler] Deep link detectado con payload: ${startPayload}`);
       restaurantId = startPayload;
+
+      // Guardar en la SESIÓN (para acceso inmediato)
+      if (!ctx.session) { ctx.session = {}; }
+      ctx.session.restaurantId = restaurantId;
+      console.log(`[StartHandler] restaurantId ${restaurantId} guardado en la sesión.`);
+
+      // Guardar en la DB (vinculación persistente)
       await telegramUserService.linkChatToRestaurant(ctx.chat.id, restaurantId);
+
     } else {
-      // El usuario escribió /start manualmente. NO se le permite continuar.
-      console.log(`[StartHandler] /start manual sin payload. Acceso denegado.`);
+      // No hay payload (/start manual). ¿Ya conocemos a este usuario?
+      
+      // 2. Revisar la sesión (Prioridad #2: Usuario existente activo)
+      restaurantId = ctx.session?.restaurantId;
+      
+      if (restaurantId) {
+         console.log(`[StartHandler] Usuario existente. ID ${restaurantId} encontrado en la SESIÓN.`);
+      } else {
+        // 3. Revisar la DB (Prioridad #3: Usuario existente con sesión expirada)
+        console.log(`[StartHandler] No hay payload ni ID en sesión. Consultando DB...`);
+        
+        // Esta es la nueva función que creaste en telegramUserService
+        restaurantId = await telegramUserService.getRestaurantIdByChatId(ctx.chat.id);
+        
+        if (restaurantId) {
+          console.log(`[StartHandler] Usuario existente. ID ${restaurantId} encontrado en la DB.`);
+          // Si lo encontramos en la DB, lo guardamos en la sesión para la próxima
+          if (!ctx.session) { ctx.session = {}; }
+          ctx.session.restaurantId = restaurantId;
+        } else {
+          console.log(`[StartHandler] Usuario no encontrado en DB.`);
+        }
+      }
+    }
+    
+    // --- VERIFICACIÓN FINAL ---
+    if (!restaurantId) {
+      // FRACASO: No hay payload, ni sesión, ni DB. Ahora sí, acceso denegado.
+      console.log(`[StartHandler] /start manual sin payload Y sin registro. Acceso denegado.`);
       await ctx.reply(
         `👋 ¡Hola!\n\nPara usar este bot y hacer pedidos, necesitas escanear el código QR que se encuentra en el restaurante.\n\nEsto nos ayuda a saber exactamente desde dónde nos contactas. ¡Gracias!`,
         { reply_markup: { remove_keyboard: true } }
       );
       return; // Detener la ejecución
     }
-    
-    // --- El bloque 'if (!restaurantId)' se eliminó porque era redundante ---
 
-    // Guardar info del usuario
+    // --- ÉXITO: SI LLEGAMOS AQUÍ, SÍ TENEMOS UN restaurantId ---
+    console.log(`[StartHandler] Procediendo con restaurantId: ${restaurantId}`);
+
+    // Guardar info del usuario (actualiza la 'lastInteraction')
     await telegramUserService.saveUserInfo(ctx.from, restaurantId);
 
     // Actualizar comandos dinámicamente
@@ -42,7 +80,7 @@ module.exports = async (ctx) => {
     const features = restaurantData.features || {};
     const restaurantName = restaurantData.info?.name || 'Nuestro Restaurante';
 
-    // --- NUEVA VERIFICACIÓN: BOT HABILITADO ---
+    // --- VERIFICACIÓN: BOT HABILITADO ---
     if (features.botEnabled === false) {
       const disabledMessage = messages.botDisabled || 'El bot está temporalmente desactivado. Disculpa las molestias.';
       await ctx.reply(disabledMessage, {
@@ -115,6 +153,7 @@ module.exports = async (ctx) => {
 
   } catch (error) {
     console.error(`[StartHandler] 💥 Error procesando /start para ${ctx.from.id}:`, error);
+    View `telegramUserService.js`
     await ctx.reply(
       '❌ Hubo un error al procesar tu solicitud.\n\n' +
       'Por favor intenta nuevamente con /start'

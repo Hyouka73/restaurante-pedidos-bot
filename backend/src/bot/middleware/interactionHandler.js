@@ -6,6 +6,7 @@ const menuService = require('../../services/menuService');
 const orderService = require('../../services/orderService');
 const telegramUserService = require('../services/telegramUserService');
 const configBotService = require('../services/configBotService');
+const DiscountRuleService = require('../../services/discountRuleService'); // Importar DiscountRuleService
 const availabilityService = require('../../services/availabilityService');
 const { Markup } = require('telegraf');
 
@@ -710,60 +711,5 @@ async function handleCancelOrder(ctx, userId) {
         ])
       }
     );
-  }
-}
-
-async function handleNotificationPreference(ctx, callbackData) {
-  const [, choice, restaurantId, orderId] = callbackData.split('_');
-  const userId = ctx.from.id;
-  await ctx.answerCbQuery();
-  
-  try {
-    if (choice === 'yes') {
-      await ctx.telegram.setMyCommands(defaultCommands, { 
-        scope: { type: 'chat', chat_id: userId } 
-      });
-      await ctx.editMessageText(
-        '✅ ¡Perfecto! Te mantendremos informado sobre tu pedido.', 
-        { reply_markup: null }
-      );
-    } else if (choice === 'no') {
-      const orderRef = db.collection('restaurants')
-        .doc(restaurantId)
-        .collection('orders')
-        .doc(orderId);
-      await orderRef.update({ notificationsEnabled: false });
-      
-      await ctx.telegram.setMyCommands(commandsWithMyOrder, { 
-        scope: { type: 'chat', chat_id: userId } 
-      });
-      await ctx.editMessageText(
-        '👍 Entendido. No te enviaremos notificaciones automáticas.', 
-        { reply_markup: null }
-      );
-      await ctx.reply(
-        'Puedes consultar el estado de tu pedido en cualquier momento con el comando /mipedido.'
-      );
-    }
-  } catch (error) {
-    console.error('Error updating notification preference:', error);
-    await ctx.reply('❌ Hubo un error al guardar tu preferencia.');
-  }
-}
-
-async function handleShowOrderStatus(ctx, callbackData) {
-  const [, , restaurantId, orderId] = callbackData.split('_');
-  await ctx.answerCbQuery();
-  
-  try {
-    const order = await orderService.getOrder(restaurantId, orderId);
-    const statusMessage = formatOrderStatus(order);
-    await ctx.editMessageText(statusMessage, { 
-      parse_mode: 'Markdown', 
-      reply_markup: null 
-    });
-  } catch (error) {
-    console.error('Error showing order status:', error);
-    await ctx.reply('❌ Hubo un error al consultar el estado de tu pedido.');
   }
 }

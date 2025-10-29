@@ -38,10 +38,16 @@ if (!redisUrl) {
 }
 
 console.log("📦 [server.js] Conectando a Redis...");
-const store = Redis({ 
+const store = Redis({
   url: redisUrl,
-  connectTimeout: 10000,
-  commandTimeout: 5000,
+  // Opciones de configuración adicionales para mayor robustez en Vercel
+  config: {
+    // Forzar TLS, requerido por Vercel KV
+    tls: {},
+    // Aumentar timeouts para entornos serverless
+    connectTimeout: 15000,
+    commandTimeout: 8000,
+  },
   lazyConnect: false
 });
 
