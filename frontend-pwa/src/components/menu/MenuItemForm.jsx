@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { WizardInputField, WizardTextAreaField, WizardSelectField, WizardCheckboxField } from '../ui/WizardComponents';
+import { WizardInputField, WizardTextAreaField, WizardSelectField, WizardCheckboxField, WizardMultiSelect } from '../ui/WizardComponents'; // <-- 🔥 1. Importamos el nuevo componente
 import { ButtonLoader } from '../ui/Loader';
 
 import ItemImageUpload from './ItemImageUpload';
-import Select from 'react-select'; 
+// import Select from 'react-select'; // <-- 🔥 2. Eliminamos la importación de react-select
 
 // --- 🔥 1. ESTRUCTURA DE TAGS REFINADA ---
 // 'tipo_plato' ahora solo contiene opciones de COMIDA.
@@ -56,14 +56,12 @@ const MenuItemForm = ({ item: initialItem, allItems, onSave, onCancel, saving })
     onChange('tags', newTags);
   };
 
-  // Lógica para el selector de 'sugerir_items'
+  // --- 🔥 3. SIMPLIFICAMOS LA LÓGICA DEL SELECTOR ---
+  // Ahora solo creamos las opciones. El componente se encarga del resto.
+  // Y lo más importante: el 'label' ya no incluye el ID.
   const itemOptions = (allItems || [])
     .filter(i => i.id !== item?.id) // Un item no puede sugerirse a sí mismo
-    .map(i => ({ value: i.id, label: `${i.name} (ID: ...${i.id.slice(-5)})` }));
-
-  const selectedItemOptions = (item?.sugerir_items || [])
-    .map(itemId => itemOptions.find(opt => opt.value === itemId))
-    .filter(Boolean); // Filtramos por si algún item fue eliminado
+    .map(i => ({ value: i.id, label: i.name })); // <-- Solo el nombre
 
   // --- 🔥 2. DIV PRINCIPAL SIMPLIFICADO ---
   return (
@@ -150,17 +148,15 @@ const MenuItemForm = ({ item: initialItem, allItems, onSave, onCancel, saving })
         <div className="mt-6 p-4 border border-gray-200 rounded-lg">
             <h4 className="text-md font-semibold text-gray-600 mb-3">Venta Cruzada (Cross-Sell)</h4>
             
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sugerir Items</label>
-            <Select
-              isMulti
+            {/* --- 🔥 4. REEMPLAZAMOS EL COMPONENTE --- */}
+            <WizardMultiSelect
+              label="Sugerir Items"
               options={itemOptions}
-              value={selectedItemOptions}
-              onChange={(selectedOptions) => {
-                const selectedIds = selectedOptions.map(opt => opt.value);
+              value={item.sugerir_items || []}
+              onChange={(selectedIds) => {
                 onChange('sugerir_items', selectedIds);
               }}
-              placeholder="Selecciona items para sugerir..."
-              classNamePrefix="react-select"
+              placeholder="Busca y selecciona items para sugerir..."
             />
             <p className="text-xs text-gray-500 mt-1">Añade productos para sugerir cuando este se añada al carrito.</p>
         </div>

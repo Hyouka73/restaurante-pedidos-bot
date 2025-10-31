@@ -1,7 +1,7 @@
 //src/components/ui/WizardComponents.jsx
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Info, Check, X, AlertTriangle } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 
 // --- Componente ProgressBar ---
@@ -116,6 +116,136 @@ export const WizardInputField = ({
           {error}
         </motion.p>
       )}
+    </div>
+  );
+};
+
+// --- 🔥 NUEVO COMPONENTE: WizardMultiSelect ---
+export const WizardMultiSelect = ({ 
+  label, 
+  placeholder,
+  options, // [{ value: 'id1', label: 'Item 1' }]
+  value,   // ['id1', 'id2']
+  onChange // se llama con el nuevo array de values ['id1', 'id2', 'id3']
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const inputRef = useRef(null);
+
+  // Derivamos los items seleccionados y las opciones disponibles
+  const selectedItems = value.map(val => options.find(opt => opt.value === val)).filter(Boolean);
+  const availableOptions = options.filter(opt => 
+    !value.includes(opt.value) && 
+    opt.label.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleSelect = (option) => {
+    onChange([...value, option.value]);
+    setSearchTerm('');
+    setIsOpen(false);
+  };
+
+  const handleRemove = (valueToRemove) => {
+    onChange(value.filter(v => v !== valueToRemove));
+  };
+  
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (inputRef.current && !inputRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="form-control w-full mb-4" ref={inputRef}>
+      {label && (
+        <label className="label pb-2">
+          <span className="label-text text-sm font-semibold text-gray-700">{label}</span>
+        </label>
+      )}
+      <div className="relative">
+        <div 
+          className={`
+            w-full p-2 bg-white border-2 rounded-xl
+            flex flex-wrap gap-2 items-center
+            transition-all duration-300 outline-none
+            shadow-sm hover:shadow-md cursor-text
+            ${isOpen 
+              ? 'border-[#ff7f50] ring-4 ring-[#ffe4c4]/50' 
+              : 'border-[#ffe4c4] hover:border-[#ffb9a0]'
+            }
+          `}
+          onClick={() => {
+            setIsOpen(true);
+            inputRef.current?.querySelector('input')?.focus();
+          }}
+        >
+          {/* Pills de items seleccionados */}
+          {selectedItems.map(item => (
+            <motion.div
+              key={item.value}
+              layout
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.5 }}
+              className="flex items-center gap-1 bg-gradient-to-r from-[#ff7f50] to-[#ff6347] text-white text-xs font-semibold px-2 py-1 rounded-full"
+            >
+              <span>{item.label}</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemove(item.value);
+                }}
+                className="hover:bg-black/20 rounded-full"
+              >
+                <X size={14} />
+              </button>
+            </motion.div>
+          ))}
+          {/* Input para buscar */}
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setIsOpen(true);
+            }}
+            onFocus={() => setIsOpen(true)}
+            placeholder={selectedItems.length > 0 ? '' : placeholder}
+            className="flex-grow bg-transparent outline-none text-sm font-medium text-gray-800 placeholder-gray-400 p-1"
+          />
+        </div>
+        
+        {/* Dropdown de opciones */}
+        <AnimatePresence>
+          {isOpen && (
+            <motion.ul
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto z-10"
+            >
+              {availableOptions.length > 0 ? (
+                availableOptions.map(option => (
+                  <li
+                    key={option.value}
+                    onClick={() => handleSelect(option)}
+                    className="px-4 py-2 text-sm text-gray-700 hover:bg-[#ffe4c4]/50 cursor-pointer"
+                  >
+                    {option.label}
+                  </li>
+                ))
+              ) : (
+                <li className="px-4 py-2 text-sm text-gray-400 italic">No hay más opciones</li>
+              )}
+            </motion.ul>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 };
