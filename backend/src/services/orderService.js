@@ -1,5 +1,9 @@
 const { db, admin } = require('../config/firebase');
 const telegramNotificationService = require('./telegramNotificationService');
+// 🔥 1. Importamos el "publicador" de Redis
+const { publisher } = require('../config/redisClient');
+
+const SSE_CHANNEL = 'orders_channel';
 
 class OrderService {
 
@@ -36,6 +40,19 @@ class OrderService {
     await restaurantRef.update({ orderCounter: newOrderNumber });
 
     return { id: orderRef.id, ...newOrder };
+    const createdOrder = { id: orderRef.id, ...newOrder };
+
+    // --- 🔥 2. ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
+    // Notificar al frontend (Panel de Admin) que llegó un nuevo pedido
+    try {
+      console.log('[OrderService] Enviando evento SSE por nueva orden...');
+      sendSseEvent({ type: 'order_new', payload: createdOrder });
+    } catch (sseError) {
+      console.error('[OrderService] Error enviando evento SSE:', sseError);
+    }
+    // --- FIN DE LA CORRECCIÓN ---
+
+    return createdOrder;
   }
 
   /**
@@ -89,8 +106,11 @@ class OrderService {
            console.error(`CRITICAL: Status mismatch for ${orderId} after transaction. Expected ${newStatus}, got ${updatedOrderData.status}. Possible external interference (e.g., Cloud Function).`);
       }
 
-      const { sendSseEvent } = require('../api/routes/events');
-      sendSseEvent({ type: 'order_update', payload: updatedOrderData });
+      // --- 🔥 3. PUBLICAMOS EN REDIS ---
+      console.log(`[OrderService] Publicando 'order_update' en ${SSE_CHANNEL}`);
+      const message = JSON.stringify({ type: 'order_update', payload: updatedOrderData });
+      await publisher.publish(SSE_CHANNEL, message);
+      // --- FIN DE LA MODIFICACIÓN ---
 
       const customerTelegramId = updatedOrderData.customer?.telegramId;
       if (customerTelegramId && updatedOrderData.notificationsEnabled !== false) {

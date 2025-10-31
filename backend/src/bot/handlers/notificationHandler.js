@@ -26,7 +26,9 @@ async function handleNotificationPreference(ctx, callbackData) {
   
   try {
     if (choice === 'yes') {
-      await ctx.telegram.setMyCommands(defaultCommands, { 
+      // ✅ CORRECCIÓN: Usar la lista de comandos que SÍ incluye /mipedido.
+      // El usuario acaba de crear un pedido, por lo que debe tener este comando.
+      await ctx.telegram.setMyCommands(commandsWithMyOrder, { 
         scope: { type: 'chat', chat_id: userId } 
       });
       await ctx.editMessageText(

@@ -526,6 +526,10 @@ async function handleFinalConfirmation(ctx, userId, restaurantId) {
     // Limpiar sesión
     delete ctx.session.cart;
     
+    // ✅ CORRECCIÓN: Actualizar comandos para que aparezca /mipedido
+    const telegramUserService = require('../services/telegramUserService');
+    await telegramUserService.updateUserCommands(ctx, restaurantId);
+
     // Editar el mensaje de resumen para que no se pueda volver a presionar
     await ctx.editMessageText(
       `✅ *¡Pedido Confirmado!*\n\n` +
