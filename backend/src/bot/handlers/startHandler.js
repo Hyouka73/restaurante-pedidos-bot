@@ -134,18 +134,22 @@ module.exports = async (ctx) => {
       parse_mode: 'Markdown'
     });
 
+    // Reemplazamos los 4 botones por la pregunta clave
     await ctx.reply(
       '👇 *¿Qué te gustaría hacer?*',
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [
-            Markup.button.callback('🛒 Hacer Pedido', 'init_order'),
-            Markup.button.callback('💡 Recomendación', 'start_recommendation')
+            // "Ya sabes lo que vas a pedir"
+            Markup.button.callback('📋 Ver Menú Completo', 'show_menu') 
           ],
           [
-            Markup.button.callback('📋 Ver Menú', 'show_menu'),
-            Markup.button.callback('📞 Info', 'show_info')
+            // "Deseas descubrirlo?"
+            Markup.button.callback('💡 ¡Ayúdame a descubrir!', 'start_recommendation')
+          ],
+          [
+            Markup.button.callback('📞 Info del Restaurante', 'show_info')
           ]
         ])
       }

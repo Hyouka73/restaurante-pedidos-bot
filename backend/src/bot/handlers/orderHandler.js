@@ -290,7 +290,7 @@ async function askPaymentMethod(ctx, session, restaurantId) {
     return;
   }
 
-  const buttons = enabledMethods.map(pm => 
+  const buttons = enabledMethods.map(pm =>
     [Markup.button.callback(`💳 ${pm.name}`, `payment_${pm.id}`)]
   );
   

@@ -4,18 +4,18 @@ console.log("🚀 [server.js] Iniciando...");
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { Telegraf } = require('telegraf');
+const { Telegraf } = require('telegraf'); 
 const { session } = require('telegraf');
 const { Redis } = require('@telegraf/session/redis');
 
 // ===== CONFIGURACIÓN EXPRESS =====
-const app = express();
+const app = express(); 
 
 // Middleware JSON (ANTES de las rutas)
-app.use(express.json());
+app.use(express.json()); 
 
 // CORS
-const corsOptions = {
+const corsOptions = { 
   origin: process.env.NODE_ENV === 'production' 
     ? process.env.FRONTEND_URL 
     : ['http://localhost:5173', 'http://localhost:3001', 'http://localhost:5174'],
@@ -23,22 +23,22 @@ const corsOptions = {
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 };
-app.use(cors(corsOptions));
+app.use(cors(corsOptions)); 
 
 // ===== CONFIGURACIÓN BOT =====
 console.log("🤖 [server.js] Configurando bot...");
 
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN); 
 
 // ✅ CONFIGURAR SESIÓN REDIS (ANTES DE HANDLERS)
-const redisUrl = process.env.KV_URL;
-if (!redisUrl) {
+const redisUrl = process.env.KV_URL; 
+if (!redisUrl) { 
   console.error('❌ [server.js] KV_URL no encontrado en variables de entorno');
   throw new Error('KV_URL es requerido para sesiones');
 }
 
 console.log("📦 [server.js] Conectando a Redis...");
-const store = Redis({
+const store = Redis({ 
   url: redisUrl,
   // Opciones de configuración adicionales para mayor robustez en Vercel
   config: {
@@ -63,38 +63,38 @@ bot.use(session({
   }
 }));
 
-console.log("✅ [server.js] Sesión Redis configurada");
+console.log("✅ [server.js] Sesión Redis configurada"); 
 
 // ===== IMPORTAR HANDLERS =====
 const startHandler = require('./src/bot/handlers/startHandler');
 const { menuHandler } = require('./src/bot/handlers/menuHandler');
 const orderHandler = require('./src/bot/handlers/orderHandler');
 const myOrderHandler = require('./src/bot/handlers/myOrderHandler');
-const interactionHandler = require('./src/bot/middleware/interactionHandler');
+const interactionHandler = require('./src/bot/middleware/interactionHandler'); 
 
 // ===== REGISTRAR HANDLERS =====
 console.log("🔧 [server.js] Registrando handlers...");
 
-bot.command('start', startHandler);
-bot.command('menu', menuHandler);
-bot.command('pedido', orderHandler);
-bot.command('mipedido', myOrderHandler);
+bot.command('start', startHandler); 
+bot.command('menu', menuHandler); 
+bot.command('pedido', orderHandler); 
+bot.command('mipedido', myOrderHandler); 
 
 // Callback queries (botones inline)
-bot.on('callback_query', interactionHandler);
+bot.on('callback_query', interactionHandler); 
 
 // Mensajes de texto
-bot.on('text', async (ctx) => {
+bot.on('text', async (ctx) => { 
   if (!ctx.message.text.startsWith('/')) {
     await orderHandler(ctx);
   }
 });
 
 // Ubicaciones
-bot.on('location', orderHandler);
+bot.on('location', orderHandler); 
 
 // Contactos
-bot.on('contact', async (ctx) => {
+bot.on('contact', async (ctx) => { 
   const contact = ctx.message.contact;
   console.log('📞 [server.js] Contacto recibido:', contact.phone_number);
   
@@ -111,15 +111,15 @@ bot.on('contact', async (ctx) => {
 });
 
 // Error handler
-bot.catch((err, ctx) => {
+bot.catch((err, ctx) => { 
   console.error('❌ [server.js] Error en bot:', err);
   ctx.reply('Ocurrió un error. Por favor intenta de nuevo o usa /start').catch(console.error);
 });
 
-console.log("✅ [server.js] Handlers registrados");
+console.log("✅ [server.js] Handlers registrados"); 
 
 // ===== RUTA WEBHOOK (CRÍTICA PARA VERCEL) =====
-app.post('/api/webhook', async (req, res) => {
+app.post('/api/webhook', async (req, res) => { 
   console.log('📨 [webhook] Recibido:', JSON.stringify(req.body).substring(0, 100));
   
   try {
@@ -144,7 +144,7 @@ const userRoutes = require('./src/api/routes/user');
 const dashboardRoutes = require('./src/api/routes/dashboard');
 const { router: eventsRoutes } = require('./src/api/routes/events');
 const discountRulesRoutes = require('./src/api/routes/discountRules');
-const qrRoutes = require('./src/api/routes/qr');
+const qrRoutes = require('./src/api/routes/qr'); 
 
 app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
@@ -157,10 +157,10 @@ app.use('/api/user', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/discount-rules', discountRulesRoutes);
 app.use('/api/qr', qrRoutes);
-app.use('/api/events', eventsRoutes);
+app.use('/api/events', eventsRoutes); 
 
 // ===== RUTAS AUXILIARES =====
-app.get('/health', (req, res) => {
+app.get('/health', (req, res) => { 
   res.json({
     status: 'ok',
     timestamp: new Date(),
@@ -169,7 +169,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/api', (req, res) => {
+app.get('/api', (req, res) => { 
   res.json({
     message: 'RestBot API',
     version: '1.0.0',
@@ -178,7 +178,7 @@ app.get('/api', (req, res) => {
   });
 });
 
-app.get('/', (req, res) => {
+app.get('/', (req, res) => { 
   res.json({
     message: 'RestBot - Sistema de Pedidos',
     webhook: '/api/webhook',
@@ -188,7 +188,7 @@ app.get('/', (req, res) => {
 });
 
 // ===== MANEJO DE ERRORES =====
-app.use((err, req, res, next) => {
+app.use((err, req, res, next) => { 
   console.error('❌ [server.js] Error Express:', err);
   res.status(500).json({ 
     error: 'Internal server error',
@@ -197,7 +197,7 @@ app.use((err, req, res, next) => {
 });
 
 // ===== INICIO DIFERENCIAL =====
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.NODE_ENV !== 'production') { 
   // MODO LOCAL: Usar polling
   console.log("🔧 [server.js] MODO DESARROLLO - Iniciando polling...");
   
@@ -220,11 +220,11 @@ if (process.env.NODE_ENV !== 'production') {
   process.once('SIGINT', () => bot.stop('SIGINT'));
   process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-} else {
+} else { 
   // MODO PRODUCCIÓN: Webhook (Vercel)
   console.log("🚀 [server.js] MODO PRODUCCIÓN - Configurado para webhook");
 }
 
 // ===== EXPORTAR PARA VERCEL =====
-console.log("✅ [server.js] Configuración completa");
-module.exports = app;
+console.log("✅ [server.js] Configuración completa"); 
+module.exports = app; 

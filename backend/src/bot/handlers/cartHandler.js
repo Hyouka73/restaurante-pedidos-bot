@@ -1,23 +1,24 @@
-// backend/src/bot/handlers/cartHandler.js
-
+// Importaciones necesarias (algunas son de tu viejo cartHandler)
 const { Markup } = require('telegraf');
-const { userOrderSessions, SESSION_STATES, askPaymentMethod } = require('./orderHandler');
 const menuService = require('../../services/menuService');
-const configBotService = require('../../services/configBotService');
+const configBotService = require('../services/configBotService');
 const DiscountRuleService = require('../../services/discountRuleService');
-const orderService = require('../../services/orderService');
+const { SESSION_STATES, askPaymentMethod } = require('./orderHandler');
+const { showMenuView } = require('./menuHandler'); // Para 'back_to_menu'
 
 // --- LÓGICA DE AÑADIR ITEM ---
-async function handleAddItem(ctx, callbackData, userId, session, restaurantId) {
+// (Esta es la lógica que estaba al final de interactionHandler.js)
+async function handleAddItem(ctx, callbackData, userId, restaurantId) {
+  const session = ctx.session?.cart;
   if (!session) {
     await ctx.answerCbQuery('⚠️ Tu sesión ha expirado. Inicia un nuevo pedido con /pedido', { show_alert: true });
     return;
   }
-
+  
   const itemId = callbackData.split('_')[2];
   const menuData = await menuService.getMenuForBot(restaurantId);
   if (!Array.isArray(menuData)) {
-    console.error('[handleAddItem] menuData no es array:', typeof menuData, menuData);
+    console.error('[handleAddItem] menuData no es array:', typeof menuData);
     await ctx.answerCbQuery('❌ Error al cargar el menú', { show_alert: true });
     return;
   }
@@ -43,34 +44,34 @@ async function handleAddItem(ctx, callbackData, userId, session, restaurantId) {
     await ctx.answerCbQuery(`✅ ${item.name} agregado al carrito`);
   }
 
-  // --- LÓGICA DE COMBOS DINÁMICOS ---
-  const { cart: updatedCart, notification: comboNotification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
-  userOrderSessions.set(userId, updatedCart); 
+  // Aplicar combos dinámicos
+  const { cart: updatedCart, notification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
+  ctx.session.cart = updatedCart;
 
-  if (comboNotification) {
-    await ctx.reply(`*${comboNotification.titulo}*\n${comboNotification.texto}`, { parse_mode: 'Markdown' });
+  if (notification) {
+    await ctx.reply(`*${notification.title}*\n${notification.text}`, { parse_mode: 'Markdown' });
   }
 
-  // --- LÓGICA DE VENTA CRUZADA (CROSS-SELL) ---
+  // Cross-sell (Lógica mejorada de interactionHandler)
   if (item.sugerir_items && item.sugerir_items.length > 0) {
-    const apiClient = require('../../services/apiClient'); // Asumimos que tienes este servicio
     try {
-      const crossSellResponse = await apiClient.post('/chatbot/get-cross-sell', {
-        restaurantId: restaurantId,
-        item_agregado_id: itemId
-      });
-      const suggestions = crossSellResponse.data.sugerencias;
+      const suggestionPromises = item.sugerir_items.map(itemId => 
+        menuService.getMenuItem(restaurantId, itemId)
+      );
+      const rawSuggestions = await Promise.all(suggestionPromises);
+      const suggestions = rawSuggestions.filter(s => s);
       if (suggestions && suggestions.length > 0) {
-        const suggestionNames = suggestions.map(s => s.nombre).join(', ');
+        const suggestionNames = suggestions.map(s => s.name).join(', ');
         await ctx.reply(`💡 Ya que llevas *${item.name}*, quizás te interese también: ${suggestionNames}.`, { parse_mode: 'Markdown' });
       }
-    } catch (crossSellError) {
-      console.error('Error al obtener sugerencias de cross-sell:', crossSellError);
+    } catch (error) {
+      console.error('Error en cross-sell:', error);
     }
   }
 }
 
 // --- LÓGICA DE INFO DE ITEM ---
+// 
 async function handleItemInfo(ctx, callbackData, restaurantId) {
   const itemId = callbackData.split('_')[2];
   const menuItems = await menuService.getMenuForBot(restaurantId);
@@ -80,13 +81,12 @@ async function handleItemInfo(ctx, callbackData, restaurantId) {
     await ctx.answerCbQuery('😔 Platillo no encontrado', { show_alert: true });
     return;
   }
-  
-  const price = item.price || 0;
+
   const itemType = item.isCombo ? '🎁 Combo' : '🍽️ Platillo';
   const info = 
     `${itemType}: *${item.name}*\n\n` +
     `${item.description || 'Deliciosa opción'}\n\n` +
-    `💰 Precio: $${price.toFixed(2)}\n` +
+    `💰 Precio: $${item.price}\n` + // Asumimos que el precio ya viene formateado o es un número
     `⏱️ Tiempo de preparación: ${item.prepTime || '20-30'} min\n` +
     `${item.ingredients ? `\n🥘 Ingredientes: ${item.ingredients}` : ''}`;
 
@@ -95,27 +95,27 @@ async function handleItemInfo(ctx, callbackData, restaurantId) {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
       [Markup.button.callback('🛒 Agregar al pedido', `add_item_${item.id}`)],
-      [Markup.button.callback('« Volver', 'back_to_menu')]
+      [Markup.button.callback('« Volver', 'back_to_menu')] // 'back_to_menu' es manejado por interactionHandler
     ])
   });
 }
 
-// --- LÓGICA DE VER CARRITO (CON CORRECCIONES) ---
-async function handleViewCart(ctx, userId, session) {
+// --- LÓGICA DE VER CARRITO ---
+// 
+async function handleViewCart(ctx, userId) {
+  const session = ctx.session?.cart;
   if (!session || session.items.length === 0) {
     await ctx.answerCbQuery('🛒 Tu carrito está vacío', { show_alert: true });
     return;
   }
-
+  
   // Usar los totales de la sesión (calculados por DiscountRuleService)
-  // Fallbacks (|| 0) por si la sesión es de una versión anterior
   const subtotal = session.subtotal || session.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const discount = session.discount; // Objeto { amount, ruleName }
   const total = session.total || subtotal;
-
+  
   let cartMessage = '🛒 *Tu Carrito de Compras*\n';
   cartMessage += '─'.repeat(25) + '\n\n';
-  
   session.items.forEach((item, index) => {
     const itemType = item.type === 'combo' ? '🎁' : '🍽️';
     cartMessage += `${itemType} *${item.name}*\n`;
@@ -125,7 +125,6 @@ async function handleViewCart(ctx, userId, session) {
   });
   
   cartMessage += '─'.repeat(25) + '\n';
-  
   cartMessage += `💰 *Subtotal: $${subtotal.toFixed(2)}*\n`;
 
   // Mostrar descuento si existe
@@ -145,6 +144,7 @@ async function handleViewCart(ctx, userId, session) {
       Markup.button.callback('🗑️ Eliminar', `remove_${index}`)
     ]);
   });
+  
   buttons.push([Markup.button.callback('➕ Agregar más platillos', 'back_to_menu')]);
   buttons.push([
     Markup.button.callback('✅ Continuar al Pago', 'continue_to_delivery'),
@@ -158,7 +158,6 @@ async function handleViewCart(ctx, userId, session) {
       ...Markup.inlineKeyboard(buttons)
     });
   } catch (e) {
-    // Si falla la edición (ej. mensaje muy antiguo), envía uno nuevo.
     await ctx.reply(cartMessage, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard(buttons)
@@ -166,9 +165,14 @@ async function handleViewCart(ctx, userId, session) {
   }
 }
 
-// --- LÓGICA DE CAMBIAR CANTIDAD (CON CORRECCIONES) ---
-async function handleQuantityChange(ctx, callbackData, userId, session, restaurantId) {
-  if (!session) return;
+// --- LÓGICA DE CAMBIAR CANTIDAD ---
+// (Modificada para usar la nueva lógica de 'applyDynamicCombos')
+async function handleQuantityChange(ctx, callbackData, userId, restaurantId) {
+  const session = ctx.session?.cart;
+  if (!session) {
+    await ctx.answerCbQuery('⚠️ Sesión expirada');
+    return;
+  }
 
   const [action, operation, indexStr] = callbackData.split('_');
   const index = parseInt(indexStr);
@@ -191,44 +195,51 @@ async function handleQuantityChange(ctx, callbackData, userId, session, restaura
       return;
     }
   }
-
+  
   // Recalcular descuentos dinámicos
-  const { cart: updatedCart, notification: comboNotification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
-  userOrderSessions.set(userId, updatedCart); // Guardar el carrito actualizado
+  const { cart: updatedCart, notification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
+  ctx.session.cart = updatedCart; // Guardar el carrito actualizado
 
   // Notificar al usuario SI HAY un cambio en el descuento
-  if (comboNotification) {
-    await ctx.reply(`*${comboNotification.titulo}*\n${comboNotification.texto}`, { parse_mode: 'Markdown' });
+  if (notification) {
+    await ctx.reply(`*${notification.title}*\n${notification.text}`, { parse_mode: 'Markdown' });
   }
 
-  // Actualizar la vista del carrito con el carrito actualizado
-  await handleViewCart(ctx, userId, updatedCart);
+  // Actualizar la vista del carrito
+  await handleViewCart(ctx, userId);
 }
 
-// --- LÓGICA DE QUITAR ITEM (CON CORRECCIONES) ---
-async function handleRemoveItem(ctx, callbackData, userId, session, restaurantId) {
-  if (!session) return;
+// --- LÓGICA DE QUITAR ITEM ---
+// (Modificada para usar la nueva lógica de 'applyDynamicCombos')
+async function handleRemoveItem(ctx, callbackData, userId, restaurantId) {
+  const session = ctx.session?.cart;
+  if (!session) {
+    await ctx.answerCbQuery('⚠️ Sesión expirada');
+    return;
+  }
 
   const index = parseInt(callbackData.split('_')[1]);
   const item = session.items[index];
+
   if (!item) {
     await ctx.answerCbQuery('❌ Item no encontrado');
     return;
   }
-
+  
+  const removedItemName = item.name;
   session.items.splice(index, 1);
-  await ctx.answerCbQuery(`🗑️ ${item.name} eliminado del carrito`);
+  await ctx.answerCbQuery(`🗑️ ${removedItemName} eliminado del carrito`);
 
   // Recalcular descuentos dinámicos
-  const { cart: updatedCart, notification: comboNotification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
-  userOrderSessions.set(userId, updatedCart);
+  const { cart: updatedCart, notification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
+  ctx.session.cart = updatedCart;
 
   // Notificar al usuario SI HAY un cambio en el descuento
-  if (comboNotification) {
-    await ctx.reply(`*${comboNotification.titulo}*\n${comboNotification.texto}`, { parse_mode: 'Markdown' });
+  if (notification) {
+    await ctx.reply(`*${notification.title}*\n${notification.text}`, { parse_mode: 'Markdown' });
   }
-
-  if (updatedCart.items.length === 0) {
+  
+  if (session.items.length === 0) {
     await ctx.editMessageText('🛒 Tu carrito está vacío\n\n¿Deseas ver el menú nuevamente?', {
       ...Markup.inlineKeyboard([
         [Markup.button.callback('📋 Ver Menú', 'back_to_menu')],
@@ -236,14 +247,18 @@ async function handleRemoveItem(ctx, callbackData, userId, session, restaurantId
       ])
     });
   } else {
-    // Actualizar la vista del carrito con el carrito actualizado
-    await handleViewCart(ctx, userId, updatedCart);
+    await handleViewCart(ctx, userId);
   }
 }
 
 // --- LÓGICA DE ENTREGA/RECOJO ---
-async function handleContinueToDelivery(ctx, userId, session, restaurantId) {
-  if (!session) return;
+// 
+async function handleContinueToDelivery(ctx, userId, restaurantId) {
+  const session = ctx.session?.cart;
+  if (!session) {
+    await ctx.answerCbQuery('⚠️ Sesión expirada');
+    return;
+  }
 
   const restaurantData = await configBotService.getRestaurantData(restaurantId);
   const features = restaurantData.features || {};
@@ -264,9 +279,7 @@ async function handleContinueToDelivery(ctx, userId, session, restaurantId) {
   }
 
   buttons.push([Markup.button.callback('« Volver al carrito', 'view_cart')]);
-
   session.step = SESSION_STATES.CHOOSING_DELIVERY;
-  userOrderSessions.set(userId, session);
 
   await ctx.answerCbQuery();
   await ctx.editMessageText(
@@ -281,12 +294,16 @@ async function handleContinueToDelivery(ctx, userId, session, restaurantId) {
 }
 
 // --- LÓGICA DE PEDIR UBICACIÓN ---
-async function handleDeliveryYes(ctx, userId, session) {
-  if (!session) return;
+// 
+async function handleDeliveryYes(ctx, userId) {
+  const session = ctx.session?.cart;
+  if (!session) {
+    await ctx.answerCbQuery('⚠️ Sesión expirada');
+    return;
+  }
 
   session.deliveryType = 'delivery';
   session.step = SESSION_STATES.WAITING_LOCATION;
-  userOrderSessions.set(userId, session);
 
   await ctx.answerCbQuery();
   await ctx.reply(
@@ -313,23 +330,29 @@ async function handleDeliveryYes(ctx, userId, session) {
 }
 
 // --- LÓGICA DE RECOGER EN TIENDA ---
-async function handlePickup(ctx, userId, session, restaurantId) {
-  if (!session) return;
+// (Modificada para usar la nueva lógica de 'applyDynamicCombos')
+async function handlePickup(ctx, userId, restaurantId) {
+  const session = ctx.session?.cart;
+  if (!session) {
+    await ctx.answerCbQuery('⚠️ Sesión expirada');
+    return;
+  }
 
   const restaurantData = await configBotService.getRestaurantData(restaurantId);
   const features = restaurantData.features || {};
 
   session.deliveryType = 'pickup';
   session.delivery = { fee: 0, distanceKm: 0 }; // Reiniciar costos de envío
-  // Recalcular total por si acaso
+
+  // Recalcular total (por si había un costo de envío)
   const { cart: updatedCart } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
-  userOrderSessions.set(userId, updatedCart);
+  ctx.session.cart = updatedCart;
   
   await ctx.answerCbQuery('✅ Recogerás tu pedido en tienda');
-
   await ctx.reply('🏪 Perfecto, recogerás tu pedido en tienda', {
     reply_markup: { remove_keyboard: true }
   });
+  
   const address = restaurantData.info?.address || 'Dirección no disponible';
   await ctx.reply(
     `📍 *Dirección del restaurante:*\n${address}\n\n` +
@@ -347,13 +370,19 @@ async function handlePickup(ctx, userId, session, restaurantId) {
 }
 
 // --- LÓGICA DE SELECCIÓN DE PAGO ---
-async function handlePaymentSelection(ctx, callbackData, userId, session, restaurantId) {
-  if (!session) return;
+// 
+async function handlePaymentSelection(ctx, callbackData, userId, restaurantId) {
+  const session = ctx.session?.cart;
+  if (!session) {
+    await ctx.answerCbQuery('⚠️ Sesión expirada');
+    return;
+  }
 
   const paymentId = callbackData.split('_')[1];
   const restaurantData = await configBotService.getRestaurantData(restaurantId);
   const paymentMethods = restaurantData.paymentMethods || [];
   const selectedPayment = paymentMethods.find(pm => pm.id === paymentId);
+  
   if (!selectedPayment) {
     await ctx.answerCbQuery('❌ Método de pago no válido');
     return;
@@ -361,26 +390,34 @@ async function handlePaymentSelection(ctx, callbackData, userId, session, restau
 
   session.paymentMethod = selectedPayment;
   session.step = SESSION_STATES.FINAL_CONFIRMATION;
-  userOrderSessions.set(userId, session);
 
   await ctx.answerCbQuery(`✅ Pagarás con ${selectedPayment.name}`);
-  await showFinalConfirmation(ctx, session, restaurantData);
+  
+  // Pasamos ctx y restaurantId (que contiene los datos)
+  await showFinalConfirmation(ctx, restaurantData);
 }
 
 // --- LÓGICA DE MOSTRAR RESUMEN FINAL ---
-async function showFinalConfirmation(ctx, session, restaurantData) {
+// (Modificada para usar los totales de la sesión)
+async function showFinalConfirmation(ctx, restaurantData) {
+  const session = ctx.session?.cart;
+  if (!session) {
+    await ctx.reply('⚠️ Sesión expirada. Inicia un nuevo pedido con /pedido');
+    return;
+  }
+
   // Usar los totales de la sesión
   const subtotal = session.subtotal || 0;
   const deliveryFee = session.delivery?.fee || 0;
   const discount = session.discount;
-  const total = session.total || (subtotal + deliveryFee);
+  const total = session.total || (subtotal + deliveryFee); // Total ya incluye descuento
 
   let confirmMessage = '📋 *Resumen de tu Pedido:*\n\n';
   confirmMessage += '🛒 *Items:*\n';
   session.items.forEach((item, i) => {
-    const itemTotal = (item.price || 0) * item.quantity;
-    confirmMessage += `${i + 1}. ${item.name} (${item.quantity}x) - $${itemTotal.toFixed(2)}\n`;
+    confirmMessage += `${i + 1}. ${item.name} (${item.quantity}x) - $${((item.price || 0) * item.quantity).toFixed(2)}\n`;
   });
+  
   confirmMessage += `\n💰 Subtotal: $${subtotal.toFixed(2)}\n`;
   
   if (session.deliveryType === 'delivery') {
@@ -400,15 +437,12 @@ async function showFinalConfirmation(ctx, session, restaurantData) {
   confirmMessage += `\n*TOTAL: $${total.toFixed(2)}*\n\n`;
   
   confirmMessage += `📍 *Entrega:* ${session.deliveryType === 'delivery' ? 'A domicilio' : 'Recoger en tienda'}\n`;
-  
   if (session.customerAddress) {
     confirmMessage += `📮 Dirección: ${session.customerAddress}\n`;
   }
-  
   if (session.customerPhone) {
     confirmMessage += `📞 Teléfono: ${session.customerPhone}\n`;
   }
-  
   confirmMessage += `💳 *Pago:* ${session.paymentMethod?.name || 'No seleccionado'}\n`;
   confirmMessage += `👤 *Nombre:* ${session.customerName || 'No proporcionado'}\n`;
   confirmMessage += `\n⏱️ *Tiempo estimado:* 25-35 minutos`;
@@ -424,19 +458,24 @@ async function showFinalConfirmation(ctx, session, restaurantData) {
 }
 
 // --- LÓGICA DE CONFIRMACIÓN FINAL (CREAR ORDEN) ---
-async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
-  if (!session) return;
-  
-  // Evitar doble confirmación
-  if (session.step !== SESSION_STATES.FINAL_CONFIRMATION) {
-    await ctx.answerCbQuery('⚠️ Tu pedido ya está siendo procesado.');
+// (Modificada para usar los totales de la sesión)
+async function handleFinalConfirmation(ctx, userId, restaurantId) {
+  const session = ctx.session?.cart;
+  if (!session) {
+    await ctx.answerCbQuery('⚠️ Sesión expirada');
     return;
   }
   
-  session.step = 'PROCESSING'; // Marcar como procesando para evitar duplicados
-  userOrderSessions.set(userId, session);
-
+  // Evitar doble confirmación
+  if (session.step === 'PROCESSING') {
+     await ctx.answerCbQuery('⚠️ Tu pedido ya está siendo procesado.');
+     return;
+  }
+  
+  session.step = 'PROCESSING'; // Marcar como procesando
+  
   await ctx.answerCbQuery('⏳ Procesando pedido...');
+  
   try {
     // Usar los totales finales de la sesión
     const subtotal = session.subtotal || 0;
@@ -444,20 +483,21 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
     const total = session.total || (subtotal + deliveryFee);
     const discountAmount = session.discount?.amount || 0;
     
+    const orderService = require('../../services/orderService'); // Evitar dependencia circular
+    
     const orderData = {
-      info: {
-        location: {
-          coordinates: session.customerLocation || null,
+      info: { 
+        location: { 
+          coordinates: session.customerLocation || null, 
           formatted_address: session.customerAddress || null
-        }
+        } 
       },
-      customer: {
-        name: session.customerName,
-        telegramId: userId,
-        phone: session.customerPhone,
+      customer: { 
+        name: session.customerName, 
+        telegramId: userId, 
+        phone: session.customerPhone 
       },
-     
-     items: session.items,
+      items: session.items,
       subtotal,
       deliveryFee,
       discount: discountAmount, // Guardar el monto del descuento
@@ -468,11 +508,12 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
       status: 'pending',
       notificationsEnabled: true
     };
+    
     const order = await orderService.createOrder(restaurantId, orderData);
 
-    // Limpiar sesión SOLO si la orden se crea exitosamente
-    userOrderSessions.delete(userId);
-
+    // Limpiar sesión
+    delete ctx.session.cart;
+    
     // Editar el mensaje de resumen para que no se pueda volver a presionar
     await ctx.editMessageText(
       `✅ *¡Pedido Confirmado!*\n\n` +
@@ -495,11 +536,12 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
             [Markup.button.callback('👎 No, yo consultaré', `notify_no_${restaurantId}_${order.id}`)]
         ])
     );
+    
   } catch (error) {
-    console.error('Error creando pedido:', error);
+    console.error('❌ Error creando pedido:', error);
+    
     // Restaurar estado para reintentar
     session.step = SESSION_STATES.FINAL_CONFIRMATION;
-    userOrderSessions.set(userId, session);
     
     await ctx.reply(
       '❌ Hubo un error al procesar tu pedido. Por favor intenta nuevamente o contacta al restaurante.',
@@ -512,9 +554,11 @@ async function handleFinalConfirmation(ctx, userId, session, restaurantId) {
 }
 
 // --- LÓGICA DE CANCELAR ORDEN ---
+// 
 async function handleCancelOrder(ctx, userId) {
-  userOrderSessions.delete(userId);
+  delete ctx.session.cart;
   await ctx.answerCbQuery('❌ Pedido cancelado');
+  
   try {
     await ctx.editMessageText(
       '❌ Pedido cancelado\n\n¿Deseas iniciar un nuevo pedido?',
@@ -526,7 +570,6 @@ async function handleCancelOrder(ctx, userId) {
       }
     );
   } catch (editError) {
-    // Si falla la edición (mensaje antiguo), envía uno nuevo
     await ctx.reply(
       '❌ Pedido cancelado\n\n¿Deseas iniciar un nuevo pedido?',
       {

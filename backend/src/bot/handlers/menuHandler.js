@@ -21,7 +21,6 @@ async function showMenuView(ctx, page = 1, isEdit = false) {
     const menuItems = await menuService.getMenuForBot(restaurantId);
     if (!menuItems || menuItems.length === 0) {
       const emptyMenuText = '😔 Lo sentimos, el menú no está disponible en este momento.';
-      // Si es una edición, edita el mensaje, si no, responde.
       return isEdit ? ctx.editMessageText(emptyMenuText) : ctx.reply(emptyMenuText);
     }
 
@@ -32,34 +31,39 @@ async function showMenuView(ctx, page = 1, isEdit = false) {
     const pageItems = menuItems.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
     // --- Construir el texto del mensaje ---
-    let messageText = `📋 *Nuestro Menú* - Página ${page} de ${totalPages}\n\n`;
-    if (pageItems.length === 0 && menuItems.length > 0) {
-        messageText = '🤔 No hay más platillos por aquí. ¡Prueba la página anterior!';
-    } else {
-        pageItems.forEach(item => {
-            const itemType = item.isCombo ? '🎁' : '🍽️';
-            messageText += `${itemType} *${item.name}* - 💰 $${item.price}\n`;
-            if (item.description) {
-                // Limitar la descripción para no hacer el mensaje muy largo
-                const shortDesc = item.description.length > 50 ? item.description.substring(0, 47) + '...' : item.description;
-                messageText += `_${shortDesc}_
-`;
-            }
-            messageText += `\n`;
-        });
-    }
+    let messageText = `📋 *Nuestro Menú* - Página ${page} de ${totalPages}\n`;
+    
+    // --- CONSTRUCCIÓN DE BOTONES MODIFICADA ---
+    const allButtons = []; // Aquí irán todos los botones
+
+    pageItems.forEach(item => {
+        const itemType = item.isCombo ? '🎁' : '🍽️';
+        const price = item.price || 0;
+        messageText += `\n${'─'.repeat(15)}\n`; // Separador
+        messageText += `${itemType} *${item.name}* - 💰 $${price.toFixed(2)}\n`;
+        
+        if (item.description) {
+            const shortDesc = item.description.length > 50 ? item.description.substring(0, 47) + '...' : item.description;
+            messageText += `_${shortDesc}_\n`;
+        }
+
+        // Añadimos los dos botones de acción para este item
+        const itemActionButtons = [
+            Markup.button.callback('ℹ️ Ver Info', `item_info_${item.id}`),
+            Markup.button.callback('➕ Añadir', `add_item_${item.id}`)
+        ];
+        
+        allButtons.push(itemActionButtons);
+    });
+    
+    messageText += `\n${'─'.repeat(15)}\n`;
     messageText += '👇 Agrega platillos a tu pedido o navega por el menú.';
 
     // --- Construir el teclado de botones ---
-    const itemButtons = pageItems.map(item => {
-        return [Markup.button.callback(`➕ ${item.name}`, `add_item_${item.id}`)];
-    });
-
     const navButtons = [];
     if (page > 1) {
         navButtons.push(Markup.button.callback('⬅️ Anterior', `menu_page_${page - 1}`));
     }
-    // Botón de página (no se puede hacer clic)
     navButtons.push(Markup.button.callback(`Pág. ${page}/${totalPages}`, 'no_action'));
     if (page < totalPages) {
         navButtons.push(Markup.button.callback('Siguiente ➡️', `menu_page_${page + 1}`));
@@ -71,14 +75,13 @@ async function showMenuView(ctx, page = 1, isEdit = false) {
     ];
 
     const keyboard = Markup.inlineKeyboard([
-        ...itemButtons,
+        ...allButtons, // Usamos los nuevos botones
         navButtons,
         actionsRow
     ]);
 
     // --- Enviar o Editar Mensaje ---
     if (isEdit) {
-        // Evitar error si el mensaje es idéntico
         if (ctx.callbackQuery.message.text === messageText) {
             return ctx.answerCbQuery('Ya estás en esta página.');
         }
