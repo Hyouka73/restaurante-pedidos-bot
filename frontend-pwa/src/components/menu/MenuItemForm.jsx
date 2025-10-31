@@ -3,37 +3,35 @@ import { WizardInputField, WizardTextAreaField, WizardSelectField, WizardCheckbo
 import { ButtonLoader } from '../ui/Loader';
 import { X } from 'lucide-react';
 import ItemImageUpload from './ItemImageUpload';
-import Select from 'react-select'; // 🔥 1. IMPORTAMOS 'Select'
+import Select from 'react-select'; 
 
 // Opciones para los tags de recomendación
-const TAG_OPTIONS = { 
+const TAG_OPTIONS = {
   categoria_general: ['Comida', 'Bebida', 'Postre'],
-  tipo_plato: ['Plato Fuerte', 'Entrada', 'Para Compartir', 'Acompañante', 'Snack'],
+  tipo_plato: ['Plato Fuerte', 'Entrada', 'Para Compartir', 'Acompañante', 'Snack', 'Bebida', 'Postre'], // <--- 🔥 MODIFICADO
   proteina: ['Res', 'Pollo', 'Cerdo', 'Pescado', 'Vegano', 'Vegetariano', 'Otro'],
   perfil_sabor: ['Ligero', 'Contundente', 'Picante', 'Dulce', 'Salado', 'Agridulce', 'Amargo'],
 };
 
-// 🔥 2. ACEPTAMOS 'allItems' COMO NUEVA PROP
+// Aceptamos 'allItems' como nueva prop
 const MenuItemForm = ({ item, categories, allItems, onSave, onCancel, onChange, saving }) => {
-  const isEditing = !!item.id; 
+  const isEditing = !!item.id;
 
-  const handleImageUrlChange = (url) => { 
+  const handleImageUrlChange = (url) => {
     onChange('imageUrl', url);
   };
 
   // Manejador para los cambios en los tags (estado anidado)
-  const handleTagChange = (tagName, value) => { 
+  const handleTagChange = (tagName, value) => {
     const newTags = { ...(item.tags || {}), [tagName]: value };
     onChange('tags', newTags);
   };
 
-  // --- 🔥 3. LÓGICA PARA EL SELECTOR DE ITEMS ---
+  // Lógica para el selector de 'sugerir_items'
   const itemOptions = (allItems || [])
     .filter(i => i.id !== item.id) // Un item no puede sugerirse a sí mismo
-    .map(i => ({ value: i.id, label: `${i.name} (ID: ...${i.id.slice(-5)})` })); // Mostramos ID y Nombre
+    .map(i => ({ value: i.id, label: `${i.name} (ID: ...${i.id.slice(-5)})` }));
 
-  // Convertimos el array de IDs guardado (ej: ['id1', 'id2'])
-  // al formato que 'react-select' necesita (ej: [{value: 'id1', label: 'Item 1'}])
   const selectedItemOptions = (item.sugerir_items || [])
     .map(itemId => itemOptions.find(opt => opt.value === itemId))
     .filter(Boolean); // Filtramos por si algún item fue eliminado
@@ -97,7 +95,8 @@ const MenuItemForm = ({ item, categories, allItems, onSave, onCancel, onChange, 
                     onChange={(e) => handleTagChange('tipo_plato', e.target.value)}
                 >
                     <option value="">Seleccionar...</option>
-                    {TAG_OPTIONS.tipo_plato.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    {/* AHORA SÍ APARECERÁN AQUÍ */}
+                    {TAG_OPTIONS.tipo_plato.map(opt => <option key={opt} value={opt}>{opt}</option>)} 
                 </WizardSelectField>
                 <WizardSelectField
                     label="Proteína Principal"
@@ -122,14 +121,12 @@ const MenuItemForm = ({ item, categories, allItems, onSave, onCancel, onChange, 
         <div className="mt-6 p-4 border border-gray-200 rounded-lg">
             <h4 className="text-md font-semibold text-gray-600 mb-3">Venta Cruzada (Cross-Sell)</h4>
             
-            {/* --- 🔥 4. REEMPLAZAMOS EL TEXTAREA  --- */}
             <label className="block text-sm font-medium text-gray-700 mb-1">Sugerir Items</label>
             <Select
               isMulti
               options={itemOptions}
               value={selectedItemOptions}
               onChange={(selectedOptions) => {
-                // Guardamos solo el array de IDs, no el objeto completo
                 const selectedIds = selectedOptions.map(opt => opt.value);
                 onChange('sugerir_items', selectedIds);
               }}
@@ -137,7 +134,6 @@ const MenuItemForm = ({ item, categories, allItems, onSave, onCancel, onChange, 
               classNamePrefix="react-select"
             />
             <p className="text-xs text-gray-500 mt-1">Añade productos para sugerir cuando este se añada al carrito.</p>
-            {/* --- FIN DEL REEMPLAZO --- */}
         </div>
 
         {/* --- Otros Detalles --- */}
