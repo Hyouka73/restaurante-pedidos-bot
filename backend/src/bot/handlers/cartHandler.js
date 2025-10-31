@@ -7,13 +7,25 @@ const { SESSION_STATES, askPaymentMethod } = require('./orderHandler');
 const { showMenuView } = require('./menuHandler'); // Para 'back_to_menu'
 
 // --- LÓGICA DE AÑADIR ITEM ---
-// (Esta es la lógica que estaba al final de interactionHandler.js)
+// ✅ LÓGICA MEJORADA: Inicia el pedido si no existe
 async function handleAddItem(ctx, callbackData, userId, restaurantId) {
-  const session = ctx.session?.cart;
-  if (!session) {
-    await ctx.answerCbQuery('⚠️ Tu sesión ha expirado. Inicia un nuevo pedido con /pedido', { show_alert: true });
-    return;
+  // Si no hay carrito, se crea uno nuevo automáticamente.
+  if (!ctx.session?.cart) {
+    console.log('🛒 [handleAddItem] No hay carrito, creando uno nuevo...');
+    ctx.session.cart = {
+      restaurantId,
+      items: [],
+      step: SESSION_STATES.SELECTING_ITEM,
+      deliveryType: null,
+      customerLocation: null,
+      customerAddress: null,
+      customerPhone: null,
+      customerName: ctx.from.first_name,
+      delivery: null,
+      createdAt: new Date().toISOString()
+    };
   }
+  const session = ctx.session.cart;
   
   const itemId = callbackData.split('_')[2];
   const menuData = await menuService.getMenuForBot(restaurantId);
@@ -524,7 +536,7 @@ async function handleFinalConfirmation(ctx, userId, restaurantId) {
       `🔔 Te notificaremos cuando tu pedido esté listo`,
       {
         parse_mode: 'Markdown',
-        reply_markup: { remove_keyboard: true } // Quitar teclado de ubicación
+        reply_markup: { inline_keyboard: [] } // ✅ CORRECCIÓN: Borra los botones del mensaje
       }
     );
     
@@ -573,7 +585,7 @@ async function handleCancelOrder(ctx, userId) {
     await ctx.reply(
       '❌ Pedido cancelado\n\n¿Deseas iniciar un nuevo pedido?',
       {
-        reply_markup: { remove_keyboard: true },
+        // ✅ CORRECCIÓN: Se elimina el 'remove_keyboard' que causaba conflicto
         ...Markup.inlineKeyboard([
           [Markup.button.callback('🛒 Nuevo Pedido', 'init_order')],
           [Markup.button.callback('📋 Ver Menú', 'show_menu')]
