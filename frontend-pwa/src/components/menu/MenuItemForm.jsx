@@ -5,17 +5,21 @@ import { X } from 'lucide-react';
 import ItemImageUpload from './ItemImageUpload';
 import Select from 'react-select'; 
 
-// Opciones para los tags de recomendación
+// --- 🔥 1. ESTRUCTURA DE TAGS REFINADA ---
+// 'tipo_plato' ahora solo contiene opciones de COMIDA.
 const TAG_OPTIONS = {
   categoria_general: ['Comida', 'Bebida', 'Postre'],
-  tipo_plato: ['Plato Fuerte', 'Entrada', 'Para Compartir', 'Acompañante', 'Snack', 'Bebida', 'Postre'], // <--- 🔥 MODIFICADO
-  proteina: ['Res', 'Pollo', 'Cerdo', 'Pescado', 'Vegano', 'Vegetariano', 'Otro'],
+  tipo_plato: ['Plato Fuerte', 'Entrada', 'Para Compartir', 'Acompañante', 'Snack'],
+  proteina: ['Res', 'Pollo', 'Cerdo', 'Pescado', 'Vegano', 'Vegetariano', 'Otro', 'N/A'],
   perfil_sabor: ['Ligero', 'Contundente', 'Picante', 'Dulce', 'Salado', 'Agridulce', 'Amargo'],
 };
 
-// Aceptamos 'allItems' como nueva prop
-const MenuItemForm = ({ item, categories, allItems, onSave, onCancel, onChange, saving }) => {
+// --- 🔥 2. ELIMINAMOS 'categories' DE LOS PROPS ---
+const MenuItemForm = ({ item, allItems, onSave, onCancel, onChange, saving }) => {
   const isEditing = !!item.id;
+
+  // --- 🔥 3. OBSERVAMOS LA CATEGORÍA SELECCIONADA ---
+  const selectedCategory = item.tags?.categoria_general;
 
   const handleImageUrlChange = (url) => {
     onChange('imageUrl', url);
@@ -24,6 +28,18 @@ const MenuItemForm = ({ item, categories, allItems, onSave, onCancel, onChange, 
   // Manejador para los cambios en los tags (estado anidado)
   const handleTagChange = (tagName, value) => {
     const newTags = { ...(item.tags || {}), [tagName]: value };
+    
+    // --- 🔥 4. LÓGICA DE LIMPIEZA ---
+    // Si la categoría cambia, reseteamos los tags que ya no aplican.
+    if (tagName === 'categoria_general') {
+      if (value === 'Bebida' || value === 'Postre') {
+        newTags.tipo_plato = '';
+        newTags.proteina = 'N/A'; // Opcional: poner 'N/A' por defecto
+      }
+      if (value === 'Comida') {
+        newTags.proteina = ''; // Limpiar 'N/A' si volvemos a 'Comida'
+      }
+    }
     onChange('tags', newTags);
   };
 
@@ -58,24 +74,17 @@ const MenuItemForm = ({ item, categories, allItems, onSave, onCancel, onChange, 
           onChange={(e) => onChange('description', e.target.value)}
           rows={3}
         />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <WizardInputField
-            label="Precio ($)"
-            type="number"
-            step="0.01"
-            value={item.price || ''}
-            onChange={(e) => onChange('price', e.target.value)}
-            required
-          />
-          <WizardSelectField
-            label="Categoría (Visual)"
-            value={item.category || ''}
-            onChange={(e) => onChange('category', e.target.value)}
-          >
-            <option value="">Sin categoría</option>
-            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-          </WizardSelectField>
-        </div>
+        <WizardInputField
+          label="Precio ($)"
+          type="number"
+          step="0.01"
+          value={item.price || ''}
+          onChange={(e) => onChange('price', e.target.value)}
+          required
+        />
+
+        {/* --- 🔥 5. CAMPO DE "CATEGORÍA VISUAL" ELIMINADO --- */}
+        {/* El 'WizardSelectField' para 'item.category' ha sido removido  */}
         
         {/* --- Metadatos para el Asistente de Recomendaciones --- */}
         <div className="mt-6 p-4 border border-gray-200 rounded-lg">
@@ -85,27 +94,37 @@ const MenuItemForm = ({ item, categories, allItems, onSave, onCancel, onChange, 
                     label="Categoría General"
                     value={item.tags?.categoria_general || ''}
                     onChange={(e) => handleTagChange('categoria_general', e.target.value)}
+                    required // Hacemos este campo obligatorio
                 >
                     <option value="">Seleccionar...</option>
                     {TAG_OPTIONS.categoria_general.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </WizardSelectField>
-                <WizardSelectField
-                    label="Tipo de Plato"
-                    value={item.tags?.tipo_plato || ''}
-                    onChange={(e) => handleTagChange('tipo_plato', e.target.value)}
-                >
-                    <option value="">Seleccionar...</option>
-                    {/* AHORA SÍ APARECERÁN AQUÍ */}
-                    {TAG_OPTIONS.tipo_plato.map(opt => <option key={opt} value={opt}>{opt}</option>)} 
-                </WizardSelectField>
-                <WizardSelectField
-                    label="Proteína Principal"
-                    value={item.tags?.proteina || ''}
-                    onChange={(e) => handleTagChange('proteina', e.target.value)}
-                >
-                    <option value="">Seleccionar...</option>
-                    {TAG_OPTIONS.proteina.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </WizardSelectField>
+
+                {/* --- 🔥 6. RENDERIZADO CONDICIONAL --- */}
+                {/* Estos campos solo aparecen si la categoría es "Comida" */}
+                {selectedCategory === 'Comida' && (
+                  <>
+                    <WizardSelectField
+                        label="Tipo de Plato"
+                        value={item.tags?.tipo_plato || ''}
+                        onChange={(e) => handleTagChange('tipo_plato', e.target.value)}
+                    >
+                        <option value="">Seleccionar...</option>
+                        {TAG_OPTIONS.tipo_plato.map(opt => <option key={opt} value={opt}>{opt}</option>)} 
+                    </WizardSelectField>
+                    
+                    <WizardSelectField
+                        label="Proteína Principal"
+                        value={item.tags?.proteina || ''}
+                        onChange={(e) => handleTagChange('proteina', e.target.value)}
+                    >
+                        <option value="">Seleccionar...</option>
+                        {TAG_OPTIONS.proteina.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </WizardSelectField>
+                  </>
+                )}
+                
+                {/* Este campo aparece siempre */}
                 <WizardSelectField
                     label="Perfil de Sabor"
                     value={item.tags?.perfil_sabor || ''}

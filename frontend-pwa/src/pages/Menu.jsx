@@ -52,7 +52,6 @@ const Menu = () => {
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState([]);
   const [combos, setCombos] = useState([]);
-  const [categories] = useState(['Entradas', 'Platos Fuertes', 'Postres', 'Bebidas', 'Adicionales']);
   const [error, setError] = useState('');
   const [editingItem, setEditingItem] = useState(null);
   const [editingCombo, setEditingCombo] = useState(null);
@@ -370,7 +369,6 @@ const Menu = () => {
           <div ref={formRef} className="mb-6 scroll-mt-20">
             <MenuItemForm 
               item={editingItem || newItem} 
-              categories={categories} 
               allItems={items} 
               onSave={editingItem ? handleUpdateItem : handleAddItem} 
               onCancel={() => { setShowItemForm(false); setEditingItem(null); }} 
