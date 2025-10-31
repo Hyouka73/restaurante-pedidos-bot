@@ -26,7 +26,33 @@ const MenuComboForm = ({ combo, menuItems, onSave, onCancel, onChange, saving })
     onChange('componentes', newComponents);
   };
 
-  const itemOptions = menuItems.map(item => ({ value: item.id, label: `(${item.id}) ${item.name}` }));
+  // --- 🔥 1. Renombramos a 'allItemOptions' para claridad ---
+  const allItemOptions = menuItems.map(item => ({ value: item.id, label: `(${item.id}) ${item.name}` }));
+
+  // --- 🔥 2. Nueva función para filtrar opciones dinámicamente ---
+  const getOptionsForComponent = (componentIndex) => {
+    // Obtener los IDs ya seleccionados en *este* componente
+    const currentComponentSelectedIds = new Set(
+      (combo.componentes[componentIndex]?.items_opciones || []).map(item => item.id)
+    );
+
+    // Obtener los IDs seleccionados en *todos los OTROS* componentes
+    const otherSelectedIds = new Set();
+    (combo.componentes || []).forEach((c, idx) => {
+      if (idx !== componentIndex) { // <- La clave es "idx !== componentIndex"
+        (c.items_opciones || []).forEach(item => otherSelectedIds.add(item.id));
+      }
+    });
+
+    // Filtramos la lista completa
+    return allItemOptions.filter(opt => 
+      // El ítem se muestra si:
+      // 1. Ya está seleccionado en ESTE componente (para que aparezca en el 'value')
+      // O
+      // 2. NO está seleccionado en NINGÚN OTRO componente
+      currentComponentSelectedIds.has(opt.value) || !otherSelectedIds.has(opt.value)
+    );
+  };
 
   return (
     <div className="bg-white rounded-xl p-4 shadow-md max-h-[90vh] overflow-y-auto">
@@ -72,35 +98,49 @@ const MenuComboForm = ({ combo, menuItems, onSave, onCancel, onChange, saving })
             </button>
           </div>
 
-          {(combo.componentes || []).map((component, index) => (
-            <div key={index} className="p-3 border rounded-md mb-3 bg-gray-50">
-              <div className="flex justify-between items-center mb-2">
-                <h5 className="font-semibold text-sm">Componente #{index + 1}</h5>
-                <button type="button" onClick={() => removeComponent(index)} className="text-red-500 hover:text-red-700">
-                  <Trash2 size={16} />
-                </button>
-              </div>
-              <WizardInputField
-                label="Título del Componente (ej: Elige tu bebida)"
-                value={component.title || ''}
-                onChange={(e) => handleComponentChange(index, 'title', e.target.value)}
-              />
-              <div className="mt-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Opciones de Items</label>
-                <Select
-                  isMulti
-                  options={itemOptions}
-                  value={itemOptions.filter(opt => (component.items_opciones || []).some(item => item.id === opt.value))}
-                  onChange={(selectedOptions) => {
-                    const selectedItems = selectedOptions.map(opt => ({ id: opt.value, name: opt.label.split(') ')[1] }));
-                    handleComponentChange(index, 'items_opciones', selectedItems);
-                  }}
-                  placeholder="Selecciona items del menú..."
-                  classNamePrefix="react-select"
+          {(combo.componentes || []).map((component, index) => {
+            // --- 🔥 3. Lógica movida dentro del map ---
+            // Obtenemos las opciones filtradas para ESTE componente
+            const componentOptions = getOptionsForComponent(index);
+            // Obtenemos el valor actual en el formato que 'react-select' necesita
+            const currentValue = componentOptions.filter(opt => 
+              (component.items_opciones || []).some(item => item.id === opt.value)
+            );
+
+            return (
+              <div key={index} className="p-3 border rounded-md mb-3 bg-gray-50">
+                <div className="flex justify-between items-center mb-2">
+                  <h5 className="font-semibold text-sm">Componente #{index + 1}</h5>
+                  <button type="button" onClick={() => removeComponent(index)} className="text-red-500 hover:text-red-700">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+                <WizardInputField
+                  label="Título del Componente (ej: Elige tu bebida)"
+                  value={component.title || ''}
+                  onChange={(e) => handleComponentChange(index, 'title', e.target.value)}
                 />
+                <div className="mt-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Opciones de Items</label>
+                  <Select
+                    isMulti
+                    options={componentOptions} // <-- 🔥 4. Usamos las opciones filtradas
+                    value={currentValue}      // <-- 🔥 5. Usamos el valor calculado
+                    onChange={(selectedOptions) => {
+                      // Hacemos el parseo del nombre un poco más seguro
+                      const selectedItems = selectedOptions.map(opt => ({ 
+                        id: opt.value, 
+                        name: opt.label.split(') ')[1] || opt.label 
+                      }));
+                      handleComponentChange(index, 'items_opciones', selectedItems);
+                    }}
+                    placeholder="Selecciona items del menú..."
+                    classNamePrefix="react-select"
+                  />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="flex gap-2 mt-4">
