@@ -42,7 +42,7 @@ const initialNewComboState = {
   componentes: []
 };
 
-const Menu = () => {
+const Menu = () => { 
   const [user, loadingAuth] = useAuthState(auth);
   const navigate = useNavigate();
   const { data: restaurantData, loading: loadingRestaurant } = useRestaurant();
@@ -110,7 +110,7 @@ const Menu = () => {
     fetchMenu();
   }, [user, loadingAuth, restaurantId, loadingRestaurant]);
 
-  const fetchMenu = async () => {
+  const fetchMenu = async () => { 
     if (!restaurantId) {
       console.log('[Menu] ❌ fetchMenu llamado sin restaurantId');
       return;
@@ -152,7 +152,7 @@ const Menu = () => {
     }
   };
 
-  const handleAddItem = async () => {
+  const handleAddItem = async () => { 
     if (!restaurantId) {
       console.log('[Menu] ❌ handleAddItem sin restaurantId');
       return;
@@ -190,7 +190,7 @@ const Menu = () => {
     }
   };
 
-  const handleUpdateItem = async () => {
+  const handleUpdateItem = async () => { 
     if (!restaurantId || !editingItem) {
       console.log('[Menu] ❌ handleUpdateItem sin restaurantId o editingItem');
       return;
@@ -229,7 +229,7 @@ const Menu = () => {
     }
   };
 
-  const handleDeleteItem = async (itemId) => {
+  const handleDeleteItem = async (itemId) => { 
     if (!restaurantId || !window.confirm('¿Estás seguro de eliminar este item?')) {
       return;
     }
@@ -250,7 +250,7 @@ const Menu = () => {
     }
   };
 
-  const handleSaveCombo = async () => {
+  const handleSaveCombo = async () => { 
     const comboToSave = editingCombo || newCombo;
     
     if (!comboToSave.name.trim() || !comboToSave.price) {
@@ -297,7 +297,7 @@ const Menu = () => {
     }
   };
 
-  const handleDeleteCombo = async (comboId) => {
+  const handleDeleteCombo = async (comboId) => { 
     if (!restaurantId || !window.confirm('¿Estás seguro de eliminar este combo?')) {
       return;
     }
@@ -318,7 +318,7 @@ const Menu = () => {
     }
   };
 
-  if (loading) {
+  if (loading) { 
     return (
       <div className="min-h-screen flex items-center justify-center">
         <ButtonLoader size="lg" message="Cargando menú..." />
@@ -338,7 +338,7 @@ const Menu = () => {
         
         {error && <WizardErrorBox error={error} onDismiss={() => setError('')} />}
         
-        <div className="flex gap-4 mb-6">
+        <div className="flex gap-4 mb-6"> 
           <button 
             onClick={() => { 
               setShowItemForm(true); 
@@ -371,6 +371,7 @@ const Menu = () => {
             <MenuItemForm 
               item={editingItem || newItem} 
               categories={categories} 
+              allItems={items} 
               onSave={editingItem ? handleUpdateItem : handleAddItem} 
               onCancel={() => { setShowItemForm(false); setEditingItem(null); }} 
               onChange={(field, value) => 
@@ -383,7 +384,7 @@ const Menu = () => {
           </div>
         )}
 
-        {(showComboForm || editingCombo) && (
+        {(showComboForm || editingCombo) && ( 
           <div ref={formRef} className="mb-6 scroll-mt-20">
             <MenuComboForm 
               combo={editingCombo || newCombo} 
@@ -405,13 +406,13 @@ const Menu = () => {
             Items del Menú ({items.length})
           </h3>
           
-          {items.length === 0 ? (
+          {items.length === 0 ? ( 
             <div className="text-center py-12 text-gray-500">
               No hay items en el menú. ¡Crea el primero!
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map(item => (
+              {items.map(item => ( 
                 <MenuItemCard 
                   key={item.id} 
                   item={item} 
@@ -433,13 +434,13 @@ const Menu = () => {
             Combos ({combos.length})
           </h3>
           
-          {combos.length === 0 ? (
+          {combos.length === 0 ? ( 
             <div className="text-center py-12 text-gray-500">
               No hay combos configurados. ¡Crea el primero!
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {combos.map(combo => (
+              {combos.map(combo => ( 
                 <MenuComboCard 
                   key={combo.id} 
                   combo={combo} 

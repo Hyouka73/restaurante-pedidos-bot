@@ -3,27 +3,40 @@ import { WizardInputField, WizardTextAreaField, WizardSelectField, WizardCheckbo
 import { ButtonLoader } from '../ui/Loader';
 import { X } from 'lucide-react';
 import ItemImageUpload from './ItemImageUpload';
+import Select from 'react-select'; // 🔥 1. IMPORTAMOS 'Select'
 
 // Opciones para los tags de recomendación
-const TAG_OPTIONS = {
+const TAG_OPTIONS = { 
   categoria_general: ['Comida', 'Bebida', 'Postre'],
   tipo_plato: ['Plato Fuerte', 'Entrada', 'Para Compartir', 'Acompañante', 'Snack'],
   proteina: ['Res', 'Pollo', 'Cerdo', 'Pescado', 'Vegano', 'Vegetariano', 'Otro'],
   perfil_sabor: ['Ligero', 'Contundente', 'Picante', 'Dulce', 'Salado', 'Agridulce', 'Amargo'],
 };
 
-const MenuItemForm = ({ item, categories, onSave, onCancel, onChange, saving }) => {
-  const isEditing = !!item.id;
+// 🔥 2. ACEPTAMOS 'allItems' COMO NUEVA PROP
+const MenuItemForm = ({ item, categories, allItems, onSave, onCancel, onChange, saving }) => {
+  const isEditing = !!item.id; 
 
-  const handleImageUrlChange = (url) => {
+  const handleImageUrlChange = (url) => { 
     onChange('imageUrl', url);
   };
 
   // Manejador para los cambios en los tags (estado anidado)
-  const handleTagChange = (tagName, value) => {
+  const handleTagChange = (tagName, value) => { 
     const newTags = { ...(item.tags || {}), [tagName]: value };
     onChange('tags', newTags);
   };
+
+  // --- 🔥 3. LÓGICA PARA EL SELECTOR DE ITEMS ---
+  const itemOptions = (allItems || [])
+    .filter(i => i.id !== item.id) // Un item no puede sugerirse a sí mismo
+    .map(i => ({ value: i.id, label: `${i.name} (ID: ...${i.id.slice(-5)})` })); // Mostramos ID y Nombre
+
+  // Convertimos el array de IDs guardado (ej: ['id1', 'id2'])
+  // al formato que 'react-select' necesita (ej: [{value: 'id1', label: 'Item 1'}])
+  const selectedItemOptions = (item.sugerir_items || [])
+    .map(itemId => itemOptions.find(opt => opt.value === itemId))
+    .filter(Boolean); // Filtramos por si algún item fue eliminado
 
   return (
     <div className="bg-white rounded-xl p-4 shadow-md max-h-[90vh] overflow-y-auto">
@@ -108,14 +121,23 @@ const MenuItemForm = ({ item, categories, onSave, onCancel, onChange, saving }) 
         {/* --- Venta Cruzada (Cross-Sell) --- */}
         <div className="mt-6 p-4 border border-gray-200 rounded-lg">
             <h4 className="text-md font-semibold text-gray-600 mb-3">Venta Cruzada (Cross-Sell)</h4>
-            <WizardTextAreaField
-              label="Sugerir Items (IDs separados por coma)"
-              placeholder="ID_item_1,ID_item_2,..."
-              value={Array.isArray(item.sugerir_items) ? item.sugerir_items.join(',') : ''}
-              onChange={(e) => onChange('sugerir_items', e.target.value.split(',').map(id => id.trim()).filter(id => id))}
-              rows={2}
-              helpText="Añade los IDs de otros productos para sugerir cuando este se añada al carrito."
+            
+            {/* --- 🔥 4. REEMPLAZAMOS EL TEXTAREA  --- */}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sugerir Items</label>
+            <Select
+              isMulti
+              options={itemOptions}
+              value={selectedItemOptions}
+              onChange={(selectedOptions) => {
+                // Guardamos solo el array de IDs, no el objeto completo
+                const selectedIds = selectedOptions.map(opt => opt.value);
+                onChange('sugerir_items', selectedIds);
+              }}
+              placeholder="Selecciona items para sugerir..."
+              classNamePrefix="react-select"
             />
+            <p className="text-xs text-gray-500 mt-1">Añade productos para sugerir cuando este se añada al carrito.</p>
+            {/* --- FIN DEL REEMPLAZO --- */}
         </div>
 
         {/* --- Otros Detalles --- */}
