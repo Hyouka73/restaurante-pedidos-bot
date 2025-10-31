@@ -1,7 +1,7 @@
-// frontend-pwa/src/components/menu/MenuItemForm.jsx
+import React, { useState, useEffect } from 'react';
 import { WizardInputField, WizardTextAreaField, WizardSelectField, WizardCheckboxField } from '../ui/WizardComponents';
 import { ButtonLoader } from '../ui/Loader';
-import { X } from 'lucide-react';
+
 import ItemImageUpload from './ItemImageUpload';
 import Select from 'react-select'; 
 
@@ -15,11 +15,24 @@ const TAG_OPTIONS = {
 };
 
 // --- 🔥 2. ELIMINAMOS 'categories' DE LOS PROPS ---
-const MenuItemForm = ({ item, allItems, onSave, onCancel, onChange, saving }) => {
+// --- 🔥 1. EL FORMULARIO AHORA MANEJA SU PROPIO ESTADO ---
+const MenuItemForm = ({ item: initialItem, allItems, onSave, onCancel, saving }) => {
+  // Manejamos el estado del formulario internamente
+  const [item, setItem] = useState(initialItem);
   const isEditing = !!item.id;
 
+  // Sincronizar si el prop 'initialItem' cambia (ej. al cambiar de "editar" a "crear")
+  useEffect(() => {
+    setItem(initialItem);
+  }, [initialItem]);
+  
+  // 'onChange' ahora es local
+  const onChange = (field, value) => {
+    setItem(prev => ({ ...prev, [field]: value }));
+  };
+
   // --- 🔥 3. OBSERVAMOS LA CATEGORÍA SELECCIONADA ---
-  const selectedCategory = item.tags?.categoria_general;
+  const selectedCategory = item?.tags?.categoria_general;
 
   const handleImageUrlChange = (url) => {
     onChange('imageUrl', url);
@@ -27,7 +40,7 @@ const MenuItemForm = ({ item, allItems, onSave, onCancel, onChange, saving }) =>
 
   // Manejador para los cambios en los tags (estado anidado)
   const handleTagChange = (tagName, value) => {
-    const newTags = { ...(item.tags || {}), [tagName]: value };
+    const newTags = { ...(item?.tags || {}), [tagName]: value };
     
     // --- 🔥 4. LÓGICA DE LIMPIEZA ---
     // Si la categoría cambia, reseteamos los tags que ya no aplican.
@@ -45,22 +58,19 @@ const MenuItemForm = ({ item, allItems, onSave, onCancel, onChange, saving }) =>
 
   // Lógica para el selector de 'sugerir_items'
   const itemOptions = (allItems || [])
-    .filter(i => i.id !== item.id) // Un item no puede sugerirse a sí mismo
+    .filter(i => i.id !== item?.id) // Un item no puede sugerirse a sí mismo
     .map(i => ({ value: i.id, label: `${i.name} (ID: ...${i.id.slice(-5)})` }));
 
-  const selectedItemOptions = (item.sugerir_items || [])
+  const selectedItemOptions = (item?.sugerir_items || [])
     .map(itemId => itemOptions.find(opt => opt.value === itemId))
     .filter(Boolean); // Filtramos por si algún item fue eliminado
 
+  // --- 🔥 2. DIV PRINCIPAL SIMPLIFICADO ---
   return (
-    <div className="bg-white rounded-xl p-4 shadow-md max-h-[90vh] overflow-y-auto">
-      <div className="flex justify-between items-center mb-4 sticky top-0 bg-white py-2 z-10">
-        <h3 className="text-lg font-semibold">{isEditing ? 'Editar Item' : 'Agregar Nuevo Item'}</h3>
-        <button onClick={onCancel} className="text-gray-500 hover:text-gray-700">
-          <X size={20} />
-        </button>
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); onSave(); }}>
+    // Ya no tiene clases de 'max-h' ni 'overflow' ni 'shadow'
+    <div className="bg-white rounded-xl"> 
+      {/* --- 🔥 3. ENCABEZADO Y BOTÓN X ELIMINADOS --- */}
+      <form onSubmit={(e) => { e.preventDefault(); onSave(item); }}>
         {/* --- Información Básica --- */}
         <WizardInputField
           label="Nombre"
@@ -190,13 +200,15 @@ const MenuItemForm = ({ item, allItems, onSave, onCancel, onChange, saving }) =>
           checked={item.available !== false} // Default a true si es undefined
           onChange={(e) => onChange('available', e.target.checked)}
         />
-        <div className="flex gap-2 mt-4">
+        {/* --- 🔥 4. BOTONES DENTRO DEL FORMULARIO --- */}
+        {/* Los botones ahora se renderizan aquí, al final del formulario */}
+        <div className="flex gap-2 mt-6 pt-4 border-t border-gray-200">
           <button
             type="submit"
             disabled={saving}
             className="px-4 py-2 bg-gradient-to-r from-[#ff7f50] to-[#ff6347] text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
           >
-            {saving ? <ButtonLoader size="sm" /> : (isEditing ? 'Actualizar' : 'Agregar')}
+            {saving ? <ButtonLoader size="sm" /> : (isEditing ? 'Actualizar Item' : 'Agregar Item')}
           </button>
           <button
             type="button"

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react'; // Eliminamos useRef
 import { useNavigate } from 'react-router-dom';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth } from '../config/firebase';
@@ -11,7 +11,8 @@ import MenuItemForm from '../components/menu/MenuItemForm';
 import MenuComboForm from '../components/menu/MenuComboForm';
 import MenuItemCard from '../components/menu/MenuItemCard';
 import MenuComboCard from '../components/menu/MenuComboCard';
-import { api, configureAlerts } from '../services/api';
+import { api, configureAlerts } from '../services/api'; 
+import Modal from '../components/ui/Modal'; // <-- 🔥 1. IMPORTAMOS TU MODAL
 
 const initialNewItemState = { 
   name: '', 
@@ -19,7 +20,6 @@ const initialNewItemState = {
   price: '', 
   imageUrl: '', 
   available: true, 
-  category: 'Platos Fuertes', 
   prepTime: 5, 
   complexity: 1, 
   order: 1,
@@ -52,27 +52,24 @@ const Menu = () => {
   const [saving, setSaving] = useState(false);
   const [items, setItems] = useState([]);
   const [combos, setCombos] = useState([]);
-  const [error, setError] = useState('');
-  const [editingItem, setEditingItem] = useState(null);
-  const [editingCombo, setEditingCombo] = useState(null);
-  const [showItemForm, setShowItemForm] = useState(false);
-  const [showComboForm, setShowComboForm] = useState(false);
+  const [error, setError] = useState(''); 
   
-  const [newItem, setNewItem] = useState(initialNewItemState);
-  const [newCombo, setNewCombo] = useState(initialNewComboState);
+  // --- 🔥 2. ESTADO DE FORMULARIOS REFACTORIZADO ---
+  // Un solo estado para manejar qué modal está abierto
+  const [modalState, setModalState] = useState({
+    isOpen: false,
+    type: null, // 'ITEM' o 'COMBO'
+    data: null   // Los datos para el formulario (nuevo o en edición)
+  });
 
   const { showAlert, alerts, hideAlert } = useAlert();
-  const formRef = useRef(null);
 
   useEffect(() => {
     configureAlerts(showAlert);
   }, [showAlert]);
 
-  useEffect(() => {
-    if ((showItemForm || editingItem || showComboForm || editingCombo) && formRef.current) {
-      setTimeout(() => formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-    }
-  }, [showItemForm, editingItem, showComboForm, editingCombo]);
+  // Se elimina el useEffect para 'formRef.current.scrollIntoView'
+  
 
   // ✅ Validar autenticación
   useEffect(() => {
@@ -151,146 +148,135 @@ const Menu = () => {
     }
   };
 
-  const handleAddItem = async () => { 
-    if (!restaurantId) {
-      console.log('[Menu] ❌ handleAddItem sin restaurantId');
-      return;
-    }
-    
-    if (!newItem.name.trim() || !newItem.price) {
+  // --- 🔥 3. LÓGICA DE MODAL ---
+
+  // Funciones para ABRIR el modal
+  const handleAddNewItem = () => {
+    setModalState({ isOpen: true, type: 'ITEM', data: initialNewItemState });
+  };
+  
+  const handleEditItem = (item) => {
+    setModalState({ isOpen: true, type: 'ITEM', data: item });
+  };
+
+  const handleAddNewCombo = () => {
+    setModalState({ isOpen: true, type: 'COMBO', data: initialNewComboState });
+  };
+
+  const handleEditCombo = (combo) => {
+    setModalState({ isOpen: true, type: 'COMBO', data: combo });
+  };
+  
+  // Función para CERRAR el modal
+  const handleCloseModal = () => {
+    setModalState({ isOpen: false, type: null, data: null });
+  };
+
+  // --- 🔥 4. LÓGICA DE GUARDADO (Ahora es genérica) ---
+
+  const handleSaveItem = async (itemData) => {
+    const isEditing = !!itemData.id;
+    if (!itemData.name.trim() || !itemData.price) {
       showAlert('Nombre y precio son obligatorios.', 'warning', 3000);
       return;
     }
+    // Validación de categoría general
+    if (!itemData.tags?.categoria_general) {
+      showAlert('La "Categoría General" es obligatoria.', 'warning', 3000);
+      return;
+    }
     
-    console.log('[Menu] ➕ Agregando nuevo item:', newItem);
+    console.log(isEditing ? '[Menu] ✏️ Actualizando item:' : '[Menu] ➕ Agregando nuevo item:', itemData.id || '(nuevo)');
     setSaving(true);
     
     try {
       const itemData = { 
-        ...newItem, 
-        price: parseFloat(newItem.price), 
-        prepTime: parseInt(newItem.prepTime) || 5, 
-        complexity: parseInt(newItem.complexity) || 1, 
-        order: parseInt(newItem.order) || 1 
+        ...itemData, 
+        price: parseFloat(itemData.price), 
+        prepTime: parseInt(itemData.prepTime) || 5, 
+        complexity: parseInt(itemData.complexity) || 1, 
+        order: parseInt(itemData.order) || 1 
       };
+
+      if (isEditing) {
+        await api.put(`/menu/${restaurantId}/items/${data.id}`, data);
+        setItems(prev => prev.map(item => (item.id === data.id ? data : item)));
+      } else {
+        await api.post(`/menu/${restaurantId}/items`, data);
+        await fetchMenu(); // Recargar todo para obtener el nuevo ID
+      }
       
-      console.log('[Menu] 📡 POST /menu/' + restaurantId + '/items');
-      await api.post(`/menu/${restaurantId}/items`, itemData);
+      handleCloseModal(); // Cierra el modal al guardar
+      showAlert(isEditing ? 'Item actualizado' : 'Item agregado', 'success');
       
-      console.log('[Menu] ✅ Item creado, recargando menú...');
-      await fetchMenu();
-      
-      setNewItem(initialNewItemState);
-      setShowItemForm(false);
     } catch (err) {
-      console.error('[Menu] ❌ Error al agregar item:', err);
+      console.error('[Menu] ❌ Error al guardar item:', err);
+      showAlert(`Error al guardar: ${err.message}`, 'error');
     } finally {
       setSaving(false);
     }
   };
-
-  const handleUpdateItem = async () => { 
-    if (!restaurantId || !editingItem) {
-      console.log('[Menu] ❌ handleUpdateItem sin restaurantId o editingItem');
-      return;
-    }
-    
-    if (!editingItem.name.trim() || !editingItem.price) {
-      showAlert('Nombre y precio son obligatorios.', 'warning', 3000);
-      return;
-    }
-    
-    console.log('[Menu] ✏️ Actualizando item:', editingItem.id);
-    setSaving(true);
-    
-    try {
-      const itemData = { 
-        ...editingItem, 
-        price: parseFloat(editingItem.price), 
-        prepTime: parseInt(editingItem.prepTime) || 5, 
-        complexity: parseInt(editingItem.complexity) || 1, 
-        order: parseInt(editingItem.order) || 1 
-      };
-      
-      console.log('[Menu] 📡 PUT /menu/' + restaurantId + '/items/' + editingItem.id);
-      await api.put(`/menu/${restaurantId}/items/${editingItem.id}`, itemData);
-      
-      setItems(prev => prev.map(item => 
-        item.id === editingItem.id ? { ...itemData, id: editingItem.id } : item
-      ));
-      setEditingItem(null);
-      
-      console.log('[Menu] ✅ Item actualizado');
-    } catch (err) {
-      console.error('[Menu] ❌ Error al actualizar item:', err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteItem = async (itemId) => { 
+  
+  const handleDeleteItem = async (itemId) => {
     if (!restaurantId || !window.confirm('¿Estás seguro de eliminar este item?')) {
       return;
     }
     
     console.log('[Menu] 🗑️ Eliminando item:', itemId);
-    setSaving(true);
     
     try {
       console.log('[Menu] 📡 DELETE /menu/' + restaurantId + '/items/' + itemId);
       await api.delete(`/menu/${restaurantId}/items/${itemId}`);
       
       setItems(prev => prev.filter(item => item.id !== itemId));
+      showAlert('Item eliminado', 'success');
       console.log('[Menu] ✅ Item eliminado');
     } catch (err) {
       console.error('[Menu] ❌ Error al eliminar item:', err);
-    } finally {
-      setSaving(false);
+      showAlert(`Error al eliminar: ${err.message}`, 'error');
     }
   };
 
-  const handleSaveCombo = async () => { 
-    const comboToSave = editingCombo || newCombo;
-    
-    if (!comboToSave.name.trim() || !comboToSave.price) {
+  const handleSaveCombo = async (comboData) => {
+    const isEditing = !!comboData.id;
+    if (!comboData.name.trim() || !comboData.price) {
       showAlert('Nombre y precio son obligatorios para el combo.', 'warning', 3000);
       return;
     }
-    
-    if (!comboToSave.componentes || comboToSave.componentes.length === 0 || 
-        comboToSave.componentes.some(c => !c.title || c.items_opciones.length === 0)) {
+    if (!comboData.componentes || comboData.componentes.length === 0 || 
+        comboData.componentes.some(c => !c.title || c.items_opciones.length === 0)) {
       showAlert('El combo debe tener al menos un componente con título y opciones.', 'warning', 3000);
       return;
     }
 
-    console.log('[Menu] 💾 Guardando combo:', comboToSave);
+    console.log(isEditing ? '[Menu] ✏️ Actualizando combo:' : '[Menu] 💾 Guardando combo:', comboData.id || '(nuevo)');
     setSaving(true);
     
     try {
       const comboData = { 
-        ...comboToSave, 
+        ...comboData, 
         price: parseFloat(comboToSave.price),
         order: parseInt(comboToSave.order) || 1 
       };
 
-      if (editingCombo) {
+      if (isEditing) {
         console.log('[Menu] 📡 PUT /menu/' + restaurantId + '/combos/' + comboData.id);
         await api.put(`/menu/${restaurantId}/combos/${comboData.id}`, comboData);
         setCombos(prev => prev.map(combo => 
           combo.id === comboData.id ? comboData : combo
         ));
-        setEditingCombo(null);
       } else {
         console.log('[Menu] 📡 POST /menu/' + restaurantId + '/combos');
         await api.post(`/menu/${restaurantId}/combos`, comboData);
         await fetchMenu();
-        setNewCombo(initialNewComboState);
-        setShowComboForm(false);
       }
       
-      console.log('[Menu] ✅ Combo guardado');
+      handleCloseModal(); // Cierra el modal
+      showAlert(isEditing ? 'Combo actualizado' : 'Combo agregado', 'success');
+
     } catch (err) {
       console.error('[Menu] ❌ Error al guardar combo:', err);
+      showAlert(`Error al guardar combo: ${err.message}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -302,18 +288,17 @@ const Menu = () => {
     }
     
     console.log('[Menu] 🗑️ Eliminando combo:', comboId);
-    setSaving(true);
     
     try {
       console.log('[Menu] 📡 DELETE /menu/' + restaurantId + '/combos/' + comboId);
       await api.delete(`/menu/${restaurantId}/combos/${comboId}`);
       
       setCombos(prev => prev.filter(combo => combo.id !== comboId));
+      showAlert('Combo eliminado', 'success');
       console.log('[Menu] ✅ Combo eliminado');
     } catch (err) {
       console.error('[Menu] ❌ Error al eliminar combo:', err);
-    } finally {
-      setSaving(false);
+      showAlert(`Error al eliminar combo: ${err.message}`, 'error');
     }
   };
 
@@ -325,6 +310,7 @@ const Menu = () => {
     );
   }
 
+  // --- 🔥 5. RENDERIZADO SIMPLIFICADO ---
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <AlertContainer alerts={alerts} onClose={hideAlert} />
@@ -339,66 +325,23 @@ const Menu = () => {
         
         <div className="flex gap-4 mb-6"> 
           <button 
-            onClick={() => { 
-              setShowItemForm(true); 
-              setEditingItem(null); 
-              setShowComboForm(false); 
-              setEditingCombo(null); 
-              setNewItem(initialNewItemState); 
-            }} 
+            onClick={handleAddNewItem} // <-- Llama a la nueva función
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#ff7f50] to-[#ff6347] text-white rounded-lg hover:shadow-lg transition-all"
           >
             <Plus size={18} /> Agregar Item
           </button>
           
           <button 
-            onClick={() => { 
-              setShowComboForm(true); 
-              setEditingCombo(null); 
-              setShowItemForm(false); 
-              setEditingItem(null); 
-              setNewCombo(initialNewComboState); 
-            }} 
+            onClick={handleAddNewCombo} // <-- Llama a la nueva función
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all"
           >
             <Plus size={18} /> Agregar Combo
           </button>
         </div>
         
-        {(showItemForm || editingItem) && (
-          <div ref={formRef} className="mb-6 scroll-mt-20">
-            <MenuItemForm 
-              item={editingItem || newItem} 
-              allItems={items} 
-              onSave={editingItem ? handleUpdateItem : handleAddItem} 
-              onCancel={() => { setShowItemForm(false); setEditingItem(null); }} 
-              onChange={(field, value) => 
-                editingItem 
-                  ? setEditingItem({...editingItem, [field]: value}) 
-                  : setNewItem({...newItem, [field]: value})
-              } 
-              saving={saving} 
-            />
-          </div>
-        )}
+        {/* --- LOS FORMULARIOS YA NO SE RENDERIZAN AQUÍ --- */}
 
-        {(showComboForm || editingCombo) && ( 
-          <div ref={formRef} className="mb-6 scroll-mt-20">
-            <MenuComboForm 
-              combo={editingCombo || newCombo} 
-              menuItems={items}
-              onSave={handleSaveCombo} 
-              onCancel={() => { setShowComboForm(false); setEditingCombo(null); }} 
-              onChange={(field, value) => 
-                editingCombo 
-                  ? setEditingCombo({...editingCombo, [field]: value}) 
-                  : setNewCombo({...newCombo, [field]: value})
-              } 
-              saving={saving} 
-            />
-          </div>
-        )}
-
+        {/* --- LISTA DE ITEMS --- */}
         <div className="mb-8">
           <h3 className="text-xl font-semibold mb-4">
             Items del Menú ({items.length})
@@ -414,12 +357,7 @@ const Menu = () => {
                 <MenuItemCard 
                   key={item.id} 
                   item={item} 
-                  onEdit={(itemData) => { 
-                    setEditingItem(itemData); 
-                    setShowItemForm(false); 
-                    setShowComboForm(false); 
-                    setEditingCombo(null); 
-                  }} 
+                  onEdit={handleEditItem} // <-- Llama a la nueva función
                   onDelete={handleDeleteItem} 
                 />
               ))}
@@ -427,6 +365,7 @@ const Menu = () => {
           )}
         </div>
         
+        {/* --- LISTA DE COMBOS --- */}
         <div>
           <h3 className="text-xl font-semibold mb-4">
             Combos ({combos.length})
@@ -443,12 +382,7 @@ const Menu = () => {
                   key={combo.id} 
                   combo={combo} 
                   items={items} 
-                  onEdit={(comboData) => { 
-                    setEditingCombo(comboData); 
-                    setShowComboForm(false); 
-                    setShowItemForm(false); 
-                    setEditingItem(null); 
-                  }} 
+                  onEdit={handleEditCombo} // <-- Llama a la nueva función
                   onDelete={handleDeleteCombo} 
                 />
               ))}
@@ -456,6 +390,41 @@ const Menu = () => {
           )}
         </div>
       </WizardCard>
+      
+      {/* --- 🔥 6. MODALES (RENDERIZADO FUERA DEL CARD) --- */}
+      <Modal 
+        isOpen={modalState.isOpen && modalState.type === 'ITEM'}
+        onClose={handleCloseModal}
+        title={modalState.data?.id ? 'Editar Item' : 'Agregar Nuevo Item'}
+        size="md" // Usamos el tamaño 'md' de tu modal
+      >
+        <MenuItemForm 
+          // Pasamos el item/combo como prop
+          item={modalState.data} 
+          allItems={items} 
+          onSave={handleSaveItem} 
+          onCancel={handleCloseModal}
+          saving={saving}
+          // El 'onChange' ahora es manejado internamente por el formulario
+        />
+      </Modal>
+
+      <Modal 
+        isOpen={modalState.isOpen && modalState.type === 'COMBO'}
+        onClose={handleCloseModal}
+        title={modalState.data?.id ? 'Editar Combo' : 'Agregar Nuevo Combo'}
+        size="lg" // Los combos necesitan más espacio
+      >
+        <MenuComboForm 
+          combo={modalState.data} 
+          menuItems={items}
+          onSave={handleSaveCombo} 
+          onCancel={handleCloseModal} 
+          saving={saving} 
+          // El 'onChange' ahora es manejado internamente
+        />
+      </Modal>
+
     </div>
   );
 };

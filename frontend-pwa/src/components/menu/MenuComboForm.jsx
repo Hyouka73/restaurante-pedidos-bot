@@ -1,13 +1,26 @@
-// frontend-pwa/src/components/menu/MenuComboForm.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // &lt;--- Añadimos hooks
 import { WizardInputField, WizardTextAreaField, WizardSelectField } from '../ui/WizardComponents';
 import { ButtonLoader } from '../ui/Loader';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react'; 
 import ItemImageUpload from './ItemImageUpload';
 import Select from 'react-select';
 
-const MenuComboForm = ({ combo, menuItems, onSave, onCancel, onChange, saving }) => {
+// --- 🔥 1. EL FORMULARIO AHORA MANEJA SU PROPIO ESTADO ---
+const MenuComboForm = ({ combo: initialCombo, menuItems, onSave, onCancel, saving }) => {
+  const [combo, setCombo] = useState(initialCombo);
   const isEditing = !!combo.id;
+  
+  // Sincronizar si el prop 'initialCombo' cambia
+  useEffect(() => {
+    setCombo(initialCombo);
+  }, [initialCombo]);
+  
+  // 'onChange' ahora es local
+  const onChange = (field, value) => {
+    setCombo(prev => ({ ...prev, [field]: value }));
+  };
+
+
 
   const handleComponentChange = (index, field, value) => {
     const newComponents = [...(combo.componentes || [])];
@@ -33,12 +46,12 @@ const MenuComboForm = ({ combo, menuItems, onSave, onCancel, onChange, saving })
   const getOptionsForComponent = (componentIndex) => {
     // Obtener los IDs ya seleccionados en *este* componente
     const currentComponentSelectedIds = new Set(
-      (combo.componentes[componentIndex]?.items_opciones || []).map(item => item.id)
+      (combo?.componentes[componentIndex]?.items_opciones || []).map(item => item.id)
     );
 
     // Obtener los IDs seleccionados en *todos los OTROS* componentes
     const otherSelectedIds = new Set();
-    (combo.componentes || []).forEach((c, idx) => {
+    (combo?.componentes || []).forEach((c, idx) => {
       if (idx !== componentIndex) { // <- La clave es "idx !== componentIndex"
         (c.items_opciones || []).forEach(item => otherSelectedIds.add(item.id));
       }
@@ -54,15 +67,11 @@ const MenuComboForm = ({ combo, menuItems, onSave, onCancel, onChange, saving })
     );
   };
 
+  // --- 🔥 2. DIV PRINCIPAL SIMPLIFICADO ---
   return (
-    <div className="bg-white rounded-xl p-4 shadow-md max-h-[90vh] overflow-y-auto">
-      <div className="flex justify-between items-center mb-4 sticky top-0 bg-white py-2 z-10">
-        <h3 className="text-lg font-semibold">{isEditing ? 'Editar Combo' : 'Agregar Nuevo Combo'}</h3>
-        <button onClick={onCancel} className="text-gray-500 hover:text-gray-700">
-          <X size={20} />
-        </button>
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); onSave(); }}>
+    <div className="bg-white rounded-xl">
+      {/* --- 🔥 3. ENCABEZADO Y BOTÓN X ELIMINADOS --- */}
+      <form onSubmit={(e) => { e.preventDefault(); onSave(combo); }}>
         {/* --- Información Básica --- */}
         <WizardInputField
           label="Nombre del Combo"
@@ -143,11 +152,12 @@ const MenuComboForm = ({ combo, menuItems, onSave, onCancel, onChange, saving })
           })}
         </div>
 
-        <div className="flex gap-2 mt-4">
+        {/* --- 🔥 4. BOTONES DENTRO DEL FORMULARIO --- */}
+        <div className="flex gap-2 mt-6 pt-4 border-t border-gray-200">
           <button
             type="submit"
             disabled={saving}
-            className="px-4 py-2 bg-gradient-to-r from-[#ff7f50] to-[#ff6347] text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
+            className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all disabled:opacity-50"
           >
             {saving ? <ButtonLoader size="sm" /> : (isEditing ? 'Actualizar Combo' : 'Agregar Combo')}
           </button>
