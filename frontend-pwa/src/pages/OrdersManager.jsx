@@ -8,7 +8,7 @@ import {
   Package, Clock, CheckCircle, XCircle, ChefHat, Store, Truck, 
   Phone, MapPin, DollarSign, RefreshCw 
 } from 'lucide-react';
-import { ButtonLoader } from '../components/ui/Loader';
+import { AlertContainer } from '../components/ui/CustomAlert';
 import { WizardErrorBox } from '../components/ui/WizardComponents';
 
 // 🔥 NUEVO: Componente OrderCard optimizado
