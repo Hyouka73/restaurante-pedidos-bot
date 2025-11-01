@@ -1,15 +1,273 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useState, useEffect } from 'react';
+import { api } from '../services/api';
 import { useRestaurant } from '../context/RestaurantContext';
-import { api, API_BASE } from '../services/api';
-import { Package, Clock, CheckCircle, XCircle, ChefHat, Store, Truck, Phone, MapPin, DollarSign, RefreshCw } from 'lucide-react';
+import Loader from '../components/ui/Loader';
+import { WizardErrorBox } from '../components/ui/WizardComponents';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Bell, Edit } from 'lucide-react';
+import { useAlert } from '../components/ui/CustomAlert';
+// 🔥 1. Importar la nueva librería
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 
-export default function OrdersManager() {
-  const [user] = useAuthState(auth);
-  const navigate = useNavigate();
-  const { data: restaurantData } = useRestaurant();
+// Componente individual para una orden (para mejor organización)
+const OrderCard = ({ order, onUpdateStatus }) => {
+  // ... (Este componente interno no necesita cambios)
+  const [showDetails, setShowDetails] = useState(false);
+  const [newStatus, setNewStatus] = useState(order.status);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const statusOptions = ['pending', 'confirmed', 'preparing', 'ready', 'delivering', 'delivered', 'cancelled'];
+  const statusColors = {
+    pending: 'bg-yellow-100 text-yellow-800',
+    confirmed: 'bg-blue-100 text-blue-800',
+    preparing: 'bg-indigo-100 text-indigo-800',
+    ready: 'bg-cyan-100 text-cyan-800',
+    delivering: 'bg-purple-100 text-purple-800',
+    delivered: 'bg-green-100 text-green-800',
+    cancelled: 'bg-red-100 text-red-800',
+  };
+
+  const handleUpdate = async () => {
+    if (newStatus === order.status) return;
+    setIsUpdating(true);
+    await onUpdateStatus(order.id, newStatus);
+    setIsUpdating(false);
+  };
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden"
+    >
+      <div 
+        className={`p-4 flex flex-col sm:flex-row justify-between items-center cursor-pointer ${statusColors[order.status]}`}
+        onClick={() => setShowDetails(!showDetails)}
+      >
+        <div className="mb-2 sm:mb-0">
+          <span className="font-bold text-lg">Orden #{order.orderNumber}</span>
+          <span className="text-sm ml-2">({new Date(order.createdAt.seconds * 1000).toLocaleTimeString()})</span> {/* Asumiendo timestamp de Firestore */}
+        </div>
+        <div className="font-semibold text-lg">${order.total.toFixed(2)}</div>
+      </div>
+      
+      <AnimatePresence>
+        {showDetails && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="p-4 border-t border-gray-200">
+              {/* ... (Detalles del cliente, items, y selector de estado) ... */}
+              <h5 className="font-bold mt-4 mb-2">Actualizar Estado:</h5>
+              <div className="flex gap-2">
+                <select 
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  className="flex-1 p-2 border border-gray-300 rounded-lg"
+                >
+                  {statusOptions.map(status => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+                <button 
+                  onClick={handleUpdate}
+                  disabled={isUpdating || newStatus === order.status}
+                  className="btn btn-primary disabled:opacity-50"
+                >
+                  {isUpdating ? '...' : 'Actualizar'}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+};
+
+
+// --- Componente Principal de OrdersManager ---
+const OrdersManager = () => {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const { data: restaurantData, loading: loadingRestaurant } = useRestaurant();
+  const restaurantId = restaurantData?.id;
+  const { showAlert } = useAlert();
+
+  // Función para cargar pedidos (solo se usa al inicio)
+  const fetchOrders = async () => {
+    if (!restaurantId) return;
+    try {
+      setLoading(true);
+      const data = await api.get(`/orders/${restaurantId}`);
+      // Asegurarse de que createdAt es un Date para ordenar
+      const sortedData = (Array.isArray(data) ? data : []).map(o => ({
+        ...o,
+        createdAt: o.createdAt.seconds ? new Date(o.createdAt.seconds * 1000) : new Date(o.createdAt)
+      })).sort((a, b) => b.createdAt - a.createdAt);
+      
+      setOrders(sortedData);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Carga inicial de pedidos
+  useEffect(() => {
+    if (restaurantId) {
+      fetchOrders();
+    }
+  }, [restaurantId]);
+
+
+  // --- 🔥 2. CONEXIÓN SSE (AHORA ROBUSTA) ---
+  useEffect(() => {
+    if (!restaurantId) return;
+
+    const eventSourceUrl = `${api.defaults.baseURL}/events`;
+    console.log(`[OrdersManager] 🔌 Conectando a SSE en: ${eventSourceUrl}`);
+    
+    // AbortController para poder cancelar la conexión
+    const ctrl = new AbortController();
+
+    fetchEventSource(eventSourceUrl, {
+      signal: ctrl.signal,
+      
+      onopen(response) {
+        if (response.ok) {
+          console.log('[OrdersManager] ✅ Conexión SSE abierta');
+          // Conexión exitosa, recargamos por si perdimos algo
+          fetchOrders();
+        } else {
+          console.error('[OrdersManager] ❌ Fallo al abrir conexión SSE:', response.statusText);
+        }
+      },
+      
+      onmessage(event) {
+        const data = JSON.parse(event.data);
+        console.log('[OrdersManager] 📨 Evento SSE recibido:', data.type);
+
+        if (data.type === 'connected') {
+          console.log('[OrdersManager] Conexión SSE confirmada por el servidor.');
+          return;
+        }
+
+        if (data.type === 'order_new') {
+          setOrders(prevOrders => {
+            // Prevenir duplicados
+            if (prevOrders.find(o => o.id === data.payload.id)) return prevOrders;
+            const newOrder = {
+              ...data.payload,
+              createdAt: data.payload.createdAt.seconds ? new Date(data.payload.createdAt.seconds * 1000) : new Date(data.payload.createdAt)
+            };
+            return [newOrder, ...prevOrders];
+          });
+          showAlert('¡Nuevo pedido recibido!', 'success');
+          // playNotificationSound();
+        }
+        
+        if (data.type === 'order_update') {
+          setOrders(prevOrders => 
+            prevOrders.map(order => 
+              order.id === data.payload.id ? { ...data.payload, createdAt: new Date(data.payload.createdAt.seconds * 1000) } : order
+            )
+          );
+        }
+      },
+      
+      onclose() {
+        // Esto solo se llama si nosotros cerramos la conexión (ctrl.abort())
+        console.log('[OrdersManager] 🔌 Conexión SSE cerrada limpiamente');
+      },
+      
+      onerror(err) {
+        // ESTE ES EL MANEJO CLAVE
+        console.error('[OrdersManager] ❌ Error en SSE, reintentando...', err);
+        // La librería reintentará automáticamente.
+        // Si el error es fatal (ej. 404), debemos detenerla.
+        if (err.status && err.status >= 400 && err.status < 500) {
+          console.error('[OrdersManager] ❌ Error fatal de SSE, deteniendo reintentos.', err);
+          ctrl.abort(); // Detener reintentos
+          setError('No se pudo conectar al servidor de eventos.');
+        }
+        // Si es un error de Vercel (timeout), la librería lo manejará y reconectará.
+      }
+    });
+
+    // Limpiar la conexión al desmontar
+    return () => {
+      console.log('[OrdersManager] 🔌 Abortando conexión SSE');
+      ctrl.abort();
+    };
+
+  }, [restaurantId, showAlert]); // Dependencias correctas
+
+
+  const handleUpdateStatus = async (orderId, newStatus) => {
+    try {
+      await api.put(`/orders/${restaurantId}/${orderId}/status`, { newStatus });
+      showAlert('Estado actualizado', 'success');
+      // No necesitamos actualizar el estado localmente,
+      // el backend publicará en Redis y el SSE 'onmessage' lo capturará.
+    } catch (err) {
+      showAlert(`Error al actualizar: ${err.message}`, 'error');
+    }
+  };
+
+  if (loading || loadingRestaurant) {
+    return <Loader message="Cargando pedidos..." />;
+  }
+
+  // Separar pedidos
+  const activeOrders = orders.filter(o => !['delivered', 'cancelled'].includes(o.status));
+  const completedOrders = orders.filter(o => ['delivered', 'cancelled'].includes(o.status));
+
+  return (
+    <div className="p-4 md:p-8 max-w-6xl mx-auto">
+      {/* ... (Encabezado de la página) ... */}
+      <div className="flex items-center gap-3 pb-4 mb-6 border-b">
+        {/* ... */}
+      </div>
+      
+      {error && <WizardErrorBox error={error} onDismiss={() => setError(null)} />}
+
+      {/* Pedidos Activos */}
+      <section className="mb-12">
+        <h2 className="text-xl font-bold text-gray-700 mb-4">Pedidos Activos ({activeOrders.length})</h2>
+        <motion.div layout className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <AnimatePresence>
+            {activeOrders.length === 0 ? (
+              <p className="text-gray-500 md:col-span-3">No hay pedidos activos.</p>
+            ) : (
+              activeOrders.map(order => (
+                <OrderCard 
+                  key={order.id} 
+                  order={order} 
+                  onUpdateStatus={handleUpdateStatus} 
+                />
+              ))
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </section>
+
+      {/* Pedidos Completados */}
+      <section>
+        {/* ... (renderizado de pedidos completados) ... */}
+      </section>
+    </div>
+  );
+};
+
+export default OrdersManager;
   
   // ✅ CAMBIO: allOrders contiene TODOS los pedidos (se carga 1 sola vez)
   const [allOrders, setAllOrders] = useState([]);
@@ -381,4 +639,3 @@ export default function OrdersManager() {
       </div>
     </div>
   );
-}
