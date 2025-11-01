@@ -8,30 +8,32 @@ import {
   Package, Clock, CheckCircle, XCircle, ChefHat, Store, Truck, 
   Phone, MapPin, DollarSign, RefreshCw 
 } from 'lucide-react';
-import { AlertContainer } from '../components/ui/CustomAlert';
-import { WizardErrorBox } from '../components/ui/WizardComponents';
+// 🔥 1. IMPORTAMOS LOS COMPONENTES DE ALERTA QUE FALTABAN
+import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
+import { ButtonLoader } from '../components/ui/Loader'; // <-- SÍ se usa en el loader de página
 
-// 🔥 NUEVO: Componente OrderCard optimizado
-// (Lo saqué de OrdersManager para que el código sea más limpio)
-// Ahora recibe 'isUpdating' del padre para saber si debe deshabilitarse
+// 🔥 2. COMPONENTE DE TARJETA (EXTRAÍDO PARA MAYOR LIMPIEZA)
+// (Este es el mismo diseño que tenías, pero como un componente separado)
 const OrderCard = ({ order, onUpdateStatus, isUpdating }) => {
-  const statusConfigs = {
-    pending: { label: 'Pendiente', icon: Clock, color: 'text-yellow-600 bg-yellow-100 border-yellow-300', nextStatus: 'confirmed', nextLabel: 'Confirmar' },
-    confirmed: { label: 'Confirmado', icon: CheckCircle, color: 'text-blue-600 bg-blue-100 border-blue-300', nextStatus: 'preparing', nextLabel: 'Preparar' },
-    preparing: { label: 'En Preparación', icon: ChefHat, color: 'text-purple-600 bg-purple-100 border-purple-300', nextStatus: 'ready', nextLabel: 'Marcar como Listo' },
-    ready: { label: 'Listo', icon: Package, color: 'text-green-600 bg-green-100 border-green-300', nextStatus: 'delivering', nextLabel: 'Enviar Pedido' },
-    delivering: { label: 'En Reparto', icon: Truck, color: 'text-cyan-600 bg-cyan-100 border-cyan-300', nextStatus: 'delivered', nextLabel: 'Marcar como Entregado' },
-    delivered: { label: 'Entregado', icon: CheckCircle, color: 'text-gray-600 bg-gray-100 border-gray-300', nextStatus: null, nextLabel: null },
-    cancelled: { label: 'Cancelado', icon: XCircle, color: 'text-red-600 bg-red-100 border-red-300', nextStatus: null, nextLabel: null }
-  };
-
+  
   const getStatusConfig = (order) => {
-    const config = statusConfigs[order.status] || statusConfigs.pending;
-    // Ajuste para 'Recoger en Tienda'
-    if (order.status === 'ready' && order.deliveryType === 'pickup') {
-      return { ...config, nextStatus: 'delivered', nextLabel: 'Marcar como Recogido' };
+    const { status, deliveryType } = order;
+    const configs = {
+      pending: { label: 'Pendiente', icon: Clock, color: 'bg-yellow-100 text-yellow-800 border-yellow-300', nextStatus: 'confirmed', nextLabel: 'Confirmar' },
+      confirmed: { label: 'Confirmado', icon: CheckCircle, color: 'bg-blue-100 text-blue-800 border-blue-300', nextStatus: 'preparing', nextLabel: 'Preparar' },
+      preparing: { label: 'En Preparación', icon: ChefHat, color: 'bg-purple-100 text-purple-800 border-purple-300', nextStatus: 'ready', nextLabel: 'Marcar como Listo' },
+      ready: { label: 'Listo', icon: Package, color: 'bg-green-100 text-green-800 border-green-300', nextStatus: 'delivering', nextLabel: 'Enviar Pedido' },
+      delivering: { label: 'En Reparto', icon: Truck, color: 'bg-cyan-100 text-cyan-800 border-cyan-300', nextStatus: 'delivered', nextLabel: 'Marcar como Entregado' },
+      delivered: { label: 'Entregado', icon: CheckCircle, color: 'bg-gray-100 text-gray-600 border-gray-300', nextStatus: null, nextLabel: null },
+      cancelled: { label: 'Cancelado', icon: XCircle, color: 'bg-red-100 text-red-800 border-red-300', nextStatus: null, nextLabel: null }
+    };
+
+    if (status === 'ready' && deliveryType === 'pickup') {
+      configs.ready.nextStatus = 'delivered';
+      configs.ready.nextLabel = 'Marcar como Recogido';
     }
-    return config;
+    
+    return configs[status] || configs.pending;
   };
 
   const formatTime = (timestamp) => {
@@ -54,33 +56,30 @@ const OrderCard = ({ order, onUpdateStatus, isUpdating }) => {
   const StatusIcon = statusConfig.icon;
 
   return (
-    // Tarjeta individual
-    <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-100">
-      {/* Encabezado con color */}
-      <div className={`px-4 py-3 border-l-4 ${statusConfig.color.replace('bg-', 'border-').replace('100', '500')}`}>
+    <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+      <div className={`px-4 py-3 border-l-4 ${statusConfig.color.replace('bg-', 'border-').split(' ')[0].replace('100', '500')}`}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span className="text-2xl font-bold text-gray-800">
               #{order.orderNumber || order.id.substring(0, 6).toUpperCase()}
             </span>
             {order.deliveryType === 'delivery' ? (
-              <Truck className="w-5 h-5 text-blue-500" title="A Domicilio" />
+              <Truck className="w-5 h-5 text-blue-500" title="A Domicilio"/>
             ) : (
-              <Store className="w-5 h-5 text-green-500" title="Recoger en Tienda" />
+              <Store className="w-5 h-5 text-green-500" title="Recoger en Tienda"/>
             )}
           </div>
-          <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold border ${statusConfig.color}`}>
+          <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold border ${statusConfig.color}`}>
             <StatusIcon className="w-4 h-4" />
             {statusConfig.label}
           </span>
         </div>
-        <p className="text-sm text-gray-500 flex items-center gap-1.5">
+        <p className="text-sm text-gray-500 flex items-center gap-1">
           <Clock className="w-4 h-4" />
           {formatTime(order.createdAt)}
         </p>
       </div>
 
-      {/* Cuerpo de la tarjeta */}
       <div className="p-4 space-y-3">
         {/* Info del Cliente */}
         <div className="flex items-start gap-3 text-sm">
@@ -190,6 +189,9 @@ export default function OrdersManager() {
   const [statusFilter, setStatusFilter] = useState('active');
   const [updatingOrder, setUpdatingOrder] = useState(null); // ID del pedido que se está actualizando
   const [error, setError] = useState(null);
+  
+  // 🔥 Importamos las alertas
+  const { showAlert, alerts, hideAlert } = useAlert();
 
   // Filtrado en memoria
   const filteredOrders = useMemo(() => {
@@ -209,15 +211,17 @@ export default function OrdersManager() {
     return [...filtered].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [allOrders, statusFilter]);
 
+
   // Función de carga inicial
   const fetchOrders = useCallback(async () => {
     if (!restaurantId) return;
     console.log('[OrdersManager] 📡 Cargando pedidos iniciales...');
     try {
       setLoading(true);
+      setError(null); // Limpiar error al recargar
       const orders = await api.get(`/orders/${restaurantId}`);
       // Convertir timestamps de Firestore a objetos Date
-      const ordersWithDates = orders.map(o => ({
+      const ordersWithDates = (Array.isArray(orders) ? orders : []).map(o => ({
         ...o,
         createdAt: o.createdAt?.seconds ? new Date(o.createdAt.seconds * 1000) : new Date(o.createdAt)
       }));
@@ -239,9 +243,10 @@ export default function OrdersManager() {
     if (restaurantId) {
       fetchOrders();
     }
-  }, [user, navigate, restaurantId, fetchOrders]); // fetchOrders está en dependencias
+  }, [user, navigate, restaurantId, fetchOrders]);
 
-  // --- 🔥 SSE MEJORADO (CON LÓGICA DE ESTADO LOCAL) ---
+
+  // --- 🔥 3. SSE CORREGIDO (LÓGICA LOCAL) ---
   useEffect(() => {
     if (!restaurantId) return;
 
@@ -250,7 +255,7 @@ export default function OrdersManager() {
     
     eventSource.onopen = () => {
       console.log('[OrdersManager] ✅ SSE conectado');
-      // Opcional: recargar por si perdimos algo mientras estábamos desconectados
+      // Al (re)conectar, recargamos por si perdimos algo
       fetchOrders(); 
     };
     
@@ -264,19 +269,26 @@ export default function OrdersManager() {
           return;
         }
 
+        // Convertir el payload a un objeto Date (CRÍTICO para ordenar)
         const newOrder = {
           ...eventData.payload,
-          createdAt: eventData.payload.createdAt?.seconds ? new Date(eventData.payload.createdAt.seconds * 1000) : new Date(eventData.payload.createdAt)
+          createdAt: eventData.payload.createdAt?.seconds 
+            ? new Date(eventData.payload.createdAt.seconds * 1000) 
+            : new Date(eventData.payload.createdAt)
         };
 
+        // --- ESTA ES LA LÓGICA QUE FALTABA ---
         if (eventData.type === 'order_new') {
           console.log('[OrdersManager] ✨ Recibido nuevo pedido:', newOrder.id);
+          showAlert('¡Nuevo pedido recibido!', 'success');
+          // Aquí puedes añadir sonido
+          
           setAllOrders(prevOrders => {
             // Prevenir duplicados
             if (prevOrders.find(o => o.id === newOrder.id)) return prevOrders;
+            // Añadir al inicio de la lista
             return [newOrder, ...prevOrders];
           });
-          // Aquí puedes añadir sonido de notificación
         }
         
         if (eventData.type === 'order_update') {
@@ -293,18 +305,20 @@ export default function OrdersManager() {
     };
 
     eventSource.onerror = (err) => {
-      console.error('[OrdersManager] ❌ Error en SSE, Vercel cerró la conexión. Reconectando...', err);
-      // No cerramos, EventSource intentará reconectar automáticamente.
-      // Aquí es donde veías el error, es "normal" en serverless.
+      // ESTE ES EL ERROR "NORMAL" DE TIMEOUT DE VERCEL
+      console.error('[OrdersManager] ❌ Error en SSE (conexión cerrada por Vercel), reconectando...', err);
+      // NO cerramos la conexión (eventSource.close())
+      // El navegador intentará reconectar automáticamente por defecto.
     };
 
     return () => {
       console.log('[OrdersManager] 🔌 Cerrando conexión SSE');
       eventSource.close();
     };
-  }, [restaurantId, fetchOrders]); // fetchOrders está en dependencias
+  }, [restaurantId, fetchOrders, showAlert]); // <-- Añadimos showAlert
 
-  // --- 🔥 ACTUALIZACIÓN DE ESTADO OPTIMISTA ---
+
+  // --- 🔥 4. ACTUALIZACIÓN DE ESTADO OPTIMISTA ---
   const updateOrderStatus = async (orderId, newStatus) => {
     if (!user || !restaurantId) return;
     
@@ -322,21 +336,22 @@ export default function OrdersManager() {
       // 2. Llamada a la API (Backend)
       // Esta llamada ahora SÓLO notifica al backend, no esperamos
       // a que termine para actualizar la UI.
-      await api.put(`/orders/${restaurantData.id}/${orderId}/status`, {
+      await api.put(`/orders/${restaurantId}/${orderId}/status`, {
         newStatus: newStatus
       });
       // El backend publicará en Redis, y el SSE nos enviará la
-      // confirmación (aunque visualmente ya lo hayamos actualizado).
+      // confirmación (actualizando el estado con la data más reciente).
       console.log('[OrdersManager] ✅ Pedido actualizado en backend:', orderId);
     } catch (err) {
       console.error('[OrdersManager] ❌ Error actualizando pedido:', err);
       // 3. Reversión (Rollback)
-      // Si la API falla, revertimos el cambio en el frontend
-      // y mostramos un error.
-      alert('Error al actualizar el pedido. Reintentando...');
-      fetchOrders(); // Recargamos todo para estar seguros
+      showAlert('Error al actualizar. Revirtiendo...', 'error');
+      // Recargamos todo para estar seguros
+      fetchOrders(); 
     } finally {
-      setUpdatingOrder(null); // Desbloquear botones
+      // Desbloqueamos el botón después de un segundo para
+      // dar tiempo a que el SSE refresque el estado.
+      setTimeout(() => setUpdatingOrder(null), 1000);
     }
   };
 
@@ -344,8 +359,8 @@ export default function OrdersManager() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-red-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-orange-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Cargando pedidos...</p>
+          {/* Usamos el ButtonLoader que SÍ se importa */}
+          <ButtonLoader size="lg" message="Cargando pedidos..." />
         </div>
       </div>
     );
@@ -354,7 +369,8 @@ export default function OrdersManager() {
   return (
     // Fondo degradado y padding, como en Menu.jsx
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 pb-20">
-      <AlertContainer /> {/* Asegúrate de tener esto si usas showAlert */}
+      {/* 🔥 5. AÑADIMOS EL CONTENEDOR DE ALERTA */}
+      <AlertContainer alerts={alerts} onClose={hideAlert} />
       
       {/* Encabezado Fijo (como en Menu.jsx) */}
       <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm shadow-md">
@@ -411,16 +427,15 @@ export default function OrdersManager() {
         ) : (
           // Grid responsivo, como en Menu.jsx
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <AnimatePresence>
-              {filteredOrders.map(order => (
-                <OrderCard 
-                  key={order.id} 
-                  order={order} 
-                  onUpdateStatus={updateOrderStatus}
-                  isUpdating={updatingOrder === order.id}
-                />
-              ))}
-            </AnimatePresence>
+            {/* 🔥 6. USAMOS EL NUEVO COMPONENTE OrderCard */}
+            {filteredOrders.map(order => (
+              <OrderCard 
+                key={order.id} 
+                order={order} 
+                onUpdateStatus={updateOrderStatus}
+                isUpdating={updatingOrder === order.id}
+              />
+            ))}
           </div>
         )}
       </div>
