@@ -1,9 +1,9 @@
 const { db, admin } = require('../config/firebase');
 const telegramNotificationService = require('./telegramNotificationService');
-// 🔥 1. Importamos el "publicador" de Redis (de tu redisClient.js)
+// Importamos el "publicador" de Redis
 const { publisher } = require('../config/redisClient');
 
-const SSE_CHANNEL = 'orders_channel'; // El canal que definimos
+const SSE_CHANNEL = 'orders_channel';
 
 class OrderService {
 
@@ -35,10 +35,10 @@ class OrderService {
     const orderRef = await ordersCollection.add(newOrder);
     await restaurantRef.update({ orderCounter: newOrderNumber });
 
-    // ✅ CORRECCIÓN: Creamos el objeto PRIMERO
+    // ✅ CORRECCIÓN 1: Creamos el objeto PRIMERO
     const createdOrder = { id: orderRef.id, ...newOrder };
 
-    // --- 🔥 2. PUBLICAMOS EN REDIS (ANTES DE RETORNAR) ---
+    // --- PUBLICAMOS EN REDIS (ANTES DE RETORNAR) ---
     try {
       console.log(`[OrderService] Publicando 'order_new' en ${SSE_CHANNEL}`);
       // Usamos el 'publisher' de tu redisClient.js
@@ -47,9 +47,8 @@ class OrderService {
     } catch (sseError) {
       console.error('[OrderService] Error publicando en Redis:', sseError);
     }
-    // --- FIN DE LA CORRECCIÓN ---
-
-    // ✅ CORRECCIÓN: El 'return' va al final.
+    
+    // ✅ CORRECCIÓN 2: El 'return' va al final.
     return createdOrder;
   }
 
@@ -61,7 +60,8 @@ class OrderService {
     if (!orderDoc.exists) {
       throw new Error('Pedido no encontrado');
     }
-    return { id: doc.id, ...doc.data() };
+    // ✅ ¡CORRECCIÓN 3 (EL BUG PRINCIPAL)! Era 'orderDoc', no 'doc'
+    return { id: orderDoc.id, ...orderDoc.data() };
   }
 
   /**
@@ -90,27 +90,28 @@ class OrderService {
       console.log(`[OrderService] Transaction successful for order ${orderId} to status ${newStatus}.`);
     } catch (error) {
       console.error(`[OrderService] Transaction failed for order ${orderId}:`, error);
-      throw error;
+      throw error; // Re-throw to be caught by the route handler
     }
 
+    // Este bloque 'try' es el que fallaba por el bug en getOrder
     try {
-      const updatedOrderData = await this.getOrder(restaurantId, orderId);
+      const updatedOrderData = await this.getOrder(restaurantId, orderId); // Esta llamada ahora SÍ funciona
       
       if (updatedOrderData.status !== newStatus) {
            console.error(`CRITICAL: Status mismatch for ${orderId}...`);
       }
 
-      // --- 🔥 3. PUBLICAMOS EN REDIS (Esta parte ya estaba bien) ---
+      // --- PUBLICAMOS EN REDIS ---
       console.log(`[OrderService] Publicando 'order_update' en ${SSE_CHANNEL}`);
       const message = JSON.stringify({ type: 'order_update', payload: updatedOrderData });
       await publisher.publish(SSE_CHANNEL, message);
-      // --- FIN DE LA MODIFICACIÓN ---
 
       const customerTelegramId = updatedOrderData.customer?.telegramId;
       if (customerTelegramId && updatedOrderData.notificationsEnabled !== false) {
         await telegramNotificationService.notifyUserOfStatusChange(customerTelegramId, newStatus, updatedOrderData, restaurantId);
       }
     } catch (notifyError) {
+      // Aquí es donde caía tu error
       console.error(`[OrderService] Error during notification phase for ${orderId}:`, notifyError);
     }
 
