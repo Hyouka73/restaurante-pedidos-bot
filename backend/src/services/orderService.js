@@ -1,17 +1,15 @@
+// backend/src/services/orderService.js
 const { db, admin } = require('../config/firebase');
 const telegramNotificationService = require('./telegramNotificationService');
-// 🔥 1. Importamos el "publicador" de Redis
+// 🔥 1. Importamos el "publicador" de Redis (de tu redisClient.js)
 const { publisher } = require('../config/redisClient');
 
-const SSE_CHANNEL = 'orders_channel';
+const SSE_CHANNEL = 'orders_channel'; // El canal que definimos
 
 class OrderService {
 
   /**
    * Crea un nuevo pedido en la base de datos.
-   * @param {string} restaurantId - ID del restaurante.
-   * @param {object} orderData - Datos del pedido.
-   * @returns {Promise<object>} El objeto del pedido creado.
    */
   async createOrder(restaurantId, orderData) {
     const restaurantRef = db.collection('restaurants').doc(restaurantId);
@@ -36,22 +34,23 @@ class OrderService {
     };
 
     const orderRef = await ordersCollection.add(newOrder);
-    
     await restaurantRef.update({ orderCounter: newOrderNumber });
 
-    return { id: orderRef.id, ...newOrder };
+    // ✅ CORRECCIÓN: Creamos el objeto PRIMERO
     const createdOrder = { id: orderRef.id, ...newOrder };
 
-    // --- 🔥 2. ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-    // Notificar al frontend (Panel de Admin) que llegó un nuevo pedido
+    // --- 🔥 2. PUBLICAMOS EN REDIS (ANTES DE RETORNAR) ---
     try {
-      console.log('[OrderService] Enviando evento SSE por nueva orden...');
-      sendSseEvent({ type: 'order_new', payload: createdOrder });
+      console.log(`[OrderService] Publicando 'order_new' en ${SSE_CHANNEL}`);
+      // Usamos el 'publisher' de tu redisClient.js
+      const message = JSON.stringify({ type: 'order_new', payload: createdOrder });
+      await publisher.publish(SSE_CHANNEL, message);
     } catch (sseError) {
-      console.error('[OrderService] Error enviando evento SSE:', sseError);
+      console.error('[OrderService] Error publicando en Redis:', sseError);
     }
     // --- FIN DE LA CORRECCIÓN ---
 
+    // ✅ CORRECCIÓN: El 'return' va al final.
     return createdOrder;
   }
 
@@ -78,38 +77,34 @@ class OrderService {
         if (!orderDoc.exists) {
           throw new Error('Pedido no encontrado');
         }
-
         const newStatusEntry = {
           status: newStatus,
           timestamp: new Date(),
           notes
         };
-
         transaction.update(orderRef, {
           status: newStatus,
           updatedAt: new Date(),
           statusHistory: admin.firestore.FieldValue.arrayUnion(newStatusEntry)
         });
       });
-
       console.log(`[OrderService] Transaction successful for order ${orderId} to status ${newStatus}.`);
-
     } catch (error) {
       console.error(`[OrderService] Transaction failed for order ${orderId}:`, error);
-      throw error; // Re-throw to be caught by the route handler
+      throw error;
     }
 
     try {
       const updatedOrderData = await this.getOrder(restaurantId, orderId);
       
       if (updatedOrderData.status !== newStatus) {
-           console.error(`CRITICAL: Status mismatch for ${orderId} after transaction. Expected ${newStatus}, got ${updatedOrderData.status}. Possible external interference (e.g., Cloud Function).`);
+           console.error(`CRITICAL: Status mismatch for ${orderId}...`);
       }
 
-      // --- 🔥 3. PUBLICAMOS EN REDIS ---
+      // --- 🔥 3. PUBLICAMOS EN REDIS (Esta parte ya estaba bien) ---
       console.log(`[OrderService] Publicando 'order_update' en ${SSE_CHANNEL}`);
       const message = JSON.stringify({ type: 'order_update', payload: updatedOrderData });
-      await publisher.publish(SSE_CHANNEL, message);
+      await publisher.publish(SSE_CHANNEL, message); //
       // --- FIN DE LA MODIFICACIÓN ---
 
       const customerTelegramId = updatedOrderData.customer?.telegramId;
