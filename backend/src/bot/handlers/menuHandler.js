@@ -80,15 +80,27 @@ async function showMenuView(ctx, page = 1, isEdit = false) {
         actionsRow
     ]);
 
-    // --- Enviar o Editar Mensaje ---
+    // --- 🔥 CORRECCIÓN "QUITAR TECLADO" ---
+    // Creamos un objeto de opciones que incluye la orden de quitar el teclado
+    const options = {
+      parse_mode: 'Markdown',
+      ...keyboard,
+      reply_markup: { 
+        ...keyboard.reply_markup,
+        remove_keyboard: true // <-- Esta es la clave
+      }
+    };
+    
     if (isEdit) {
         if (ctx.callbackQuery.message.text === messageText) {
             return ctx.answerCbQuery('Ya estás en esta página.');
         }
-        await ctx.editMessageText(messageText, { parse_mode: 'Markdown', ...keyboard });
+        // Pasamos las nuevas 'options'
+        await ctx.editMessageText(messageText, options);
         await ctx.answerCbQuery();
     } else {
-        await ctx.reply(messageText, { parse_mode: 'Markdown', ...keyboard });
+        // Pasamos las nuevas 'options'
+        await ctx.reply(messageText, options);
     }
 
   } catch (error) {

@@ -3,8 +3,10 @@ const { Markup } = require('telegraf');
 const menuService = require('../../services/menuService');
 const configBotService = require('../services/configBotService');
 const DiscountRuleService = require('../../services/discountRuleService');
-const { SESSION_STATES, askPaymentMethod } = require('./orderHandler');
+// 🔥 CORRECCIÓN: Importamos 'askForPhone' y 'telegramUserService' que faltaban
+const { SESSION_STATES, askPaymentMethod, askForPhone } = require('./orderHandler');
 const { showMenuView } = require('./menuHandler'); // Para 'back_to_menu'
+const telegramUserService = require('../services/telegramUserService');
 
 // --- LÓGICA DE AÑADIR ITEM ---
 // ✅ LÓGICA MEJORADA: Inicia el pedido si no existe
@@ -56,30 +58,43 @@ async function handleAddItem(ctx, callbackData, userId, restaurantId) {
     await ctx.answerCbQuery(`✅ ${item.name} agregado al carrito`);
   }
 
-  // Aplicar combos dinámicos
+  // --- 🔥 ARREGLO DE BUG "UNDEFINED" ---
   const { cart: updatedCart, notification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
   ctx.session.cart = updatedCart;
 
-  if (notification) {
+  // Solo enviar si la notificación y su título existen
+  if (notification && notification.title) {
     await ctx.reply(`*${notification.title}*\n${notification.text}`, { parse_mode: 'Markdown' });
   }
 
-  // Cross-sell (Lógica mejorada de interactionHandler)
+  // --- 🔥 MEJORA DE CROSS-SELL INTERACTIVO ---
   if (item.sugerir_items && item.sugerir_items.length > 0) {
     try {
       const suggestionPromises = item.sugerir_items.map(itemId => 
         menuService.getMenuItem(restaurantId, itemId)
       );
       const rawSuggestions = await Promise.all(suggestionPromises);
-      const suggestions = rawSuggestions.filter(s => s);
+      const suggestions = rawSuggestions.filter(s => s && s.available !== false); // Filtramos nulos o no disponibles
+      
       if (suggestions && suggestions.length > 0) {
-        const suggestionNames = suggestions.map(s => s.name).join(', ');
-        await ctx.reply(`💡 Ya que llevas *${item.name}*, quizás te interese también: ${suggestionNames}.`, { parse_mode: 'Markdown' });
+        // Preparamos botones para las sugerencias
+        const suggestionButtons = suggestions.map(s => {
+          return Markup.button.callback(`➕ ${s.name} ($${s.price})`, `add_item_${s.id}`);
+        });
+        
+        // Botón para limpiar el mensaje
+        suggestionButtons.push(Markup.button.callback('No, gracias', 'delete_message'));
+
+        await ctx.reply(`💡 Ya que llevas *${item.name}*, quizás te interese también:`, { 
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard(suggestionButtons, { columns: 1 }) // Mostramos 1 por fila
+        });
       }
     } catch (error) {
       console.error('Error en cross-sell:', error);
     }
   }
+
 }
 
 // --- LÓGICA DE INFO DE ITEM ---
@@ -371,14 +386,10 @@ async function handlePickup(ctx, userId, restaurantId) {
     `⏱️ Tu pedido estará listo en aproximadamente 20-30 minutos`,
     { parse_mode: 'Markdown' }
   );
-  
-  if (features.askForPhone) {
-    session.step = SESSION_STATES.WAITING_PHONE;
-    await ctx.reply('📞 Por favor, escribe tu número de teléfono para confirmación:');
-  } else {
-    session.step = SESSION_STATES.SELECTING_PAYMENT;
-    await askPaymentMethod(ctx, session, restaurantId);
-  }
+  // --- 🔥 MEJORA DE TELÉFONO INTELIGENTE ---
+  // Ya no preguntamos directamente, llamamos a la función inteligente
+  const userInfo = await telegramUserService.getUserInfo(userId);
+  await askForPhone(ctx, session, userInfo, restaurantId);
 }
 
 // --- LÓGICA DE SELECCIÓN DE PAGO ---
@@ -610,6 +621,9 @@ module.exports = {
     handleDeliveryYes,
     handlePickup,
     handlePaymentSelection,
+    showFinalConfirmation,
+    handleFinalConfirmation,
+    handleCancelOrder,
     showFinalConfirmation,
     handleFinalConfirmation,
     handleCancelOrder

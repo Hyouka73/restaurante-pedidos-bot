@@ -1,5 +1,6 @@
 const { db, admin } = require('../config/firebase');
-const telegramNotificationService = require('./telegramNotificationService');
+// 🔥 AÑADIR AL INICIO DE LOS IMPORTS
+const notificationService = require('../bot/services/notificationService');
 // Importamos el "publicador" de Redis
 const { publisher } = require('../config/redisClient');
 
@@ -67,55 +68,51 @@ class OrderService {
   /**
    * Actualiza el estado de un pedido y notifica al usuario.
    */
-  async updateOrderStatus(restaurantId, orderId, newStatus, notes = '') {
-    const orderRef = db.collection('restaurants').doc(restaurantId).collection('orders').doc(orderId);
-
+  async updateOrderStatus(restaurantId, orderId, newStatus, additionalData = {}) {
     try {
-      await db.runTransaction(async (transaction) => {
-        const orderDoc = await transaction.get(orderRef);
-        if (!orderDoc.exists) {
-          throw new Error('Pedido no encontrado');
-        }
-        const newStatusEntry = {
-          status: newStatus,
-          timestamp: new Date(),
-          notes
-        };
-        transaction.update(orderRef, {
-          status: newStatus,
-          updatedAt: new Date(),
-          statusHistory: admin.firestore.FieldValue.arrayUnion(newStatusEntry)
-        });
+      const orderRef = db.collection('restaurants')
+        .doc(restaurantId)
+        .collection('orders')
+        .doc(orderId);
+
+      const orderDoc = await orderRef.get();
+      if (!orderDoc.exists) {
+        throw new Error('Orden no encontrada');
+      }
+
+      const currentOrder = orderDoc.data();
+      const oldStatus = currentOrder.status;
+
+      // Actualizar el documento
+      await orderRef.update({
+        status: newStatus,
+        updatedAt: new Date(),
+        ...additionalData
       });
-      console.log(`[OrderService] Transaction successful for order ${orderId} to status ${newStatus}.`);
+
+      console.log(`✅ Orden ${orderId} actualizada: ${oldStatus} → ${newStatus}`);
+
+      // 🔥 ENVIAR NOTIFICACIÓN AUTOMÁTICA AL CLIENTE
+      // Solo si el estado realmente cambió
+      if (oldStatus !== newStatus) {
+        try {
+          await notificationService.notifyOrderStatusChange(
+            restaurantId, 
+            orderId, 
+            newStatus
+          );
+        } catch (notifError) {
+          console.error('Error enviando notificación (no crítico):', notifError);
+          // No lanzar error - la actualización del pedido fue exitosa
+        }
+      }
+
+      return { success: true, orderId, newStatus };
+
     } catch (error) {
-      console.error(`[OrderService] Transaction failed for order ${orderId}:`, error);
-      throw error; // Re-throw to be caught by the route handler
+      console.error(`Error actualizando orden ${orderId}:`, error);
+      throw error;
     }
-
-    // Este bloque 'try' es el que fallaba por el bug en getOrder
-    try {
-      const updatedOrderData = await this.getOrder(restaurantId, orderId); // Esta llamada ahora SÍ funciona
-      
-      if (updatedOrderData.status !== newStatus) {
-           console.error(`CRITICAL: Status mismatch for ${orderId}...`);
-      }
-
-      // --- PUBLICAMOS EN REDIS ---
-      console.log(`[OrderService] Publicando 'order_update' en ${SSE_CHANNEL}`);
-      const message = JSON.stringify({ type: 'order_update', payload: updatedOrderData });
-      await publisher.publish(SSE_CHANNEL, message);
-
-      const customerTelegramId = updatedOrderData.customer?.telegramId;
-      if (customerTelegramId && updatedOrderData.notificationsEnabled !== false) {
-        await telegramNotificationService.notifyUserOfStatusChange(customerTelegramId, newStatus, updatedOrderData, restaurantId);
-      }
-    } catch (notifyError) {
-      // Aquí es donde caía tu error
-      console.error(`[OrderService] Error during notification phase for ${orderId}:`, notifyError);
-    }
-
-    return { success: true };
   }
 
   /**

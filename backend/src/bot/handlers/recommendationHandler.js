@@ -60,39 +60,54 @@ async function handleRecommendation(ctx) {
             }
 
         } else if (data.tipo_respuesta === 'recomendacion_final') {
-            await ctx.editMessageText('¡Aquí tienes algunas recomendaciones para ti! 👇');
+            // --- 🔥 MEJORA ANTI-SPAM Y DE FLUJO ---
+            
+            let messageText = '¡Aquí tienes algunas recomendaciones para ti! 👇\n';
+            const keyboardButtons = [];
             
             if (data.items && data.items.length > 0) {
-                for (const item of data.items) {
-                    const caption = `*${item.nombre}*\n${item.descripcion || ''}\n\n*Precio: $${item.precio.toFixed(2)}*`; // Añadido $
-                    const keyboard = Markup.inlineKeyboard([
-                        item.tipo_item === 'producto'
-                            // ❗ CORRECCIÓN: 'add_to_cart' no existe, debe ser 'add_item_'
-                            ? Markup.button.callback('🛒 Añadir al Carrito', `add_item_${item.id}`)
-                            : Markup.button.callback('🚀 Armar Combo', `build_combo:${item.id}`)
+                
+                data.items.forEach(item => {
+                  // 1. Construimos el texto
+                  messageText += `\n${'─'.repeat(15)}\n`;
+                  messageText += `*${item.nombre}* - $${item.precio.toFixed(2)}\n`;
+                  messageText += `_${item.descripcion || ''}_\n`;
+        
+                  // 2. Preparamos los botones
+                  if (item.tipo_item === 'producto') {
+                    keyboardButtons.push([
+                      Markup.button.callback(`➕ Añadir ${item.nombre}`, `add_item_${item.id}`)
                     ]);
+                  } else {
+                    keyboardButtons.push([
+                      Markup.button.callback(`🚀 Armar ${item.nombre}`, `build_combo:${item.id}`)
+                    ]);
+                  }
+                });
+        
+                // 3. Añadimos botones de navegación
+                messageText += `\n${'─'.repeat(15)}\n`;
+                keyboardButtons.push([
+                  Markup.button.callback('🛒 Ver mi carrito', 'view_cart'),
+                  Markup.button.callback('📋 Ver Menú Completo', 'show_menu')
+                ]);
+                keyboardButtons.push([
+                  Markup.button.callback('💡 Empezar de nuevo', 'start_recommendation')
+                ]);
+        
+                // 4. Editamos el mensaje original UNA SOLA VEZ
+                await ctx.editMessageText(messageText, {
+                  parse_mode: 'Markdown',
+                  ...Markup.inlineKeyboard(keyboardButtons)
+                });
 
-                    if (item.foto_url) {
-                        try {
-                            await ctx.replyWithPhoto(item.foto_url, {
-                                caption: caption,
-                                parse_mode: 'Markdown',
-                                ...keyboard
-                            });
-                        } catch (e) {
-                            console.error(`Fallo al enviar foto ${item.foto_url}, enviando como texto.`, e.message);
-                            await ctx.reply(caption, { parse_mode: 'Markdown', ...keyboard });
-                        }
-                    } else {
-                        await ctx.reply(caption, { parse_mode: 'Markdown', ...keyboard });
-                    }
-                }
             } else {
-                await ctx.reply('🤔 No encontré productos que coincidan con todos tus filtros. ¿Quieres intentar de nuevo?',
-                    Markup.inlineKeyboard([
-                        Markup.button.callback('💡 Sí, empezar de nuevo', 'start_recommendation')
-                    ])
-                );
+                // --- ESTO YA ESTABA BIEN ---
+                await ctx.editMessageText('🤔 No encontré productos que coincidan...', {
+                  ...Markup.inlineKeyboard([
+                    Markup.button.callback('💡 Sí, empezar de nuevo', 'start_recommendation')
+                  ])
+                });
             }
             delete ctx.session.recommendationFilters;
         }

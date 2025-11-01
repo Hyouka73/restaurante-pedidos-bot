@@ -10,16 +10,22 @@ const DiscountRuleService = require('../../services/discountRuleService');
 const availabilityService = require('../../services/availabilityService');
 const { Markup } = require('telegraf');
 const { 
-  SESSION_STATES, 
-  askPaymentMethod 
+  SESSION_STATES,
+  askPaymentMethod,
+  askForPhone
 } = require('../handlers/orderHandler');
 
-const { formatOrderStatus } = require('../handlers/myOrderHandler');
 const { showMenuView } = require('../handlers/menuHandler');
 const { handleRecommendation } = require('../handlers/recommendationHandler');
 const { handleComboBuilder } = require('../handlers/comboBuilderHandler');
 // Importar las funciones del nuevo handler de notificaciones
-const { handleNotificationPreference, handleShowOrderStatus } = require('../handlers/notificationHandler');
+const { 
+  handleNotificationPreference, 
+  handleShowOrderStatus,
+  handleRefreshOrderStatus,      // NUEVO
+  handleCancelOrderRequest,       // NUEVO
+  handleConfirmCancelOrder        // NUEVO
+} = require('../handlers/notificationHandler');
 
 // --- NUEVA IMPORTACIÓN ---
 // Importamos toda la lógica del carrito desde el archivo refactorizado
@@ -31,12 +37,8 @@ module.exports = async (ctx) => {
   
   const userId = ctx.from.id; 
   const callbackData = ctx.callbackQuery.data; 
-  
   try {
-    // ✅ Obtener sesión del carrito desde contexto
-    let session = ctx.session?.cart; 
-    
-    // Obtener el ID del restaurante (desde la sesión o identificando el bot)
+    const session = ctx.session?.cart;
     const restaurantId = session?.restaurantId ||
       await telegramUserService.getRestaurantIdByBotContext(ctx); 
       
@@ -93,14 +95,14 @@ module.exports = async (ctx) => {
       return;
     }
     
-    if (callbackData === 'show_menu') {
+    if (callbackData === 'show_menu' || callbackData === 'back_to_menu') {
       await ctx.answerCbQuery(); 
-      await showMenuView(ctx, 1, false); 
+      await showMenuView(ctx, 1, false); // 'isEdit = false' para enviar un mensaje nuevo y limpio
       return;
     }
     if (callbackData.startsWith('menu_page_')) {
       const page = parseInt(callbackData.split('_')[2], 10); 
-      await showMenuView(ctx, page, true); // Cambiar página del menú
+      await showMenuView(ctx, page, true);
       return;
     }
      if (callbackData === 'show_info') {
@@ -142,6 +144,70 @@ module.exports = async (ctx) => {
       await ctx.answerCbQuery(); 
       const startHandler = require('../handlers/startHandler'); // Cargar solo al necesitar
       await startHandler(ctx); 
+      return;
+    }
+
+    // --- 🔥 NUEVO HANDLER (Para limpiar el chat) ---
+    if (callbackData === 'delete_message') {
+      try {
+        await ctx.deleteMessage();
+      } catch (e) {
+        console.warn('No se pudo borrar el mensaje (quizás era muy antiguo)');
+      }
+      return;
+    }
+
+    // --- 🔥 NUEVOS HANDLERS (Para el flujo de teléfono) ---
+    if (callbackData === 'confirm_phone_yes') {
+      await ctx.answerCbQuery('Teléfono confirmado');
+      const userInfo = await telegramUserService.getUserInfo(userId);
+      // Guardamos el teléfono en la sesión por si acaso
+      session.customerPhone = session.customerPhone || userInfo?.phone;
+      
+      // Borramos el mensaje de botones
+      await ctx.editMessageReplyMarkup(null);
+
+      // Avanzamos al siguiente paso (pago)
+      session.step = SESSION_STATES.SELECTING_PAYMENT;
+      await askPaymentMethod(ctx, session, restaurantId);
+      return;
+    }
+    
+    if (callbackData === 'confirm_phone_no') {
+      await ctx.answerCbQuery('Ingresa un nuevo número');
+      // Borramos el mensaje de botones
+      await ctx.editMessageReplyMarkup(null);
+      
+      // Llamamos a la función, que ahora sabe que no hay teléfono y pedirá uno
+      await askForPhone(ctx, session, null, restaurantId); // Pasamos userInfo como 'null' para forzar la pregunta
+      return;
+    }
+
+    // --- HANDLERS DE NOTIFICACIÓN DE PEDIDO ---
+    if (callbackData.startsWith('notify_')) {
+      await handleNotificationPreference(ctx, callbackData); 
+      return;
+    }
+    if (callbackData.startsWith('show_order_status_')) {
+      await handleShowOrderStatus(ctx, callbackData); 
+      return;
+    }
+    if (callbackData.startsWith('refresh_order_')) {
+      await handleRefreshOrderStatus(ctx, callbackData);
+      return;
+    }
+    if (callbackData.startsWith('cancel_order_')) {
+      await handleCancelOrderRequest(ctx, callbackData);
+      return;
+    }
+    if (callbackData.startsWith('confirm_cancel_')) {
+      await handleConfirmCancelOrder(ctx, callbackData);
+      return;
+    }
+    if (callbackData === 'retry_my_order') {
+      await ctx.answerCbQuery();
+      const myOrderHandler = require('../handlers/myOrderHandler');
+      await myOrderHandler(ctx);
       return;
     }
 
@@ -200,13 +266,6 @@ module.exports = async (ctx) => {
       await cartHandler.handleCancelOrder(ctx, userId);
       return;
     }
-
-    if (callbackData === 'back_to_menu') {
-      await showMenuView(ctx, 1, true); 
-      return;
-    }
-
-    // --- 4. Fallback ---
     console.warn(`⚠️ Callback no manejado: ${callbackData}`); 
     await ctx.answerCbQuery('⚠️ Acción no reconocida'); 
     

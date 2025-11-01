@@ -65,6 +65,12 @@ bot.use(session({
 
 console.log("✅ [server.js] Sesión Redis configurada"); 
 
+// --- 🔥 INYECTAR BOT EN SERVICIOS ---
+// (Esto es crucial para que notificationService funcione)
+const notificationService = require('./src/bot/services/notificationService');
+notificationService.setBotInstance(bot);
+// --- FIN DE LA INYECCIÓN ---
+
 // ===== IMPORTAR HANDLERS =====
 const startHandler = require('./src/bot/handlers/startHandler');
 const { menuHandler } = require('./src/bot/handlers/menuHandler');

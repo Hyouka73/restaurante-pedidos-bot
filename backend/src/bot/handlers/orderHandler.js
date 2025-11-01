@@ -19,7 +19,8 @@ const SESSION_STATES = {
   WAITING_ADDRESS: 'waiting_address',
   WAITING_PHONE: 'waiting_phone',
   WAITING_NAME: 'waiting_name',
-  SELECTING_PAYMENT: 'selecting_payment',
+  CONFIRMING_PHONE: 'confirming_phone', // Nuevo estado
+  SELECTING_PAYMENT: 'selecting_payment', 
   FINAL_CONFIRMATION: 'final_confirmation'
 };
 
@@ -181,21 +182,10 @@ async function handleLocationMessage(ctx, userId, restaurantId, restaurantData) 
       );
     }
 
-    const features = restaurantData.features || {};
-    
-    if (features.requireLocationIfDelivery) {
-      session.step = SESSION_STATES.WAITING_ADDRESS;
-      console.log('📝 [handleLocationMessage] Pidiendo dirección');
-      await ctx.reply(
-        '📝 Por favor, escribe tu dirección completa:\n\n' +
-        '_(Ejemplo: Calle 5 de Mayo #123, Col. Centro)_',
-        { parse_mode: 'Markdown' }
-      );
-    } else {
-      session.step = SESSION_STATES.WAITING_PHONE;
-      console.log('📞 [handleLocationMessage] Pidiendo teléfono');
-      await ctx.reply('📞 Por favor, escribe tu número de teléfono:');
-    }
+    // --- 🔥 MEJORA DE TELÉFONO INTELIGENTE ---
+    // En lugar de ir directo a WAITING_PHONE, llamamos a la función inteligente
+    const userInfo = await telegramUserService.getUserInfo(userId);
+    await askForPhone(ctx, session, userInfo, restaurantId);
 
   } catch (err) {
     console.error('❌ [handleLocationMessage] Error calculando tarifa:', err);
@@ -224,23 +214,6 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
   console.log(`📝 [handleTextMessage] Estado: ${session.step}, Texto: "${text.substring(0, 50)}"`);
 
   switch (session.step) {
-    case SESSION_STATES.WAITING_ADDRESS:
-      if (text.length < 10) {
-        await ctx.reply('📝 Por favor proporciona una dirección más completa (mínimo 10 caracteres).');
-        return;
-      }
-      session.customerAddress = text;
-      console.log('✅ [handleTextMessage] Dirección guardada');
-      
-      if (features.askForPhone) {
-        session.step = SESSION_STATES.WAITING_PHONE;
-        await ctx.reply('📞 Perfecto. Ahora escribe tu número de teléfono:');
-      } else {
-        session.step = SESSION_STATES.SELECTING_PAYMENT;
-        await askPaymentMethod(ctx, session, restaurantId);
-      }
-      break;
-      
     case SESSION_STATES.WAITING_PHONE:
       const phoneRegex = /^[\d\s\-\+\(\)]{8,}$/;
       if (!phoneRegex.test(text)) {
@@ -249,6 +222,20 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
       }
       session.customerPhone = text;
       console.log('✅ [handleTextMessage] Teléfono guardado');
+      
+      session.step = SESSION_STATES.SELECTING_PAYMENT;
+      await askPaymentMethod(ctx, session, restaurantId);
+      break;
+    case SESSION_STATES.WAITING_ADDRESS:
+      if (text.length < 10) {
+        await ctx.reply('📝 Por favor proporciona una dirección más completa (mínimo 10 caracteres).');
+        return;
+      }
+      session.customerAddress = text;
+      console.log('✅ [handleTextMessage] Dirección guardada');
+      
+      const userInfo = await telegramUserService.getUserInfo(userId);
+      await askForPhone(ctx, session, userInfo, restaurantId);
       
       if (features.askForName && !session.customerName) {
         session.step = SESSION_STATES.WAITING_NAME;
@@ -305,9 +292,57 @@ async function askPaymentMethod(ctx, session, restaurantId) {
   );
 }
 
+// --- 🔥 NUEVA FUNCIÓN "INTELIGENTE" PARA PEDIR TELÉFONO ---
+async function askForPhone(ctx, session, userInfo, restaurantId) {
+  const features = (await configBotService.getRestaurantData(restaurantId)).features || {};
+
+  // Si la función de pedir teléfono está desactivada, saltar a pago
+  if (!features.askForPhone) {
+    console.log('[askForPhone] La función askForPhone está desactivada. Saltando a pago.');
+    session.step = SESSION_STATES.SELECTING_PAYMENT;
+    await askPaymentMethod(ctx, session, restaurantId);
+    return;
+  }
+  
+  // Revisar si YA tenemos un número (de esta sesión o de la BD)
+  const existingPhone = session.customerPhone || userInfo?.phone;
+
+  if (existingPhone) {
+    console.log(`[askForPhone] Teléfono encontrado: ${existingPhone}`);
+    session.step = 'CONFIRMING_PHONE'; // Un nuevo estado temporal
+    await ctx.reply(
+      `📞 ¿Usamos tu número guardado?\n*${existingPhone}*`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          Markup.button.callback('👍 Sí, usar este', `confirm_phone_yes`),
+          Markup.button.callback('✏️ No, usar otro', `confirm_phone_no`)
+        ])
+      }
+    );
+  } else {
+    // No tenemos número, lo pedimos
+    console.log('[askForPhone] No se encontró teléfono. Solicitando...');
+    session.step = SESSION_STATES.WAITING_PHONE;
+    await ctx.reply(
+      '📞 Por favor, comparte tu número de teléfono para confirmación.\n\nPuedes escribirlo o usar el botón de abajo.',
+      {
+        parse_mode: 'Markdown',
+        ...Markup.keyboard([
+          // 🔥 Botón para compartir contacto (más fácil en móvil)
+          [Markup.button.contactRequest('Compartir mi número 📱')] 
+        ]).inputFieldPlaceholder('Escribe tu número aquí...') // 🔥 Placeholder
+          .oneTime(true)
+          .resize(true)
+      }
+    );
+  }
+}
+
 // Exportar
 module.exports = mainOrderHandler;
 module.exports.SESSION_STATES = SESSION_STATES;
 module.exports.handleLocationMessage = handleLocationMessage;
 module.exports.handleTextMessage = handleTextMessage;
 module.exports.askPaymentMethod = askPaymentMethod;
+module.exports.askForPhone = askForPhone; // 🔥 Exportamos la nueva función
