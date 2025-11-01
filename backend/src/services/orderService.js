@@ -1,4 +1,3 @@
-// backend/src/services/orderService.js
 const { db, admin } = require('../config/firebase');
 const telegramNotificationService = require('./telegramNotificationService');
 // 🔥 1. Importamos el "publicador" de Redis (de tu redisClient.js)
@@ -62,7 +61,7 @@ class OrderService {
     if (!orderDoc.exists) {
       throw new Error('Pedido no encontrado');
     }
-    return { id: orderDoc.id, ...orderDoc.data() };
+    return { id: doc.id, ...doc.data() };
   }
 
   /**
@@ -104,7 +103,7 @@ class OrderService {
       // --- 🔥 3. PUBLICAMOS EN REDIS (Esta parte ya estaba bien) ---
       console.log(`[OrderService] Publicando 'order_update' en ${SSE_CHANNEL}`);
       const message = JSON.stringify({ type: 'order_update', payload: updatedOrderData });
-      await publisher.publish(SSE_CHANNEL, message); //
+      await publisher.publish(SSE_CHANNEL, message);
       // --- FIN DE LA MODIFICACIÓN ---
 
       const customerTelegramId = updatedOrderData.customer?.telegramId;
