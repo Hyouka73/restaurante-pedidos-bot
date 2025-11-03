@@ -11,6 +11,7 @@ import {
   Package, AlertCircle, ArrowRight, Sparkles
 } from 'lucide-react';
 import Loader from '../components/ui/Loader';
+import SalesProjectionChart from '../components/SalesProjectionChart';
 
 export default function Dashboard() {
   const [user, loadingAuth] = useAuthState(auth);
@@ -238,6 +239,19 @@ export default function Dashboard() {
               );
             })}
           </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+          className="bg-white rounded-3xl shadow-xl p-6 sm:p-8"
+        >
+          <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            <TrendingUp className="text-[#ff7f50]" size={28} />
+            Proyección de Ventas
+          </h2>
+          <SalesProjectionChart />
         </motion.div>
       </div>
     </div>

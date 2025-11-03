@@ -4,13 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-  "dev": "vercel dev",
-  "start": "node server.js",
-  "setup-webhook": "node scripts/setup-webhook.js",
-  "check-webhook": "node -e \"require('dotenv').config(); const {Telegraf} = require('telegraf'); const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN); bot.telegram.getWebhookInfo().then(info => console.log(JSON.stringify(info, null, 2)));\"",
-  "delete-webhook": "node -e \"require('dotenv').config(); const {Telegraf} = require('telegraf'); const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN); bot.telegram.deleteWebhook().then(() => console.log('✅ Webhook eliminado'));\"",
-  "diagnose": "node scripts/diagnose.js"
-},
+    "dev": "vercel dev",
+    "start": "node server.js",
+    "setup-webhook": "node scripts/setup-webhook.js",
+    "check-webhook": "node -e \"require('dotenv').config(); const {Telegraf} = require('telegraf'); const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN); bot.telegram.getWebhookInfo().then(info => console.log(JSON.stringify(info, null, 2)));\"",
+    "delete-webhook": "node -e \"require('dotenv').config(); const {Telegraf} = require('telegraf'); const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN); bot.telegram.deleteWebhook().then(() => console.log('✅ Webhook eliminado'));\"",
+    "diagnose": "node scripts/diagnose.js"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -26,6 +26,7 @@
     "multer": "^2.0.2",
     "qrcode": "^1.5.4",
     "redis": "^4.7.1",
+    "simple-statistics": "^7.8.8",
     "telegraf": "^4.16.3",
     "uuid": "^13.0.0"
   },

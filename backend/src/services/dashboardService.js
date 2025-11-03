@@ -1,44 +1,103 @@
-// backend/src/services/dashboardService.js
-const { db } = require('../config/firebase');
 
-class DashboardService {
+const admin = require('../../config/firebase');
+const ss = require('simple-statistics');
 
-  async getDashboardStats(restaurantId) {
-    const ordersRef = db.collection('restaurants').doc(restaurantId).collection('orders');
-    const ordersQuery = ordersRef.orderBy('createdAt', 'desc');
-    const ordersSnapshot = await ordersQuery.get();
-    
-    const ordersList = [];
-    let totalRevenue = 0;
-    let pendingCount = 0;
+const db = admin.firestore();
+const CACHE_DURATION_DAYS = 15;
 
-    ordersSnapshot.forEach((doc) => {
-      const data = doc.data();
-      ordersList.push({ id: doc.id, ...data });
-      if (data.status !== 'cancelled') {
-        totalRevenue += data.total || 0;
-      }
-      if (data.status === 'pending') {
-        pendingCount++;
-      }
-    });
+async function getProjectionStatus(restaurantId) {
+  const cacheRef = db.doc(`restaurants/${restaurantId}/dashboard_cache/salesProjection`);
+  const cacheDoc = await cacheRef.get();
 
-    const totalOrders = ordersList.length;
-    const nonCancelledOrdersCount = ordersList.filter(o => o.status !== 'cancelled').length;
-    const avgOrderValue = nonCancelledOrdersCount > 0 ? (totalRevenue / nonCancelledOrdersCount) : 0;
-
-    const metrics = {
-      totalOrders,
-      pendingOrders: pendingCount,
-      revenue: totalRevenue,
-      avgOrderValue,
-    };
-
-    const recentOrders = ordersList.slice(0, 5);
-
-    return { metrics, recentOrders };
+  if (!cacheDoc.exists) {
+    return { status: 'stale' };
   }
 
+  const cacheData = cacheDoc.data();
+  const lastCalculated = cacheData.lastCalculated.toDate();
+  const now = new Date();
+  const cacheAgeDays = (now - lastCalculated) / (1000 * 60 * 60 * 24);
+
+  if (cacheAgeDays < CACHE_DURATION_DAYS) {
+    return { status: 'fresh' };
+  } else {
+    return { status: 'stale' };
+  }
 }
 
-module.exports = new DashboardService();
+async function getProjectionData(restaurantId) {
+  const cacheRef = db.doc(`restaurants/${restaurantId}/dashboard_cache/salesProjection`);
+  const cacheDoc = await cacheRef.get();
+
+  if (cacheDoc.exists) {
+    const cacheData = cacheDoc.data();
+    const lastCalculated = cacheData.lastCalculated.toDate();
+    const now = new Date();
+    const cacheAgeDays = (now - lastCalculated) / (1000 * 60 * 60 * 24);
+
+    if (cacheAgeDays < CACHE_DURATION_DAYS) {
+      return cacheData;
+    }
+  }
+
+  // Cache is stale or doesn't exist, recalculate
+  const ordersSnapshot = await db.collection('orders')
+    .where('restaurantId', '==', restaurantId)
+    .where('status', 'in', ['delivered', 'completed'])
+    .orderBy('createdAt', 'asc')
+    .get();
+
+  if (ordersSnapshot.empty) {
+    return { message: 'No sales data available to generate a projection.' };
+  }
+
+  const salesData = {};
+  ordersSnapshot.forEach(doc => {
+    const order = doc.data();
+    const date = order.createdAt.toDate().toISOString().split('T')[0];
+    if (!salesData[date]) {
+      salesData[date] = 0;
+    }
+    salesData[date] += order.total;
+  });
+
+  const historicalData = Object.keys(salesData).map((date, index) => [index, salesData[date]]);
+
+  if (historicalData.length < 14) {
+    return { message: 'Not enough historical data to create a reliable projection. At least 14 days of sales are required.' };
+  }
+
+  const regression = ss.linearRegression(historicalData);
+  const line = ss.linearRegressionLine(regression);
+
+  const lastDateIndex = historicalData.length - 1;
+  const projectedData = [];
+  for (let i = 1; i <= 7; i++) {
+    const projectedValue = line(lastDateIndex + i);
+    projectedData.push(projectedValue > 0 ? projectedValue : 0);
+  }
+
+  const result = {
+    historical: historicalData.map(d => d[1]),
+    projected: projectedData,
+    lastCalculated: new Date(),
+  };
+
+  await cacheRef.set(result);
+
+  return result;
+}
+
+async function getDashboardStats(restaurantId) {
+    // Implement logic to get dashboard stats
+    return {
+        message: "Stats not implemented yet"
+    };
+}
+
+
+module.exports = {
+  getProjectionStatus,
+  getProjectionData,
+  getDashboardStats,
+};
