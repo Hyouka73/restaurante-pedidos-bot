@@ -101,19 +101,17 @@ async function askNextComponentQuestion(ctx) {
 
 async function finalizeCombo(ctx) {
     const builder = ctx.session.comboBuilder;
-    const userId = ctx.from.id;
 
     let orderSession = ctx.session.cart;
 
     if (!orderSession) {
         orderSession = {
             items: [],
-            // Requerimos telegramUserService aquí para evitar dependencia circular en la carga inicial
             restaurantId: await require('../services/telegramUserService').getRestaurantIdByBotContext(ctx),
             step: 'selecting_item' 
         };
         ctx.session.cart = orderSession;
-  G  }
+    }
 
     const selectionNames = builder.selections.map(sel => sel.item.nombre).join(', ');
     const comboDisplayName = `${builder.name} (${selectionNames})`;
@@ -133,13 +131,16 @@ async function finalizeCombo(ctx) {
     builder.selections.forEach(sel => {
         summary += `*${sel.title}:* ${sel.item.nombre}\n`;
     });
-    summary += `\n*Precio del combo: $${builder.price.toFixed(2)}*`;
+    summary += `\n*Precio del combo: $${builder.price.toFixed(2)}*\n\n`;
+    summary += '¡Añadido a tu carrito! 🛒';
 
-    await ctx.editMessageText(summary, { parse_mode: 'Markdown' });
-    await ctx.reply('¡Combo añadido a tu carrito! 🛒', Markup.inlineKeyboard([
-        Markup.button.callback('Ver mi pedido', 'view_cart'),
-        Markup.button.callback('Seguir comprando', 'show_menu')
-    ]));
+    await ctx.editMessageText(summary, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+            [Markup.button.callback('🛒 Ver Mi Carrito', 'view_cart')],
+            [Markup.button.callback('📋 Volver al Menú', 'back_to_menu')]
+        ])
+    });
     
     delete ctx.session.comboBuilder;
 }

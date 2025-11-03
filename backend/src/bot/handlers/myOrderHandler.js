@@ -122,7 +122,7 @@ const mainMyOrderHandler = async (ctx) => {
       // Botones contextuales según el estado
       const actionButtons = [];
       
-      if (order.status === 'pending' || order.status === 'confirmed') {
+      if (order.status === 'pending') { // [cite]187[/cite]
         actionButtons.push([Markup.button.callback('❌ Cancelar Pedido', `cancel_order_${order.restaurantId}_${order.id}`)]);
       }
       
@@ -154,7 +154,7 @@ const mainMyOrderHandler = async (ctx) => {
       
       return [Markup.button.callback(
         `${statusEmoji} Ver Pedido #${orderId}`,
-        `show_order_status_${order.restaurantId}_${order.id}`
+        `s_o_s_${order.restaurantId}_${order.id}` // 🔥 CORRECCIÓN: Acortar el callback_data para evitar error de 64 bytes.
       )];
     });
 

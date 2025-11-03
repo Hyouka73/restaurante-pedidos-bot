@@ -1,15 +1,16 @@
 // Importaciones necesarias (algunas son de tu viejo cartHandler)
 const { Markup } = require('telegraf');
+const { db } = require('../../config/firebase'); // 🔥 AÑADIDO: Para actualizar la orden directamente
 const menuService = require('../../services/menuService');
 const configBotService = require('../services/configBotService');
 const DiscountRuleService = require('../../services/discountRuleService');
+const availabilityService = require('../../services/availabilityService');
 // 🔥 CORRECCIÓN: Importamos 'askForPhone' y 'telegramUserService' que faltaban
 const { SESSION_STATES, askPaymentMethod, askForPhone } = require('./orderHandler');
-const { showMenuView } = require('./menuHandler'); // Para 'back_to_menu'
+const { showMenuView, showItemInfo } = require('./menuHandler'); // 🔥 Importar showItemInfo
 const telegramUserService = require('../services/telegramUserService');
 
-// --- LÓGICA DE AÑADIR ITEM ---
-// ✅ LÓGICA MEJORADA: Inicia el pedido si no existe
+// --- AÑADIR ITEM ---
 async function handleAddItem(ctx, callbackData, userId, restaurantId) {
   // Si no hay carrito, se crea uno nuevo automáticamente.
   if (!ctx.session?.cart) {
@@ -31,15 +32,15 @@ async function handleAddItem(ctx, callbackData, userId, restaurantId) {
   
   const itemId = callbackData.split('_')[2];
   const menuData = await menuService.getMenuForBot(restaurantId);
+  
   if (!Array.isArray(menuData)) {
-    console.error('[handleAddItem] menuData no es array:', typeof menuData);
-    await ctx.answerCbQuery('❌ Error al cargar el menú', { show_alert: true });
+    await ctx.answerCbQuery('❌ Error al cargar menú', { show_alert: true });
     return;
   }
   
   const item = menuData.find(i => i.id === itemId);
   if (!item || item.available === false) {
-    await ctx.answerCbQuery('😔 Este platillo ya no está disponible.', { show_alert: true });
+    await ctx.answerCbQuery('😔 Platillo no disponible', { show_alert: true });
     return;
   }
 
@@ -55,10 +56,9 @@ async function handleAddItem(ctx, callbackData, userId, restaurantId) {
       quantity: 1,
       type: item.type || 'item'
     });
-    await ctx.answerCbQuery(`✅ ${item.name} agregado al carrito`);
+    await ctx.answerCbQuery(`✅ ${item.name} añadido`);
   }
 
-  // --- 🔥 ARREGLO DE BUG "UNDEFINED" ---
   const { cart: updatedCart, notification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
   ctx.session.cart = updatedCart;
 
@@ -67,115 +67,76 @@ async function handleAddItem(ctx, callbackData, userId, restaurantId) {
     await ctx.reply(`*${notification.title}*\n${notification.text}`, { parse_mode: 'Markdown' });
   }
 
-  // --- 🔥 MEJORA DE CROSS-SELL INTERACTIVO ---
-  if (item.sugerir_items && item.sugerir_items.length > 0) {
-    try {
-      const suggestionPromises = item.sugerir_items.map(itemId => 
-        menuService.getMenuItem(restaurantId, itemId)
-      );
-      const rawSuggestions = await Promise.all(suggestionPromises);
-      const suggestions = rawSuggestions.filter(s => s && s.available !== false); // Filtramos nulos o no disponibles
-      
-      if (suggestions && suggestions.length > 0) {
-        // Preparamos botones para las sugerencias
-        const suggestionButtons = suggestions.map(s => {
-          return Markup.button.callback(`➕ ${s.name} ($${s.price})`, `add_item_${s.id}`);
-        });
-        
-        // Botón para limpiar el mensaje
-        suggestionButtons.push(Markup.button.callback('No, gracias', 'delete_message'));
-
-        await ctx.reply(`💡 Ya que llevas *${item.name}*, quizás te interese también:`, { 
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard(suggestionButtons, { columns: 1 }) // Mostramos 1 por fila
-        });
-      }
-    } catch (error) {
-      console.error('Error en cross-sell:', error);
-    }
-  }
-
+  // 🔥 EDITAR el mensaje actual para mostrar el carrito actualizado
+  await handleViewCart(ctx, userId);
 }
 
-// --- LÓGICA DE INFO DE ITEM ---
-// 
+// --- INFO DE ITEM (ahora edita el mensaje) ---
 async function handleItemInfo(ctx, callbackData, restaurantId) {
   const itemId = callbackData.split('_')[2];
-  const menuItems = await menuService.getMenuForBot(restaurantId);
-  const item = menuItems.find(i => i.id === itemId);
-
-  if (!item) {
-    await ctx.answerCbQuery('😔 Platillo no encontrado', { show_alert: true });
-    return;
-  }
-
-  const itemType = item.isCombo ? '🎁 Combo' : '🍽️ Platillo';
-  const info = 
-    `${itemType}: *${item.name}*\n\n` +
-    `${item.description || 'Deliciosa opción'}\n\n` +
-    `💰 Precio: $${item.price}\n` + // Asumimos que el precio ya viene formateado o es un número
-    `⏱️ Tiempo de preparación: ${item.prepTime || '20-30'} min\n` +
-    `${item.ingredients ? `\n🥘 Ingredientes: ${item.ingredients}` : ''}`;
-
-  await ctx.answerCbQuery();
-  await ctx.reply(info, {
-    parse_mode: 'Markdown',
-    ...Markup.inlineKeyboard([
-      [Markup.button.callback('🛒 Agregar al pedido', `add_item_${item.id}`)],
-      [Markup.button.callback('« Volver', 'back_to_menu')] // 'back_to_menu' es manejado por interactionHandler
-    ])
-  });
+  await showItemInfo(ctx, itemId, restaurantId); // 🔥 Usar la nueva función que edita
 }
 
-// --- LÓGICA DE VER CARRITO ---
-// 
+// --- VER CARRITO ---
 async function handleViewCart(ctx, userId) {
   const session = ctx.session?.cart;
+  
   if (!session || session.items.length === 0) {
-    await ctx.answerCbQuery('🛒 Tu carrito está vacío', { show_alert: true });
+    await ctx.answerCbQuery();
+    
+    const emptyText = '🛒 *Carrito Vacío*\n\n¿Ver el menú?';
+    const emptyButtons = Markup.inlineKeyboard([
+      [Markup.button.callback('📋 Ver Menú', 'back_to_menu')],
+      [Markup.button.callback('🏠 Inicio', 'back_to_start')]
+    ]);
+    
+    try {
+      await ctx.editMessageText(emptyText, { parse_mode: 'Markdown', ...emptyButtons });
+    } catch {
+      await ctx.reply(emptyText, { parse_mode: 'Markdown', ...emptyButtons });
+    }
     return;
   }
   
-  // Usar los totales de la sesión (calculados por DiscountRuleService)
   const subtotal = session.subtotal || session.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const discount = session.discount; // Objeto { amount, ruleName }
+  const discount = session.discount;
   const total = session.total || subtotal;
   
-  let cartMessage = '🛒 *Tu Carrito de Compras*\n';
-  cartMessage += '─'.repeat(25) + '\n\n';
+  // 🔥 DISEÑO COMPACTO Y LIMPIO
+  let cartMessage = '🛒 *Tu Carrito*\n\n';
+  
   session.items.forEach((item, index) => {
     const itemType = item.type === 'combo' ? '🎁' : '🍽️';
     cartMessage += `${itemType} *${item.name}*\n`;
     const price = item.price || 0;
     const itemTotal = (price * item.quantity);
-    cartMessage += `   ${item.quantity} x $${price.toFixed(2)} = *$${itemTotal.toFixed(2)}*\n\n`;
+    cartMessage += `${item.quantity}x = $${itemTotal.toFixed(2)}\n\n`;
   });
   
-  cartMessage += '─'.repeat(25) + '\n';
-  cartMessage += `💰 *Subtotal: $${subtotal.toFixed(2)}*\n`;
+  cartMessage += `💰 Subtotal: $${subtotal.toFixed(2)}\n`;
 
-  // Mostrar descuento si existe
   if (discount && discount.amount > 0) {
-    cartMessage += `🎉 *Promo "${discount.ruleName}": -$${discount.amount.toFixed(2)}*\n`;
+    cartMessage += `🎉 Promo: -$${discount.amount.toFixed(2)}\n`;
   }
   
   cartMessage += `*TOTAL: $${total.toFixed(2)}*`;
 
   const buttons = [];
+  
+  // Botones compactos de cantidad por item
   session.items.forEach((item, index) => {
-    buttons.push([Markup.button.callback(`- ${item.name} -`, `item_info_${item.id}`)]);
     buttons.push([
       Markup.button.callback('➖', `qty_decrease_${index}`),
-      Markup.button.callback(`${item.quantity}x`, 'no_action'),
+      Markup.button.callback(`${item.name} (${item.quantity}x)`, `item_info_${item.id}`),
       Markup.button.callback('➕', `qty_increase_${index}`),
-      Markup.button.callback('🗑️ Eliminar', `remove_${index}`)
+      Markup.button.callback('🗑️', `remove_${index}`)
     ]);
   });
   
-  buttons.push([Markup.button.callback('➕ Agregar más platillos', 'back_to_menu')]);
+  buttons.push([Markup.button.callback('📋 Agregar más', 'back_to_menu')]);
   buttons.push([
-    Markup.button.callback('✅ Continuar al Pago', 'continue_to_delivery'),
-    Markup.button.callback('❌ Vaciar Carrito', 'cancel_order')
+    Markup.button.callback('✅ Continuar', 'continue_to_delivery'),
+    Markup.button.callback('🗑️ Vaciar Todo', 'confirm_clear_cart')
   ]);
   
   await ctx.answerCbQuery();
@@ -184,7 +145,7 @@ async function handleViewCart(ctx, userId) {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard(buttons)
     });
-  } catch (e) {
+  } catch {
     await ctx.reply(cartMessage, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard(buttons)
@@ -192,8 +153,7 @@ async function handleViewCart(ctx, userId) {
   }
 }
 
-// --- LÓGICA DE CAMBIAR CANTIDAD ---
-// (Modificada para usar la nueva lógica de 'applyDynamicCombos')
+// --- CAMBIAR CANTIDAD ---
 async function handleQuantityChange(ctx, callbackData, userId, restaurantId) {
   const session = ctx.session?.cart;
   if (!session) {
@@ -218,26 +178,22 @@ async function handleQuantityChange(ctx, callbackData, userId, restaurantId) {
       item.quantity -= 1;
       await ctx.answerCbQuery(`✅ ${item.name}: ${item.quantity}x`);
     } else {
-      await ctx.answerCbQuery('⚠️ Usa el botón 🗑️ para eliminar');
+      await ctx.answerCbQuery('⚠️ Usa 🗑️ para eliminar');
       return;
     }
   }
   
-  // Recalcular descuentos dinámicos
   const { cart: updatedCart, notification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
-  ctx.session.cart = updatedCart; // Guardar el carrito actualizado
+  ctx.session.cart = updatedCart;
 
-  // Notificar al usuario SI HAY un cambio en el descuento
   if (notification) {
     await ctx.reply(`*${notification.title}*\n${notification.text}`, { parse_mode: 'Markdown' });
   }
 
-  // Actualizar la vista del carrito
   await handleViewCart(ctx, userId);
 }
 
-// --- LÓGICA DE QUITAR ITEM ---
-// (Modificada para usar la nueva lógica de 'applyDynamicCombos')
+// --- ELIMINAR ITEM ---
 async function handleRemoveItem(ctx, callbackData, userId, restaurantId) {
   const session = ctx.session?.cart;
   if (!session) {
@@ -255,31 +211,48 @@ async function handleRemoveItem(ctx, callbackData, userId, restaurantId) {
   
   const removedItemName = item.name;
   session.items.splice(index, 1);
-  await ctx.answerCbQuery(`🗑️ ${removedItemName} eliminado del carrito`);
+  await ctx.answerCbQuery(`🗑️ ${removedItemName} eliminado`);
 
-  // Recalcular descuentos dinámicos
   const { cart: updatedCart, notification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
   ctx.session.cart = updatedCart;
 
-  // Notificar al usuario SI HAY un cambio en el descuento
   if (notification) {
     await ctx.reply(`*${notification.title}*\n${notification.text}`, { parse_mode: 'Markdown' });
   }
   
-  if (session.items.length === 0) {
-    await ctx.editMessageText('🛒 Tu carrito está vacío\n\n¿Deseas ver el menú nuevamente?', {
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback('📋 Ver Menú', 'back_to_menu')],
-        [Markup.button.callback('❌ Cancelar', 'cancel_order')]
-      ])
-    });
-  } else {
-    await handleViewCart(ctx, userId);
-  }
+  await handleViewCart(ctx, userId);
 }
 
-// --- LÓGICA DE ENTREGA/RECOJO ---
-// 
+// --- CONFIRMAR VACIAR CARRITO ---
+async function handleConfirmClearCart(ctx) {
+    await ctx.answerCbQuery();
+    await ctx.editMessageText('🗑️ *¿Vaciar todo el carrito?*', {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+            [Markup.button.callback('✅ Sí, Vaciar', 'clear_cart')],
+            [Markup.button.callback('❌ No, Volver', 'view_cart')]
+        ])
+    });
+}
+
+// --- VACIAR CARRITO ---
+async function handleClearCart(ctx, userId) {
+    const session = ctx.session?.cart;
+    if (session) {
+        session.items = [];
+        
+        const { cart: updatedCart } = await DiscountRuleService.applyDynamicCombos(session, session.restaurantId);
+        ctx.session.cart = updatedCart;
+
+        await ctx.answerCbQuery('🛒 Carrito vaciado');
+        
+        await handleViewCart(ctx, userId);
+    } else {
+        await ctx.answerCbQuery('⚠️ Sesión expirada', { show_alert: true });
+    }
+}
+
+// --- CONTINUAR A ENTREGA ---
 async function handleContinueToDelivery(ctx, userId, restaurantId) {
   const session = ctx.session?.cart;
   if (!session) {
@@ -301,18 +274,16 @@ async function handleContinueToDelivery(ctx, userId, restaurantId) {
   }
 
   if (buttons.length === 0) {
-    await ctx.answerCbQuery('⚠️ No hay métodos de entrega disponibles', { show_alert: true });
+    await ctx.answerCbQuery('⚠️ Sin métodos de entrega', { show_alert: true });
     return;
   }
 
-  buttons.push([Markup.button.callback('« Volver al carrito', 'view_cart')]);
+  buttons.push([Markup.button.callback('« Volver', 'view_cart')]);
   session.step = SESSION_STATES.CHOOSING_DELIVERY;
 
   await ctx.answerCbQuery();
   await ctx.editMessageText(
-    '🚀 *¿Cómo deseas recibir tu pedido?*\n\n' +
-    `🏠 *A Domicilio:* Entrega en tu ubicación\n` +
-    `🏪 *Recoger en Tienda:* Sin costo de envío`,
+    '🚀 *¿Cómo recibes tu pedido?*',
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard(buttons)
@@ -320,8 +291,7 @@ async function handleContinueToDelivery(ctx, userId, restaurantId) {
   );
 }
 
-// --- LÓGICA DE PEDIR UBICACIÓN ---
-// 
+// --- DOMICILIO ---
 async function handleDeliveryYes(ctx, userId) {
   const session = ctx.session?.cart;
   if (!session) {
@@ -333,19 +303,10 @@ async function handleDeliveryYes(ctx, userId) {
   session.step = SESSION_STATES.WAITING_LOCATION;
 
   await ctx.answerCbQuery();
-  await ctx.reply(
-    '📍 *Por favor, comparte tu ubicación*\n\n' +
-    '👉 Presiona el botón 📎 y selecciona "Ubicación"\n' +
-    'o usa el botón de abajo:',
-    {
-      parse_mode: 'Markdown',
-      ...Markup.keyboard([
-        [Markup.button.locationRequest('📍 Compartir mi ubicación')]
-      ]).resize()
-    }
-  );
-  await ctx.reply(
-    '💡 _También puedes presionar el ícono de clip (📎) en tu teclado y seleccionar "Ubicación"_',
+  
+  // 🔥 EDITAR el mensaje en lugar de crear uno nuevo
+  await ctx.editMessageText(
+    '📍 *Comparte tu ubicación*\n\nUsa el botón de abajo o el clip 📎',
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
@@ -354,10 +315,20 @@ async function handleDeliveryYes(ctx, userId) {
       ])
     }
   );
+  
+  // Enviar el teclado de ubicación por separado (este sí necesita ser nuevo mensaje)
+  await ctx.reply(
+    '👇 *Presiona el botón:*',
+    {
+      parse_mode: 'Markdown',
+      ...Markup.keyboard([
+        [Markup.button.locationRequest('📍 Compartir Ubicación')]
+      ]).oneTime().resize()
+    }
+  );
 }
 
-// --- LÓGICA DE RECOGER EN TIENDA ---
-// (Modificada para usar la nueva lógica de 'applyDynamicCombos')
+// --- RECOGER EN TIENDA ---
 async function handlePickup(ctx, userId, restaurantId) {
   const session = ctx.session?.cart;
   if (!session) {
@@ -366,34 +337,28 @@ async function handlePickup(ctx, userId, restaurantId) {
   }
 
   const restaurantData = await configBotService.getRestaurantData(restaurantId);
-  const features = restaurantData.features || {};
 
   session.deliveryType = 'pickup';
-  session.delivery = { fee: 0, distanceKm: 0 }; // Reiniciar costos de envío
+  session.delivery = { fee: 0, distanceKm: 0 };
 
-  // Recalcular total (por si había un costo de envío)
   const { cart: updatedCart } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
   ctx.session.cart = updatedCart;
   
-  await ctx.answerCbQuery('✅ Recogerás tu pedido en tienda');
-  await ctx.reply('🏪 Perfecto, recogerás tu pedido en tienda', {
-    reply_markup: { remove_keyboard: true }
+  await ctx.answerCbQuery('✅ Recoger en Tienda');
+
+  const address = restaurantData.info?.address || 'Dirección no disponible';
+  const message = `🏪 *Recogerás en Tienda*\n\n📍 ${address}\n\n⏱️ Listo en 20-30 min`;
+
+  await ctx.editMessageText(message, { 
+    parse_mode: 'Markdown',
+    reply_markup: { inline_keyboard: [] }
   });
   
-  const address = restaurantData.info?.address || 'Dirección no disponible';
-  await ctx.reply(
-    `📍 *Dirección del restaurante:*\n${address}\n\n` +
-    `⏱️ Tu pedido estará listo en aproximadamente 20-30 minutos`,
-    { parse_mode: 'Markdown' }
-  );
-  // --- 🔥 MEJORA DE TELÉFONO INTELIGENTE ---
-  // Ya no preguntamos directamente, llamamos a la función inteligente
   const userInfo = await telegramUserService.getUserInfo(userId);
   await askForPhone(ctx, session, userInfo, restaurantId);
 }
 
-// --- LÓGICA DE SELECCIÓN DE PAGO ---
-// 
+// --- SELECCIÓN DE PAGO ---
 async function handlePaymentSelection(ctx, callbackData, userId, restaurantId) {
   const session = ctx.session?.cart;
   if (!session) {
@@ -407,100 +372,96 @@ async function handlePaymentSelection(ctx, callbackData, userId, restaurantId) {
   const selectedPayment = paymentMethods.find(pm => pm.id === paymentId);
   
   if (!selectedPayment) {
-    await ctx.answerCbQuery('❌ Método de pago no válido');
+    await ctx.answerCbQuery('❌ Método no válido');
     return;
   }
 
   session.paymentMethod = selectedPayment;
   session.step = SESSION_STATES.FINAL_CONFIRMATION;
 
-  await ctx.answerCbQuery(`✅ Pagarás con ${selectedPayment.name}`);
-  
-  // Pasamos ctx y restaurantId (que contiene los datos)
-  await showFinalConfirmation(ctx, restaurantData);
+  await ctx.answerCbQuery(`✅ ${selectedPayment.name}`);
+  await showFinalConfirmation(ctx, restaurantData, true);
 }
 
-// --- LÓGICA DE MOSTRAR RESUMEN FINAL ---
-// (Modificada para usar los totales de la sesión)
-async function showFinalConfirmation(ctx, restaurantData) {
+// --- RESUMEN FINAL ---
+async function showFinalConfirmation(ctx, restaurantData, isEdit = false) {
   const session = ctx.session?.cart;
   if (!session) {
     await ctx.reply('⚠️ Sesión expirada. Inicia un nuevo pedido con /pedido');
     return;
   }
 
-  // Usar los totales de la sesión
   const subtotal = session.subtotal || 0;
   const deliveryFee = session.delivery?.fee || 0;
   const discount = session.discount;
-  const total = session.total || (subtotal + deliveryFee); // Total ya incluye descuento
+  const total = session.total || (subtotal + deliveryFee);
 
-  let confirmMessage = '📋 *Resumen de tu Pedido:*\n\n';
+  // 🔥 RESUMEN COMPACTO
+  let confirmMessage = '📋 *Resumen Final*\n\n';
+  
   confirmMessage += '🛒 *Items:*\n';
-  session.items.forEach((item, i) => {
-    confirmMessage += `${i + 1}. ${item.name} (${item.quantity}x) - $${((item.price || 0) * item.quantity).toFixed(2)}\n`;
+  session.items.forEach(item => {
+    confirmMessage += `• ${item.name} (${item.quantity}x) - $${((item.price || 0) * item.quantity).toFixed(2)}\n`;
   });
   
   confirmMessage += `\n💰 Subtotal: $${subtotal.toFixed(2)}\n`;
   
   if (session.deliveryType === 'delivery') {
     confirmMessage += `🚚 Envío: $${deliveryFee.toFixed(2)}\n`;
-    if (deliveryFee === 0 && session.delivery?.distanceKm > 0) {
-      confirmMessage += `   ✨ _¡Envío gratis!_\n`;
-    }
-  } else {
-    confirmMessage += `🏪 Recoger en tienda: $0.00\n`;
   }
   
-  // Mostrar descuento si existe
   if (discount && discount.amount > 0) {
-    confirmMessage += `🎉 *Promo "${discount.ruleName}": -$${discount.amount.toFixed(2)}*\n`;
+    confirmMessage += `🎉 Promo: -$${discount.amount.toFixed(2)}\n`;
   }
 
   confirmMessage += `\n*TOTAL: $${total.toFixed(2)}*\n\n`;
   
-  confirmMessage += `📍 *Entrega:* ${session.deliveryType === 'delivery' ? 'A domicilio' : 'Recoger en tienda'}\n`;
-  if (session.customerAddress) {
-    confirmMessage += `📮 Dirección: ${session.customerAddress}\n`;
-  }
+  confirmMessage += `📍 ${session.deliveryType === 'delivery' ? '🏠 Domicilio' : '🏪 Recoger'}\n`;
   if (session.customerPhone) {
-    confirmMessage += `📞 Teléfono: ${session.customerPhone}\n`;
+    confirmMessage += `📞 ${session.customerPhone}\n`;
   }
-  confirmMessage += `💳 *Pago:* ${session.paymentMethod?.name || 'No seleccionado'}\n`;
-  confirmMessage += `👤 *Nombre:* ${session.customerName || 'No proporcionado'}\n`;
-  confirmMessage += `\n⏱️ *Tiempo estimado:* 25-35 minutos`;
+  confirmMessage += `💳 ${session.paymentMethod?.name || 'No seleccionado'}\n`;
+  confirmMessage += `⏱️ 25-35 min`;
 
-  await ctx.reply(confirmMessage, {
+  const options = {
     parse_mode: 'Markdown',
     ...Markup.inlineKeyboard([
-      [Markup.button.callback('✅ Confirmar Pedido', 'confirm_final')],
-      [Markup.button.callback('✏️ Editar', 'view_cart')], // Botón para volver al carrito
+      [Markup.button.callback('✅ Confirmar', 'confirm_final')],
+      [Markup.button.callback('✏️ Editar', 'view_cart')],
       [Markup.button.callback('❌ Cancelar', 'cancel_order')]
     ])
-  });
+  };
+
+  if (isEdit) {
+    await ctx.editMessageText(confirmMessage, options);
+  } else {
+    await ctx.reply(confirmMessage, options);
+  }
 }
 
-// --- LÓGICA DE CONFIRMACIÓN FINAL (CREAR ORDEN) ---
-// (Modificada para usar los totales de la sesión)
+// --- CONFIRMACIÓN FINAL ---
 async function handleFinalConfirmation(ctx, userId, restaurantId) {
   const session = ctx.session?.cart;
   if (!session) {
     await ctx.answerCbQuery('⚠️ Sesión expirada');
     return;
   }
-  
-  // Evitar doble confirmación
-  if (session.step === 'PROCESSING') {
-     await ctx.answerCbQuery('⚠️ Tu pedido ya está siendo procesado.');
-     return;
+
+  const availability = await availabilityService.checkAvailability(restaurantId);
+  if (availability.status !== 'open') {
+    await ctx.editMessageText('😔 Ya no aceptamos pedidos. Tu pedido no se realizó.');
+    return;
   }
   
-  session.step = 'PROCESSING'; // Marcar como procesando
-  
-  await ctx.answerCbQuery('⏳ Procesando pedido...');
+  if (session.step === 'PROCESSING') {
+    await ctx.answerCbQuery('Procesando...');
+    return;
+  }
+
+  session.step = 'PROCESSING';
+  await ctx.answerCbQuery('⏳ Procesando...');
   
   try {
-    // Usar los totales finales de la sesión
     const subtotal = session.subtotal || 0;
     const deliveryFee = session.delivery?.fee || 0;
     const total = session.total || (subtotal + deliveryFee);
@@ -516,7 +477,7 @@ async function handleFinalConfirmation(ctx, userId, restaurantId) {
         } 
       },
       customer: { 
-        name: session.customerName, 
+        name: session.customerName || null, 
         telegramId: userId, 
         phone: session.customerPhone 
       },
@@ -534,80 +495,70 @@ async function handleFinalConfirmation(ctx, userId, restaurantId) {
     
     const order = await orderService.createOrder(restaurantId, orderData);
 
-    // Limpiar sesión
     delete ctx.session.cart;
     
-    // ✅ CORRECCIÓN: Actualizar comandos para que aparezca /mipedido
-    const telegramUserService = require('../services/telegramUserService');
     await telegramUserService.updateUserCommands(ctx, restaurantId);
 
-    // Editar el mensaje de resumen para que no se pueda volver a presionar
+    // 🔥--- INICIO DE LA MODIFICACIÓN ---🔥
+    // ✅ CORRECCIÓN: Usar las variables 'total' y 'orderId' ya existentes para evitar redeclaración.
+    const orderId = order.orderNumber || order.id.substring(0, 8).toUpperCase();
+
+    // Mensaje simple sin pregunta de recibo
     await ctx.editMessageText(
-      `✅ *¡Pedido Confirmado!*\n\n` +
-      `📝 Número de pedido: *#${order.orderNumber || order.id.substring(0, 8).toUpperCase()}*\n` +
+      `✅ *¡Pedido Enviado!*\n\n` +
+      `📝 Pedido #${orderId}\n` +
       `💰 Total: *$${total.toFixed(2)}*\n` +
-      `⏱️ Tiempo estimado: 25-35 min\n\n` +
-      `📍 ${session.deliveryType === 'delivery' ? '🚚 Será entregado a domicilio' : '🏪 Puedes recogerlo en tienda'}\n\n` +
-      `🔔 Te notificaremos cuando tu pedido esté listo`,
+      `⏳ Esperando confirmación del restaurante...\n\n` +
+      `Te notificaremos cuando tu pedido sea confirmado.`,
       {
         parse_mode: 'Markdown',
-        reply_markup: { inline_keyboard: [] } // ✅ CORRECCIÓN: Borra los botones del mensaje
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🔎 Ver Estado', `s_o_s_${restaurantId}_${order.id}`)],
+          [Markup.button.callback('🏠 Inicio', 'back_to_start')]
+        ])
       }
     );
-    
-    // Preguntar por notificaciones
+
+    // Preguntar por notificaciones en un mensaje SEPARADO
     await ctx.reply(
-        '¿Deseas recibir una notificación por cada cambio de estado de tu pedido?',
-        Markup.inlineKeyboard([
-            [Markup.button.callback('👍 Sí, notificarme', `notify_yes_${restaurantId}_${order.id}`)],
-            [Markup.button.callback('👎 No, yo consultaré', `notify_no_${restaurantId}_${order.id}`)]
-        ])
+      '🔔 ¿Quieres recibir notificaciones cuando tu pedido cambie de estado?',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('👍 Sí, notificarme', `not_y_${restaurantId}_${order.id}`)],
+        [Markup.button.callback('👎 No, gracias', `not_n_${restaurantId}_${order.id}`)]
+      ])
     );
     
   } catch (error) {
     console.error('❌ Error creando pedido:', error);
     
-    // Restaurar estado para reintentar
     session.step = SESSION_STATES.FINAL_CONFIRMATION;
     
     await ctx.reply(
-      '❌ Hubo un error al procesar tu pedido. Por favor intenta nuevamente o contacta al restaurante.',
+      '❌ Error al procesar. ¿Reintentar?',
       Markup.inlineKeyboard([
-        [Markup.button.callback('🔄 Reintentar', 'confirm_final')],
-        [Markup.button.callback('❌ Cancelar', 'cancel_order')]
+        [Markup.button.callback('🔄 Sí', 'confirm_final')],
+        [Markup.button.callback('❌ No', 'cancel_order')]
       ])
     );
   }
 }
 
-// --- LÓGICA DE CANCELAR ORDEN ---
-// 
+// --- CANCELAR PEDIDO ---
 async function handleCancelOrder(ctx, userId) {
-  delete ctx.session.cart;
-  await ctx.answerCbQuery('❌ Pedido cancelado');
-  
-  try {
-    await ctx.editMessageText(
-      '❌ Pedido cancelado\n\n¿Deseas iniciar un nuevo pedido?',
-      {
+    await ctx.answerCbQuery();
+    await ctx.editMessageText('❌ *¿Cancelar el pedido?*', {
+        parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [Markup.button.callback('🛒 Nuevo Pedido', 'init_order')],
-          [Markup.button.callback('📋 Ver Menú', 'show_menu')]
+            [Markup.button.callback('✅ Sí', 'confirm_cancel_order_action')],
+            [Markup.button.callback('⬅️ No', 'view_cart')]
         ])
-      }
-    );
-  } catch (editError) {
-    await ctx.reply(
-      '❌ Pedido cancelado\n\n¿Deseas iniciar un nuevo pedido?',
-      {
-        // ✅ CORRECCIÓN: Se elimina el 'remove_keyboard' que causaba conflicto
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('🛒 Nuevo Pedido', 'init_order')],
-          [Markup.button.callback('📋 Ver Menú', 'show_menu')]
-        ])
-      }
-    );
-  }
+    });
+}
+
+async function handleConfirmCancelOrderAction(ctx, userId) {
+    delete ctx.session.cart;
+    await ctx.answerCbQuery('❌ Cancelado');
+    await ctx.editMessageText('❌ Tu pedido ha sido cancelado.');
 }
 
 // Exportar todas las funciones
@@ -624,7 +575,7 @@ module.exports = {
     showFinalConfirmation,
     handleFinalConfirmation,
     handleCancelOrder,
-    showFinalConfirmation,
-    handleFinalConfirmation,
-    handleCancelOrder
+    handleConfirmCancelOrderAction,
+    handleConfirmClearCart,
+    handleClearCart
 };

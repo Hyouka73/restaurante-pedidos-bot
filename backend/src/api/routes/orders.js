@@ -23,7 +23,7 @@ router.put('/:restaurantId/:orderId/status', verifyTokenAndOwner, async (req, re
     const { restaurantId, orderId } = req.params;
     const { newStatus, notes } = req.body;
 
-    await orderService.updateOrderStatus(restaurantId, orderId, newStatus, notes);
+    await orderService.updateOrderStatus(restaurantId, orderId, newStatus, { notes });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

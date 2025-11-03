@@ -4,7 +4,7 @@ const menuService = require('./menuService');
 
 // Define el orden lógico de los filtros para hacer preguntas
 const FILTER_ORDER = ['categoria_general', 'tipo_plato', 'proteina', 'perfil_sabor'];
-const RECOMMENDATION_THRESHOLD = 3;
+// const RECOMMENDATION_THRESHOLD = 3; // <-- Eliminamos esta regla "tonta"
 
 class RecommendationService {
 
@@ -30,52 +30,54 @@ class RecommendationService {
       // 3. Determinar el siguiente filtro lógico a preguntar
       const nextFilterKey = this._findNextFilter(parsedFilters);
 
-      // 4. Lógica de Decisión
-      if (filteredItems.length <= RECOMMENDATION_THRESHOLD || !nextFilterKey) {
-        // DECISIÓN A: Mostrar recomendaciones finales
-        return {
-          tipo_respuesta: 'recomendacion_final',
-          items: filteredItems.map(item => ({ // Limpiar datos para el bot
-            tipo_item: item.type === 'combo' ? 'combo_manual' : 'producto',
-            id: item.id,
-            nombre: item.name,
-            descripcion: item.description,
-            precio: item.price,
-            foto_url: item.imageUrl || null
-          }))
-        };
-      } else {
-        // DECISIÓN B: Hacer la siguiente pregunta
-        const options = this._getAvailableOptions(filteredItems, nextFilterKey);
-        
-        // Si no se encuentran opciones significativas para la siguiente pregunta, devolver los resultados actuales
-        if (options.length <= 1) {
-             return {
-                tipo_respuesta: 'recomendacion_final',
-                items: filteredItems.map(item => ({
-                    tipo_item: item.type === 'combo' ? 'combo_manual' : 'producto',
-                    id: item.id,
-                    nombre: item.name,
-                    descripcion: item.description,
-                    precio: item.price,
-                    foto_url: item.imageUrl || null
-                }))
-            };
-        }
-
-        return {
-          tipo_respuesta: 'pregunta',
-          texto: this._getQuestionText(nextFilterKey),
-          opciones: options.map(option => ({
-            texto_boton: this._formatButtonText(option),
-            filtro_a_agregar: `${nextFilterKey}:${option}`
-          }))
-        };
+      // --- 🔥 LÓGICA DE DECISIÓN MEJORADA ---
+      
+      // 1. ¿No hay más preguntas que hacer?
+      if (!nextFilterKey) {
+        return this._formatFinalResponse(filteredItems); // Muestra lo que haya
       }
+      
+      // 2. ¿Cuáles son las opciones para la siguiente pregunta?
+      const options = this._getAvailableOptions(filteredItems, nextFilterKey);
+
+      // 3. ¿Hay solo una opción útil (o ninguna)?
+      //    (Ej: Si después de filtrar solo queda "Pollo", no tiene sentido preguntar "¿Qué proteína?")
+      //    Si no hay opciones, o solo hay una, es mejor mostrar los resultados directamente.
+      if (options.length <= 1) {
+        // Si no hay más preguntas Y los resultados son pocos, no tiene sentido seguir.
+        return this._formatFinalResponse(filteredItems);
+      }
+      
+      // 4. ¡SÍ hay pregunta Y hay varias opciones!
+      //    (Ej: Opciones son 'Res' y 'Pollo'). AHORA SÍ PREGUNTA.
+      return {
+        tipo_respuesta: 'pregunta',
+        texto: this._getQuestionText(nextFilterKey, filteredItems.length),
+        opciones: options.map(option => ({
+          texto_boton: this._formatButtonText(option),
+          filtro_a_agregar: `${nextFilterKey}:${option}`
+        }))
+      };
+      
     } catch (error) {
       console.error('[RecommendationService] Error al obtener recomendación:', error);
       throw error;
     }
+  }
+
+  // 🔥 NUEVA FUNCIÓN DE AYUDA (para no repetir código)
+  _formatFinalResponse(items) {
+    return {
+      tipo_respuesta: 'recomendacion_final',
+      items: items.map(item => ({
+        tipo_item: item.type === 'combo' ? 'combo_manual' : 'producto',
+        id: item.id,
+        nombre: item.name,
+        descripcion: item.description,
+        precio: item.price,
+        foto_url: item.imageUrl || null
+      }))
+    };
   }
 
   _parseFilters(filters) {
@@ -133,12 +135,12 @@ class RecommendationService {
     return Array.from(options);
   }
 
-  _getQuestionText(filterKey) {
+  _getQuestionText(filterKey, count) {
     const questions = {
-      categoria_general: '¡Hola! 👋 ¿Qué te apetece hoy?',
-      tipo_plato: '¡Entendido! ¿Buscas una entrada, un plato fuerte o algo para compartir?',
-      proteina: '¡Perfecto! ¿Qué proteína te apetece hoy?',
-      perfil_sabor: '¡Ya casi! ¿Prefieres algo ligero o más bien contundente?'
+      categoria_general: `¡Hola! 👋 Tenemos ${count} opciones. ¿Qué te apetece hoy?`,
+      tipo_plato: `¡Entendido! De las ${count} opciones que quedan, ¿buscas una entrada, un plato fuerte o algo más?`,
+      proteina: `¡Perfecto! Tenemos ${count} platillos con estas proteínas. ¿Cuál prefieres?`,
+      perfil_sabor: `¡Ya casi! De las ${count} opciones, ¿prefieres algo ligero o más bien contundente?`
     };
     return questions[filterKey] || '¿Qué más te gustaría?';
   }

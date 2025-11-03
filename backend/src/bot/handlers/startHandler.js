@@ -6,6 +6,9 @@ const { Markup } = require('telegraf');
 
 module.exports = async (ctx) => {
   console.log(`[StartHandler] Recibido comando /start del usuario: ${ctx.from.id} a las ${new Date().toLocaleTimeString()}`);
+  // 🔥 AÑADIDO: Mostrar "escribiendo..." para feedback inmediato
+  await ctx.replyWithChatAction('typing');
+
   try {
     const firstName = ctx.from.first_name;
     let restaurantId = null;
@@ -68,6 +71,9 @@ module.exports = async (ctx) => {
     // --- ÉXITO: SI LLEGAMOS AQUÍ, SÍ TENEMOS UN restaurantId ---
     console.log(`[StartHandler] Procediendo con restaurantId: ${restaurantId}`);
 
+    // 🔥 NUEVO: Guardar en ctx.state para el resto del ciclo de vida de la solicitud
+    ctx.state.restaurantId = restaurantId;
+
     // Guardar info del usuario (actualiza la 'lastInteraction')
     await telegramUserService.saveUserInfo(ctx.from, restaurantId);
 
@@ -128,29 +134,21 @@ module.exports = async (ctx) => {
     const welcomeMessage = (messages.welcome || '¡Hola {nombre}! Bienvenido a {restaurante} 🍽️')
       .replace('{nombre}', firstName)
       .replace('{restaurante}', restaurantName);
-
-      console.log(`[StartHandler] Enviando respuesta de bienvenida a ${ctx.from.id}...`);
-    await ctx.reply(`${welcomeMessage}\n\n✨ Estamos *abiertos* y listos para atenderte`, {
-      parse_mode: 'Markdown'
-    });
-
-    // Reemplazamos los 4 botones por la pregunta clave
+    
+    console.log(`[StartHandler] Enviando respuesta de bienvenida a ${ctx.from.id}...`);
+    
+    // Combinamos los dos 'reply' en uno solo
     await ctx.reply(
-      '👇 *¿Qué te gustaría hacer?*',
+      `${welcomeMessage}\n\n` +
+      `✨ Estamos *abiertos* y listos para atenderte.\n\n` +
+      `👇 *¿Qué te gustaría hacer?*`,
       {
         parse_mode: 'Markdown',
+        reply_markup: { remove_keyboard: true }, // Aseguramos limpiar teclado
         ...Markup.inlineKeyboard([
-          [
-            // "Ya sabes lo que vas a pedir"
-            Markup.button.callback('📋 Ver Menú Completo', 'show_menu') 
-          ],
-          [
-            // "Deseas descubrirlo?"
-            Markup.button.callback('💡 ¡Ayúdame a descubrir!', 'start_recommendation')
-          ],
-          [
-            Markup.button.callback('📞 Info del Restaurante', 'show_info')
-          ]
+          [Markup.button.callback('📋 Ver Menú Completo', 'show_menu')],
+          [Markup.button.callback('💡 ¡Ayúdame a descubrir!', 'start_recommendation')],
+          [Markup.button.callback('📞 Info del Restaurante', 'show_info')]
         ])
       }
     );

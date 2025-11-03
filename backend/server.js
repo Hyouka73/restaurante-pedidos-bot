@@ -7,6 +7,7 @@ const cors = require('cors');
 const { Telegraf } = require('telegraf'); 
 const { session } = require('telegraf');
 const { Redis } = require('@telegraf/session/redis');
+const IORedis = require('ioredis');
 
 // ===== CONFIGURACIÓN EXPRESS =====
 const app = express(); 
@@ -38,17 +39,42 @@ if (!redisUrl) {
 }
 
 console.log("📦 [server.js] Conectando a Redis...");
-const store = Redis({ 
-  url: redisUrl,
-  // Opciones de configuración adicionales para mayor robustez en Vercel
-  config: {
-    // Forzar TLS, requerido por Vercel KV
-    tls: {},
-    // Aumentar timeouts para entornos serverless
-    connectTimeout: 15000,
-    commandTimeout: 8000,
+
+// Create and configure an ioredis client instance
+const redisClient = new IORedis(redisUrl, {
+  tls: {}, // Requerido para Vercel KV
+  connectTimeout: 10000, // Timeout de conexión para fallar más rápido.
+  commandTimeout: 5000,
+  // 🔥 CORRECCIÓN CRÍTICA: Desactiva la cola offline. Si no hay conexión, los comandos fallan inmediatamente.
+  // Esto evita que la ejecución de la función serverless se quede colgada esperando a Redis.
+  enableOfflineQueue: false,
+  retryStrategy: (times) => {
+    const delay = Math.min(times * 100, 3000); // Reintenta más rápido al principio, con un máximo de 3s.
+    console.warn(`[Redis] Reintentando conexión (intento ${times})...`);
+    return delay;
   },
-  lazyConnect: false
+  lazyConnect: true // No conectar hasta que se use por primera vez.
+});
+
+// 🔥 MEJORA: Manejadores de eventos para mejor visibilidad del estado de la conexión.
+redisClient.on('error', (err) => {
+  // Este manejador ya existía, pero es vital. Evita que un error de conexión crashee el proceso.
+  console.error('❌ [Redis Session Client] Error:', err);
+});
+
+redisClient.on('connect', () => {
+  console.log('✅ [Redis] Conectado exitosamente.');
+});
+
+redisClient.on('close', () => {
+  // Este log es útil para saber cuándo se pierde la conexión y ioredis intentará reconectar.
+  console.warn('[Redis] La conexión se cerró. ioredis intentará reconectar.');
+});
+
+
+// Pass the pre-configured client to the session store
+const store = Redis({
+  client: redisClient,
 });
 
 // Middleware de sesión (CRÍTICO: ANTES de handlers)
@@ -66,9 +92,10 @@ bot.use(session({
 console.log("✅ [server.js] Sesión Redis configurada"); 
 
 // --- 🔥 INYECTAR BOT EN SERVICIOS ---
-// (Esto es crucial para que notificationService funcione)
-const notificationService = require('./src/bot/services/notificationService');
-notificationService.setBotInstance(bot);
+// (Esto es crucial para que telegramNotificationService funcione)
+// CORRECCIÓN: El archivo se llama telegramNotificationService.js
+const telegramNotificationService = require('./src/services/telegramNotificationService');
+telegramNotificationService.botInstance = bot;
 // --- FIN DE LA INYECCIÓN ---
 
 // ===== IMPORTAR HANDLERS =====
@@ -99,27 +126,20 @@ bot.on('text', async (ctx) => {
 // Ubicaciones
 bot.on('location', orderHandler); 
 
-// Contactos
-bot.on('contact', async (ctx) => { 
-  const contact = ctx.message.contact;
-  console.log('📞 [server.js] Contacto recibido:', contact.phone_number);
-  
-  if (!ctx.session || !ctx.session.cart) {
-    await ctx.reply('No hay un pedido activo. Usa /pedido para comenzar.');
-    return;
-  }
-  
-  ctx.session.cart.customerPhone = contact.phone_number;
-  ctx.session.cart.customerName = `${contact.first_name} ${contact.last_name || ''}`.trim();
-  
-  await ctx.reply('✅ Información de contacto guardada.');
-  await orderHandler(ctx);
-});
+// Contactos (ahora manejados por el orderHandler principal)
+bot.on('contact', orderHandler);
 
 // Error handler
 bot.catch((err, ctx) => { 
-  console.error('❌ [server.js] Error en bot:', err);
-  ctx.reply('Ocurrió un error. Por favor intenta de nuevo o usa /start').catch(console.error);
+  console.error(`❌ [server.js] Global bot error for user ${ctx.from?.id}:`, err);
+  // Avoid crashing on "Connection is closed" errors, as ioredis will handle reconnection.
+  if (err.message.includes('Connection is closed')) {
+    console.warn('Redis connection was closed. ioredis will attempt to reconnect.');
+  }
+  // Try to inform the user, but don't fail if the context is weird.
+  ctx.reply('😕 Ups, algo salió mal. Por favor, intenta de nuevo en un momento.').catch(e => {
+    console.error('❌ [server.js] Failed to send error message to user:', e);
+  });
 });
 
 console.log("✅ [server.js] Handlers registrados"); 
@@ -129,12 +149,23 @@ app.post('/api/webhook', async (req, res) => {
   console.log('📨 [webhook] Recibido:', JSON.stringify(req.body).substring(0, 100));
   
   try {
-    await bot.handleUpdate(req.body);
+    // 🔥 CORRECCIÓN CRÍTICA: Debes usar 'await' aquí.
+    // Esto fuerza a la función de Vercel a esperar a que
+    // todo el procesamiento (sesión de Redis, startHandler, reply) termine
+    // antes de enviar la respuesta y finalizar la ejecución.
+    await bot.handleUpdate(req.body); 
+    
+    // Responde 200 OK a Telegram SÓLO DESPUÉS de procesar.
     res.status(200).json({ ok: true });
+
   } catch (error) {
-    console.error('❌ [webhook] Error:', error);
-    // Siempre responder 200 para evitar reintentos de Telegram
-    res.status(200).json({ ok: false, error: error.message });
+    // Este catch ahora capturará errores de handleUpdate
+    console.error('❌ [webhook] Error en handleUpdate:', error);
+    
+    // Es importante responder 200 a Telegram incluso si hay un error,
+    // para evitar que reintente el mismo update.
+    // El error ya se logueó para debugging.
+    res.status(200).json({ ok: false, error: 'Error procesando update' }); 
   }
 });
 
@@ -166,12 +197,24 @@ app.use('/api/qr', qrRoutes);
 app.use('/api/events', eventsRoutes); 
 
 // ===== RUTAS AUXILIARES =====
-app.get('/health', (req, res) => { 
-  res.json({
-    status: 'ok',
-    timestamp: new Date(),
+app.get('/health', async (req, res) => { 
+  // 🔥 MEJORA: Health check real que verifica la conexión a Redis.
+  let redisStatus = 'disconnected';
+  try {
+    // El comando PING es ligero y perfecto para verificar la conexión.
+    const pingResponse = await redisClient.ping();
+    if (pingResponse === 'PONG') {
+      redisStatus = 'connected';
+    }
+  } catch (error) {
+    console.error('[Health Check] Redis PING falló:', error.message);
+    redisStatus = 'error';
+  }
+
+  res.status(redisStatus === 'connected' ? 200 : 503).json({
+    status: redisStatus === 'connected' ? 'ok' : 'service_unavailable',
     botConfigured: !!process.env.TELEGRAM_BOT_TOKEN,
-    redisConfigured: !!process.env.KV_URL
+    redisStatus: redisStatus
   });
 });
 

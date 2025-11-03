@@ -26,17 +26,24 @@ const SESSION_STATES = {
 
 const mainOrderHandler = async (ctx) => {
   try {
+    // 🔥 AÑADIDO: Mostrar "escribiendo..." para dar feedback al usuario
+    await ctx.replyWithChatAction('typing');
+
     console.log('🛒 [orderHandler] Iniciando...');
     
     const userId = ctx.from.id;
-    const restaurantId = await telegramUserService.getRestaurantIdByBotContext(ctx);
-    
+    // 🔥 MODIFICADO: Obtener y almacenar restaurantId en ctx.state
+    if (!ctx.state.restaurantId) {
+      console.log('🔍 [orderHandler] Buscando restaurantId...');
+      ctx.state.restaurantId = await telegramUserService.getRestaurantIdByBotContext(ctx);
+    }
+    const restaurantId = ctx.state.restaurantId; // Leer desde ctx.state
+
     if (!restaurantId) {
-      console.log('❌ [orderHandler] No se pudo identificar restaurante');
+      console.log('❌ [orderHandler] No se pudo identificar restaurante desde ctx.state');
       await ctx.reply('⚠️ No se pudo identificar el restaurante. Usa /start primero.');
       return;
     }
-
     console.log(`✅ [orderHandler] RestaurantId: ${restaurantId}`);
 
     // ✅ CRÍTICO: Inicializar sesión si no existe
@@ -54,9 +61,10 @@ const mainOrderHandler = async (ctx) => {
       return await handleLocationMessage(ctx, userId, restaurantId, restaurantData);
     }
 
-    // === MANEJO DE TEXTO ===
-    if (ctx.message && ctx.message.text && !ctx.message.text.startsWith('/')) {
-      console.log('📝 [orderHandler] Procesando texto:', ctx.message.text.substring(0, 50));
+    // === MANEJO DE TEXTO Y CONTACTO ===
+    // Si es un mensaje de texto (no comando) O un mensaje de contacto, lo procesamos.
+    if (ctx.message && ((ctx.message.text && !ctx.message.text.startsWith('/')) || ctx.message.contact)) {
+      console.log('📝 [orderHandler] Procesando mensaje de texto o contacto...');
       return await handleTextMessage(ctx, userId, restaurantId, features);
     }
 
@@ -130,7 +138,9 @@ async function handleLocationMessage(ctx, userId, restaurantId, restaurantData) 
   session.customerLocation = { latitude, longitude };
   
   console.log(`📍 [handleLocationMessage] Ubicación: ${latitude}, ${longitude}`);
-  await ctx.reply('📍 Ubicación recibida, calculando costo de envío...');
+  await ctx.reply('📍 Ubicación recibida, calculando costo de envío...', {
+    reply_markup: { remove_keyboard: true }
+  });
 
   try {
     const result = await deliveryService.calculateFee(restaurantId, session.customerLocation);
@@ -210,24 +220,49 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
     return; // No hacer nada si no hay pedido activo
   }
 
-  const text = ctx.message.text.trim();
-  console.log(`📝 [handleTextMessage] Estado: ${session.step}, Texto: "${text.substring(0, 50)}"`);
+  // 🔥 NUEVO: Verificar si es un mensaje de contacto
+  if (ctx.message.contact) {
+    console.log('📞 [handleTextMessage] Procesando mensaje de contacto...');
+    if (ctx.message.contact.user_id !== userId) {
+      // Opcional: Verificar que el contacto sea del usuario que envía el mensaje
+      console.log('📞 [handleTextMessage] Contacto no coincide con el usuario actual.');
+      await ctx.reply('Por favor, comparte tu propio número de teléfono.');
+      return;
+    }
+    const contactPhone = ctx.message.contact.phone_number;
+    if (contactPhone) {
+      await ctx.reply(`📞 ¡Número de contacto recibido!`, { reply_markup: { remove_keyboard: true } });
+      session.customerPhone = contactPhone;
+      await askForPhone(ctx, session, { id: userId }, restaurantId, false); // Iniciar confirmación
+    } else {
+      await ctx.reply('No se pudo extraer el número de teléfono del contacto. Por favor, ingrésalo manualmente.');
+      const userInfo = await telegramUserService.getUserInfo(userId);
+      await askForPhone(ctx, session, userInfo, restaurantId);
+    }
+    return;
+  }
+  // 🔥 FIN NUEVO
+
+  const text = ctx.message.text?.trim();
+  console.log(`📝 [handleTextMessage] Estado: ${session.step}, Texto: "${text?.substring(0, 50)}"`);
 
   switch (session.step) {
     case SESSION_STATES.WAITING_PHONE:
       const phoneRegex = /^[\d\s\-\+\(\)]{8,}$/;
-      if (!phoneRegex.test(text)) {
+      if (!text || !phoneRegex.test(text)) {
         await ctx.reply('📞 Por favor proporciona un número de teléfono válido.');
         return;
       }
       session.customerPhone = text;
       console.log('✅ [handleTextMessage] Teléfono guardado');
-      
-      session.step = SESSION_STATES.SELECTING_PAYMENT;
-      await askPaymentMethod(ctx, session, restaurantId);
+
+      // 🔥 --- INICIO DE LA SOLUCIÓN (QUITAR MENSAJE) --- 🔥
+      // Simplemente llama a la siguiente función.
+      // askForPhone enviará la pregunta de confirmación.
+      await askForPhone(ctx, session, { id: userId }, restaurantId, false);
       break;
     case SESSION_STATES.WAITING_ADDRESS:
-      if (text.length < 10) {
+      if (!text || text.length < 10) {
         await ctx.reply('📝 Por favor proporciona una dirección más completa (mínimo 10 caracteres).');
         return;
       }
@@ -247,7 +282,7 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
       break;
       
     case SESSION_STATES.WAITING_NAME:
-      if (text.length < 2) {
+      if (!text || text.length < 2) {
         await ctx.reply('👤 Por favor proporciona un nombre válido.');
         return;
       }
@@ -264,7 +299,8 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
 }
 
 // === MÉTODOS DE PAGO ===
-async function askPaymentMethod(ctx, session, restaurantId) {
+// 🔥 CAMBIO: Añadir "isEdit = false"
+async function askPaymentMethod(ctx, session, restaurantId, isEdit = false) {
   console.log('💳 [askPaymentMethod] Mostrando métodos de pago...');
   
   const restaurantData = await configBotService.getRestaurantData(restaurantId);
@@ -273,7 +309,12 @@ async function askPaymentMethod(ctx, session, restaurantId) {
   
   if (enabledMethods.length === 0) {
     console.log('⚠️ [askPaymentMethod] No hay métodos de pago configurados');
-    await ctx.reply('⚠️ No hay métodos de pago configurados. Por favor contacta al restaurante.');
+    const errorText = '⚠️ No hay métodos de pago configurados. Por favor contacta al restaurante.';
+    if (isEdit) {
+      await ctx.editMessageText(errorText, { reply_markup: { inline_keyboard: [] } });
+    } else {
+      await ctx.reply(errorText);
+    }
     return;
   }
 
@@ -283,18 +324,38 @@ async function askPaymentMethod(ctx, session, restaurantId) {
   
   console.log(`✅ [askPaymentMethod] Mostrando ${enabledMethods.length} métodos de pago`);
   
-  await ctx.reply(
-    '💳 *Selecciona tu método de pago:*',
-    {
+  // 🔥 CAMBIO: Añadir lógica de edición
+  const text = '💳 *Selecciona tu método de pago:*';
+  const options = {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard(buttons)
+  };
+
+  if (isEdit) {
+    // 🔥--- INICIO DE LA SOLUCIÓN ---🔥
+    try {
+      await ctx.editMessageText(text, options);
+    } catch (error) {
+      // Si el error es "message is not modified", es por un doble clic.
+      // Lo ignoramos para que no crashee.
+      if (error.description && error.description.includes('message is not modified')) {
+        console.warn('[askPaymentMethod] Ignorando error "message is not modified" (doble clic).');
+        // Importante: responde al callback para que el "loading" del usuario desaparezca.
+        await ctx.answerCbQuery().catch(console.error);
+      } else {
+        // Si fue otro error, sí lo lanzamos.
+        throw error;
+      }
     }
-  );
+  } else {
+    await ctx.reply(text, options);
+  }
 }
 
 // --- 🔥 NUEVA FUNCIÓN "INTELIGENTE" PARA PEDIR TELÉFONO ---
-async function askForPhone(ctx, session, userInfo, restaurantId) {
-  const features = (await configBotService.getRestaurantData(restaurantId)).features || {};
+async function askForPhone(ctx, session, userInfo, restaurantId, isEdit = false) {
+  const restaurantData = await configBotService.getRestaurantData(restaurantId);
+  const features = restaurantData.features || {};
 
   // Si la función de pedir teléfono está desactivada, saltar a pago
   if (!features.askForPhone) {
@@ -309,33 +370,46 @@ async function askForPhone(ctx, session, userInfo, restaurantId) {
 
   if (existingPhone) {
     console.log(`[askForPhone] Teléfono encontrado: ${existingPhone}`);
-    session.step = 'CONFIRMING_PHONE'; // Un nuevo estado temporal
-    await ctx.reply(
-      `📞 ¿Usamos tu número guardado?\n*${existingPhone}*`,
-      {
+    session.step = SESSION_STATES.CONFIRMING_PHONE;
+    session.customerPhone = existingPhone; // Asegurarnos que está en la sesión
+    
+    const text = `📞 ¿Confirmas que usemos este número?\n*${existingPhone}*`;
+    const options = {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           Markup.button.callback('👍 Sí, usar este', `confirm_phone_yes`),
           Markup.button.callback('✏️ No, usar otro', `confirm_phone_no`)
         ])
-      }
-    );
+    };
+
+    if (isEdit) {
+      await ctx.editMessageText(text, options);
+    } else {
+      await ctx.reply(text, options);
+    }
+
   } else {
     // No tenemos número, lo pedimos
     console.log('[askForPhone] No se encontró teléfono. Solicitando...');
     session.step = SESSION_STATES.WAITING_PHONE;
-    await ctx.reply(
-      '📞 Por favor, comparte tu número de teléfono para confirmación.\n\nPuedes escribirlo o usar el botón de abajo.',
-      {
+    const text = '📞 Por favor, comparte tu número de teléfono para confirmación.\n\nPuedes escribirlo o usar el botón de abajo.';
+    const options = {
         parse_mode: 'Markdown',
         ...Markup.keyboard([
-          // 🔥 Botón para compartir contacto (más fácil en móvil)
-          [Markup.button.contactRequest('Compartir mi número 📱')] 
-        ]).inputFieldPlaceholder('Escribe tu número aquí...') // 🔥 Placeholder
-          .oneTime(true)
-          .resize(true)
-      }
-    );
+          [Markup.button.contactRequest('Compartir mi número 📱')]
+        ]).oneTime().resize(),
+        input_field_placeholder: 'Escribe tu número aquí...',
+        reply_markup: { // Keep this for compatibility if needed, but the builder is preferred
+          keyboard: [[Markup.button.contactRequest('Compartir mi número 📱')]],
+          one_time_keyboard: true,
+          resize_keyboard: true,
+        }
+    };
+    if (isEdit) {
+      await ctx.editMessageText(text, options);
+    } else {
+      await ctx.reply(text, options);
+    }
   }
 }
 

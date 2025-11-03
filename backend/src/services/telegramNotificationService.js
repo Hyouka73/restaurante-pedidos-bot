@@ -24,7 +24,7 @@ class TelegramNotificationService {
         }
     }
 
-    const orderId = orderData.orderNumber || orderData.id.substring(0, 8).toUpperCase();
+    const orderIdShort = orderData.orderNumber || orderData.id.substring(0, 8).toUpperCase();
     let message = '';
 
     const formatItems = (items) => {
@@ -35,33 +35,33 @@ class TelegramNotificationService {
     // Genera mensajes basados en el estado
     switch (newStatus) {
       case 'confirmed':
-        message = `✅ ¡Tu pedido #${orderId} ha sido *confirmado* por ${restaurantName}!\n\nPronto comenzarán a prepararlo.`;
+        message = `✅ ¡Tu pedido #${orderIdShort} ha sido *confirmado* por ${restaurantName}!\n\nPronto comenzarán a prepararlo.`;
         break;
       
       case 'preparing':
-        message = `🧑‍🍳 ¡Tu pedido #${orderId} ya se está *preparando*!`;
+        message = `🧑‍🍳 ¡Tu pedido #${orderIdShort} ya se está *preparando*!`;
         break;
 
       case 'ready':
         if (orderData.deliveryType === 'pickup') {
-          message = `🎉 ¡Tu pedido #${orderId} está *listo para recoger*!\n\nPuedes pasar por él a ${restaurantName}.`;
+          message = `🎉 ¡Tu pedido #${orderIdShort} está *listo para recoger*!\n\nPuedes pasar por él a ${restaurantName}.`;
         } else {
-          message = `✅ ¡Tu pedido #${orderId} está *listo*!\n\nEstamos preparando tu envío. Te notificaremos cuando salga a reparto.`;
+          message = `✅ ¡Tu pedido #${orderIdShort} está *listo*!\n\nEstamos preparando tu envío. Te notificaremos cuando salga a reparto.`;
         }
         break;
 
       case 'delivering': // NUEVO ESTADO
         const itemsSummary = formatItems(orderData.items);
         const address = orderData.info?.location?.formatted_address || orderData.customer?.address || 'Dirección no especificada';
-        message = `🚚 ¡Tu pedido #${orderId} ha salido a reparto!\n\n*Resumen de tu pedido:*\n${itemsSummary}\n\n*Dirección de entrega:*\n${address}\n\nTotal: ${orderData.total.toFixed(2)}\n\nPronto llegará a tu ubicación.`;
+        message = `🚚 ¡Tu pedido #${orderIdShort} ha salido a reparto!\n\n*Resumen de tu pedido:*\n${itemsSummary}\n\n*Dirección de entrega:*\n${address}\n\nTotal: ${orderData.total.toFixed(2)}\n\nPronto llegará a tu ubicación.`;
         break;
       
       case 'delivered':
-        message = `🏠 ¡Tu pedido #${orderId} ha sido *entregado*!\n\nMuchas gracias por tu compra en *${restaurantName}*. ¡Disfrútalo! 😊`;
+        message = `🏠 ¡Tu pedido #${orderIdShort} ha sido *entregado*!\n\nMuchas gracias por tu compra en *${restaurantName}*. ¡Disfrútalo! 😊`;
         break;
 
       case 'cancelled':
-        message = `❌ Lo sentimos, tu pedido #${orderId} ha sido *cancelado*.`;
+        message = `❌ Lo sentimos, tu pedido #${orderIdShort} ha sido *cancelado*.`;
         break;
       
       default:

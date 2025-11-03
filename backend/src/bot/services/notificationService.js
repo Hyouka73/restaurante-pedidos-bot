@@ -52,15 +52,33 @@ class NotificationService {
       
       if (!notifications) return;
 
-      // Enviar notificación principal
-      await this.bot.telegram.sendMessage(
-        customerId,
-        notifications.message,
-        {
+      // 🔥 MEJORA: Editar mensaje existente si es posible
+      if (order.telegramMessageId) {
+        // Si tenemos un messageId, editamos el mensaje original
+        await this.bot.telegram.editMessageText(
+          customerId,
+          order.telegramMessageId,
+          null, // inline_message_id
+          notifications.message,
+          {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard(notifications.buttons)
+          }
+        ).catch(async (err) => {
+          // Si falla la edición (ej. mensaje muy antiguo), enviar uno nuevo como respaldo
+          console.warn(`Fallo al editar mensaje ${order.telegramMessageId}, enviando uno nuevo. Error: ${err.message}`);
+          await this.bot.telegram.sendMessage(customerId, notifications.message, {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard(notifications.buttons)
+          });
+        });
+      } else {
+        // Fallback: Si no hay messageId, enviar un mensaje nuevo
+        await this.bot.telegram.sendMessage(customerId, notifications.message, {
           parse_mode: 'Markdown',
           ...Markup.inlineKeyboard(notifications.buttons)
-        }
-      );
+        });
+      }
 
       console.log(`✅ Notificación enviada para orden ${orderId} (estado: ${newStatus})`);
 

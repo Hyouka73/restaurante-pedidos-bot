@@ -89,7 +89,7 @@ async function handleRecommendation(ctx) {
                 messageText += `\n${'─'.repeat(15)}\n`;
                 keyboardButtons.push([
                   Markup.button.callback('🛒 Ver mi carrito', 'view_cart'),
-                  Markup.button.callback('📋 Ver Menú Completo', 'show_menu')
+                  Markup.button.callback('📋 Volver al Menú', 'back_to_menu')
                 ]);
                 keyboardButtons.push([
                   Markup.button.callback('💡 Empezar de nuevo', 'start_recommendation')

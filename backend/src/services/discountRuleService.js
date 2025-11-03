@@ -123,7 +123,7 @@ class DiscountRuleService {
       // Caso 1: Se aplica un descuento
       
       // Solo notificar si el descuento es NUEVO o DIFERENTE al anterior
-      if (bestDiscount.toFixed(2) !== oldDiscountAmount.toFixed(2)) {
+      if (appliedRule && bestDiscount.toFixed(2) !== oldDiscountAmount.toFixed(2)) {
           notification = {
             titulo: '¡Combo Detectado!',
             texto: `¡Felicidades! Activaste la promo "${appliedRule.nombre_regla}" y ahorraste $${bestDiscount.toFixed(2)}.`
@@ -134,21 +134,21 @@ class DiscountRuleService {
         amount: bestDiscount,
         ruleName: appliedRule.nombre_regla
       };
-      cart.total = cart.subtotal - bestDiscount + (cart.deliveryFee || 0);
+      cart.total = cart.subtotal - bestDiscount + (cart.delivery?.fee || 0);
 
     } else if (!appliedRule && oldDiscountAmount > 0) {
       // Caso 2: NO hay regla aplicable, PERO HABÍA un descuento antes
       notification = {
         titulo: 'Promo Desactivada',
-        texto: `Se modificó un ítem de tu combo. El descuento de $${oldDiscountAmount.toFixed(2)} ("${oldDiscount.ruleName}") ha sido removido.`
+        texto: `Al modificar tu carrito, la promo "${oldDiscount.ruleName}" ya no aplica. El descuento de $${oldDiscountAmount.toFixed(2)} ha sido removido.`
       };
       delete cart.discount;
-      cart.total = cart.subtotal + (cart.deliveryFee || 0);
+      cart.total = cart.subtotal + (cart.delivery?.fee || 0);
     
     } else {
       // Caso 3: Sin descuento nuevo y sin descuento antiguo
       delete cart.discount;
-      cart.total = cart.subtotal + (cart.deliveryFee || 0);
+      cart.total = cart.subtotal + (cart.delivery?.fee || 0);
     }
 
     return { cart, notification };

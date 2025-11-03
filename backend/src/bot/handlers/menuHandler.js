@@ -1,127 +1,212 @@
-// backend/src/bot/handlers/menuHandler.js
+// backend/src/bot/handlers/menuHandler.js - MEJORADO CON EDICIÓN ÚNICA
 const menuService = require('../../services/menuService');
 const telegramUserService = require('../services/telegramUserService');
 const { Markup } = require('telegraf');
 
-const ITEMS_PER_PAGE = 4; // Podemos ajustar cuántos items mostrar por página
+const ITEMS_PER_PAGE = 5;
 
 /**
- * Muestra una vista paginada y editable del menú.
- * @param {object} ctx El contexto de Telegraf.
- * @param {number} page El número de página a mostrar (base 1).
- * @param {boolean} isEdit Si es true, edita el mensaje existente.
+ * 🔥 MENÚ SIMPLIFICADO - Solo botones, sin texto innecesario
  */
 async function showMenuView(ctx, page = 1, isEdit = false) {
   try {
-    const restaurantId = await telegramUserService.getRestaurantIdByBotContext(ctx);
+    if (isEdit) {
+      await ctx.answerCbQuery('📋 Cargando...');
+    } else {
+      await ctx.replyWithChatAction('typing');
+    }
+
+    if (!ctx.state.restaurantId) {
+      ctx.state.restaurantId = await telegramUserService.getRestaurantIdByBotContext(ctx);
+    }
+    const restaurantId = ctx.state.restaurantId;
+
     if (!restaurantId) {
       return ctx.reply('⚠️ No se pudo identificar el restaurante. Usa /start primero.');
     }
 
+    if (ctx.session) {
+      ctx.session.lastContext = 'menu';
+      ctx.session.lastMessageId = ctx.callbackQuery?.message?.message_id; // 🔥 Guardar ID del mensaje
+    }
+
     const menuItems = await menuService.getMenuForBot(restaurantId);
     if (!menuItems || menuItems.length === 0) {
-      const emptyMenuText = '😔 Lo sentimos, el menú no está disponible en este momento.';
-      return isEdit ? ctx.editMessageText(emptyMenuText) : ctx.reply(emptyMenuText);
+      const emptyMenuText = '😔 *Menú no disponible*\n\n¿Deseas intentar más tarde?';
+      const emptyButtons = Markup.inlineKeyboard([
+        [Markup.button.callback('🔄 Reintentar', 'show_menu')],
+        [Markup.button.callback('🏠 Volver', 'back_to_start')]
+      ]);
+      
+      return isEdit 
+        ? ctx.editMessageText(emptyMenuText, { parse_mode: 'Markdown', ...emptyButtons })
+        : ctx.reply(emptyMenuText, { parse_mode: 'Markdown', ...emptyButtons });
     }
 
     const totalPages = Math.ceil(menuItems.length / ITEMS_PER_PAGE);
-    page = Math.max(1, Math.min(page, totalPages)); // Asegurar que la página esté en el rango correcto
+    page = Math.max(1, Math.min(page, totalPages));
 
     const startIndex = (page - 1) * ITEMS_PER_PAGE;
     const pageItems = menuItems.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-    // --- Construir el texto del mensaje ---
-    let messageText = `📋 *Nuestro Menú* - Página ${page} de ${totalPages}\n`;
-    
-    // --- CONSTRUCCIÓN DE BOTONES MODIFICADA ---
-    const allButtons = []; // Aquí irán todos los botones
+    // 🔥 DISEÑO MINIMALISTA - Solo lo esencial
+    let messageText = `🍽️ *MENÚ*\n\n`;
 
-    pageItems.forEach(item => {
-        const itemType = item.isCombo ? '🎁' : '🍽️';
-        const price = item.price || 0;
-        messageText += `\n${'─'.repeat(15)}\n`; // Separador
-        messageText += `${itemType} *${item.name}* - 💰 $${price.toFixed(2)}\n`;
-        
-        if (item.description) {
-            const shortDesc = item.description.length > 50 ? item.description.substring(0, 47) + '...' : item.description;
-            messageText += `_${shortDesc}_\n`;
-        }
+    const allButtons = [];
 
-        // Añadimos los dos botones de acción para este item
-        const itemActionButtons = [
-            Markup.button.callback('ℹ️ Ver Info', `item_info_${item.id}`),
-            Markup.button.callback('➕ Añadir', `add_item_${item.id}`)
-        ];
-        
-        allButtons.push(itemActionButtons);
+    pageItems.forEach((item, index) => {
+      const itemType = item.isCombo ? '🎁' : '🍽️';
+      const price = item.price || 0;
+      const number = startIndex + index + 1;
+
+      // Solo nombre y precio, nada más
+      messageText += `${itemType} *${item.name}*\n`;
+      messageText += `💰 $${price.toFixed(2)}\n\n`;
+
+      // Botones compactos en una fila
+      if (item.isCombo) {
+        allButtons.push([
+          Markup.button.callback(`ℹ️ Info`, `item_info_${item.id}`),
+          Markup.button.callback('🚀 Armar Combo', `build_combo:${item.id}`)
+        ]);
+      } else {
+        allButtons.push([
+          Markup.button.callback(`ℹ️ Info`, `item_info_${item.id}`),
+          Markup.button.callback('➕ Añadir', `add_item_${item.id}`)
+        ]);
+      }
     });
-    
-    messageText += `\n${'─'.repeat(15)}\n`;
-    messageText += '👇 Agrega platillos a tu pedido o navega por el menú.';
 
-    // --- Construir el teclado de botones ---
+    messageText += `📄 Pág. ${page}/${totalPages}`;
+
+    // Navegación
     const navButtons = [];
-    if (page > 1) {
-        navButtons.push(Markup.button.callback('⬅️ Anterior', `menu_page_${page - 1}`));
-    }
-    navButtons.push(Markup.button.callback(`Pág. ${page}/${totalPages}`, 'no_action'));
-    if (page < totalPages) {
-        navButtons.push(Markup.button.callback('Siguiente ➡️', `menu_page_${page + 1}`));
+    
+    if (totalPages > 1) {
+      const pageNavRow = [];
+      if (page > 1) {
+        pageNavRow.push(Markup.button.callback('⬅️', `menu_page_${page - 1}`));
+      }
+      pageNavRow.push(Markup.button.callback(`${page}/${totalPages}`, 'no_action'));
+      if (page < totalPages) {
+        pageNavRow.push(Markup.button.callback('➡️', `menu_page_${page + 1}`));
+      }
+      navButtons.push(pageNavRow);
     }
 
-    const actionsRow = [
-        Markup.button.callback('🛒 Ver Carrito', 'view_cart'),
-        Markup.button.callback('« Volver', 'back_to_start')
-    ];
-
-    const keyboard = Markup.inlineKeyboard([
-        ...allButtons, // Usamos los nuevos botones
-        navButtons,
-        actionsRow
+    navButtons.push([
+      Markup.button.callback('🛒 Ver Carrito', 'view_cart'),
+      Markup.button.callback('🏠 Inicio', 'back_to_start')
     ]);
 
-    // --- 🔥 CORRECCIÓN "QUITAR TECLADO" ---
-    // Creamos un objeto de opciones que incluye la orden de quitar el teclado
+    const keyboard = Markup.inlineKeyboard([
+      ...allButtons,
+      ...navButtons
+    ]);
+
     const options = {
       parse_mode: 'Markdown',
-      ...keyboard,
-      reply_markup: { 
-        ...keyboard.reply_markup,
-        remove_keyboard: true // <-- Esta es la clave
-      }
+      ...keyboard
     };
     
     if (isEdit) {
-        if (ctx.callbackQuery.message.text === messageText) {
-            return ctx.answerCbQuery('Ya estás en esta página.');
-        }
-        // Pasamos las nuevas 'options'
+      if (ctx.callbackQuery?.message?.text === messageText) {
+        return ctx.answerCbQuery('✅ Ya estás aquí');
+      }
+      
+      try {
         await ctx.editMessageText(messageText, options);
         await ctx.answerCbQuery();
-    } else {
-        // Pasamos las nuevas 'options'
+      } catch (editError) {
+        console.log('Edit falló, enviando mensaje nuevo...');
         await ctx.reply(messageText, options);
+        await ctx.answerCbQuery();
+      }
+    } else {
+      const msg = await ctx.reply(messageText, options);
+      if (ctx.session) {
+        ctx.session.lastMessageId = msg.message_id; // 🔥 Guardar para futuras ediciones
+      }
     }
 
   } catch (error) {
     console.error('Error en showMenuView:', error);
-    const errorMessage = '❌ Hubo un error al mostrar el menú.';
+    const errorMessage = '❌ *Error al cargar menú*\n\n¿Reintentar?';
+    
     try {
-        if (isEdit) {
-            await ctx.answerCbQuery(errorMessage, { show_alert: true });
-        } else {
-            await ctx.reply(errorMessage);
-        }
+      const errorButtons = Markup.inlineKeyboard([
+        [Markup.button.callback('🔄 Sí', isEdit ? `menu_page_${page}` : 'show_menu')],
+        [Markup.button.callback('🏠 Volver', 'back_to_start')]
+      ]);
+      
+      if (isEdit) {
+        await ctx.answerCbQuery('❌ Error', { show_alert: true });
+        await ctx.editMessageText(errorMessage, { parse_mode: 'Markdown', ...errorButtons });
+      } else {
+        await ctx.reply(errorMessage, { parse_mode: 'Markdown', ...errorButtons });
+      }
     } catch (e) {
-        console.error('Error enviando mensaje de error de menú:', e);
+      console.error('Error enviando mensaje de error:', e);
     }
   }
 }
 
-// El manejador principal del comando /menu ahora solo llama a la nueva función
+/**
+ * 🔥 NUEVA FUNCIÓN: Mostrar info de item (editando el mismo mensaje)
+ */
+async function showItemInfo(ctx, itemId, restaurantId) {
+  try {
+    await ctx.answerCbQuery('📋 Cargando info...');
+    
+    const menuItems = await menuService.getMenuForBot(restaurantId);
+    const item = menuItems.find(i => i.id === itemId);
+
+    if (!item) {
+      await ctx.answerCbQuery('😔 Platillo no encontrado', { show_alert: true });
+      return;
+    }
+
+    // 🔥 DISEÑO LIMPIO DE INFO
+    let infoText = `${item.isCombo ? '🎁' : '🍽️'} *${item.name}*\n\n`;
+    
+    if (item.description) {
+      infoText += `${item.description}\n\n`;
+    }
+    
+    infoText += `💰 *Precio:* $${item.price}\n`;
+    
+    if (item.prepTime) {
+      infoText += `⏱️ *Tiempo:* ${item.prepTime} min\n`;
+    }
+    
+    if (item.ingredients) {
+      infoText += `\n🥘 *Ingredientes:*\n${item.ingredients}`;
+    }
+
+    const buttons = [
+      [Markup.button.callback('🛒 Añadir al Carrito', `add_item_${item.id}`)],
+      [Markup.button.callback('« Volver al Menú', 'back_to_menu')]
+    ];
+
+    // 🔥 EDITAR el mismo mensaje, no crear uno nuevo
+    await ctx.editMessageText(infoText, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard(buttons)
+    });
+
+  } catch (error) {
+    console.error('Error en showItemInfo:', error);
+    await ctx.answerCbQuery('❌ Error al cargar info', { show_alert: true });
+  }
+}
+
 const menuHandler = async (ctx) => {
+  await ctx.replyWithChatAction('typing');
   await showMenuView(ctx, 1, false);
 };
 
-// Exportar tanto el manejador como la función reutilizable
-module.exports = { menuHandler, showMenuView };
+module.exports = { 
+  menuHandler, 
+  showMenuView,
+  showItemInfo // 🔥 Exportar la nueva función
+};
