@@ -81,10 +81,10 @@ const DefaultLayout = ({ children, sidebarOpen, setSidebarOpen, handleLogout, ha
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-red-100 flex flex-col lg:flex-row">
       {/* Unified Header */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg shadow-md">
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg shadow-md lg:hidden">
         <div className="flex items-center justify-between p-3 sm:p-4">
           <div className="flex items-center gap-3">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 rounded-xl hover:bg-gray-100 transition-colors">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 rounded-xl hover:bg-gray-100 transition-colors lg:hidden">
               <Menu size={24} />
             </button>
             {isOrdersView ? (
