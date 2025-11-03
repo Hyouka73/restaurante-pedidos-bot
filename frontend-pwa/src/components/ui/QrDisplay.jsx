@@ -250,8 +250,8 @@ const QrDisplay = () => {
           <div className="relative bg-white p-8 rounded-3xl shadow-2xl border-4 border-white">
             <img 
               src={qrData.qrDataUrl} 
-              alt="Código QR del restaurante" 
-              className="w-72 h-72 rounded-2xl"
+              alt="Código QR del restaurante"
+              className="w-full h-auto max-w-[288px] aspect-square rounded-2xl"
             />
             
             {/* Overlay de descarga al hover */}
