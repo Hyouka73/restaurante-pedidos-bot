@@ -616,9 +616,9 @@ export const WizardSwitch = ({
   onChange,
   disabled = false,
   activeClass = "bg-gradient-to-r from-green-400 to-emerald-500",
-  inactiveClass = "bg-gray-300"
+  inactiveClass = "bg-gray-200"
 }) => (
-  <div className="relative flex-shrink-0">
+  <label className="relative inline-flex items-center cursor-pointer">
     <input
       type="checkbox"
       checked={checked}
@@ -628,15 +628,15 @@ export const WizardSwitch = ({
     />
     <div
       className={`
-        w-14 h-7 rounded-full transition-all duration-300 shadow-inner
+        w-11 h-6 rounded-full transition-all duration-300
+        peer-focus:ring-4 peer-focus:ring-emerald-300
+        after:content-[''] after:absolute after:top-0.5 after:left-[2px]
+        after:bg-white after:border-gray-300 after:border
+        after:rounded-full after:h-5 after:w-5 after:transition-all
         ${checked ? activeClass : inactiveClass}
+        ${checked ? 'after:translate-x-full' : ''}
+        ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
       `}
-    >
-      <motion.div
-        className="w-5 h-5 bg-white rounded-full shadow-md mt-1"
-        animate={{ x: checked ? 32 : 4 }}
-        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-      />
-    </div>
-  </div>
+    />
+  </label>
 );
