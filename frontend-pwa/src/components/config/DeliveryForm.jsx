@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { WizardInputField, WizardSelectField, WizardSaveButton } from '../ui/WizardComponents';
+import { WizardInputField, WizardSelectField, WizardSaveButton, WizardSwitch } from '../ui/WizardComponents';
 import { Truck, DollarSign, MapPin, Package } from 'lucide-react';
 import { useAlert } from '../ui/CustomAlert';
 import { api } from '../../services/api';
@@ -92,24 +92,11 @@ const DeliveryForm = ({ initialData }) => {
           </div>
           
           {/* Toggle Switch */}
-          <div className="relative flex-shrink-0">
-            <input
-              type="checkbox"
-              checked={features.deliveryEnabled}
-              onChange={(e) => handleFeatureChange('deliveryEnabled', e.target.checked)}
-              className="sr-only"
-            />
-            <div className={`
-              w-14 h-7 rounded-full transition-all duration-300 shadow-inner
-              ${features.deliveryEnabled ? 'bg-gradient-to-r from-green-400 to-emerald-500' : 'bg-gray-300'}
-            `}>
-              <motion.div
-                className="w-5 h-5 bg-white rounded-full shadow-md mt-1"
-                animate={{ x: features.deliveryEnabled ? 32 : 4 }}
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              />
-            </div>
-          </div>
+          <WizardSwitch
+            checked={features.deliveryEnabled}
+            onChange={(e) => handleFeatureChange('deliveryEnabled', e.target.checked)}
+            activeClass="bg-gradient-to-r from-green-400 to-emerald-500"
+          />
         </label>
       </motion.div>
 

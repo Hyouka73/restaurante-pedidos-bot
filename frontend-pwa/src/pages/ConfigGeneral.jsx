@@ -113,30 +113,30 @@ export default function ConfigGeneral() {
         return <PaymentMethodsForm initialData={config} />;
       case 'commands':
         return <CommandsForm initialData={config} />;
-      case 'bot':
-        return (
-          <WizardCard className="p-4">
-            <div className="mt-2 p-2">
-              <h4 className="font-semibold mb-2">Actualizar Token de Telegram</h4>
-              <p className="text-sm text-gray-600 mb-3">Por seguridad el token nunca se muestra. Puedes reemplazarlo aquí si necesitas actualizarlo.</p>
-              <div className="flex gap-2 items-center">
-                <input
-                  type="password"
-                  placeholder="Nuevo token de Telegram"
-                  className="input input-bordered w-full"
-                  value={botTokenInput}
-                  onChange={(e) => setBotTokenInput(e.target.value)}
-                />
-                <button type="button" className="btn btn-primary" onClick={handleUpdateBotToken} disabled={updatingToken}>
-                  {updatingToken ? <ButtonLoader size="sm" /> : 'Actualizar Token'}
-                </button>
-                <button type="button" className="btn btn-outline" onClick={handleValidateBotToken} disabled={validatingConnection}>
-                  {validatingConnection ? <ButtonLoader size="sm" /> : 'Probar Conexión'}
-                </button>
-              </div>
-            </div>
-          </WizardCard>
-        );
+      // case 'bot':
+      //   return (
+      //     <WizardCard className="p-4">
+      //       <div className="mt-2 p-2">
+      //         <h4 className="font-semibold mb-2">Actualizar Token de Telegram</h4>
+      //         <p className="text-sm text-gray-600 mb-3">Por seguridad el token nunca se muestra. Puedes reemplazarlo aquí si necesitas actualizarlo.</p>
+      //         <div className="flex gap-2 items-center">
+      //           <input
+      //             type="password"
+      //             placeholder="Nuevo token de Telegram"
+      //             className="input input-bordered w-full"
+      //             value={botTokenInput}
+      //             onChange={(e) => setBotTokenInput(e.target.value)}
+      //           />
+      //           <button type="button" className="btn btn-primary" onClick={handleUpdateBotToken} disabled={updatingToken}>
+      //             {updatingToken ? <ButtonLoader size="sm" /> : 'Actualizar Token'}
+      //           </button>
+      //           <button type="button" className="btn btn-outline" onClick={handleValidateBotToken} disabled={validatingConnection}>
+      //             {validatingConnection ? <ButtonLoader size="sm" /> : 'Probar Conexión'}
+      //           </button>
+      //         </div>
+      //       </div>
+      //     </WizardCard>
+      //   );
       default:
         return null;
     }

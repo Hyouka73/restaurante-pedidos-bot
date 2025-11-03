@@ -609,3 +609,34 @@ export const WizardLocationButton = ({ location, onClick, loading }) => (
     </div>
   </motion.button>
 );
+
+// --- 🔥 NUEVO: Componente WizardSwitch reutilizable ---
+export const WizardSwitch = ({
+  checked,
+  onChange,
+  disabled = false,
+  activeClass = "bg-gradient-to-r from-green-400 to-emerald-500",
+  inactiveClass = "bg-gray-300"
+}) => (
+  <div className="relative flex-shrink-0">
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      disabled={disabled}
+      className="sr-only peer"
+    />
+    <div
+      className={`
+        w-14 h-7 rounded-full transition-all duration-300 shadow-inner
+        ${checked ? activeClass : inactiveClass}
+      `}
+    >
+      <motion.div
+        className="w-5 h-5 bg-white rounded-full shadow-md mt-1"
+        animate={{ x: checked ? 32 : 4 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      />
+    </div>
+  </div>
+);

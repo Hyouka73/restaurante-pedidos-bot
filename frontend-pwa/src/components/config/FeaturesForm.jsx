@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { WizardSaveButton } from '../ui/WizardComponents';
+import { WizardSaveButton, WizardSwitch } from '../ui/WizardComponents';
 import { ShoppingBag, Truck, Package, MapPin, Image, MessageSquare, User, Phone } from 'lucide-react';
 import { useAlert } from '../ui/CustomAlert';
 import { api } from '../../services/api';
@@ -143,24 +143,13 @@ const FeaturesForm = ({ initialData }) => {
                     </div>
 
                     {/* Toggle Switch */}
-                    <div className="relative flex-shrink-0 ml-3">
-                      <input
-                        type="checkbox"
-                        checked={features[feature.key]}
-                        onChange={(e) => handleFeatureChange(feature.key, e.target.checked)}
-                        className="sr-only"
-                      />
-                      <div className={`
-                        w-14 h-7 rounded-full transition-all duration-300 shadow-inner
-                        ${features[feature.key] ? `bg-gradient-to-r ${category.color}` : 'bg-gray-300'}
-                      `}>
-                        <motion.div
-                          className="w-5 h-5 bg-white rounded-full shadow-md mt-1"
-                          animate={{ x: features[feature.key] ? 32 : 4 }}
-                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                        />
-                      </div>
-                    </div>
+                    <WizardSwitch
+                      checked={features[feature.key]}
+                      onChange={(e) => handleFeatureChange(feature.key, e.target.checked)}
+                      activeClass={`bg-gradient-to-r ${category.color}`}
+                      inactiveClass="bg-gray-300"
+                      className="ml-3"
+                    />
                   </label>
                 </motion.div>
               ))}

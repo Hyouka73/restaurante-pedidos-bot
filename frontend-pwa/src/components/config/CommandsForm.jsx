@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { WizardSaveButton } from '../ui/WizardComponents';
+import { WizardSaveButton, WizardSwitch } from '../ui/WizardComponents';
 import { MessageSquare, Terminal, CheckCircle, XCircle } from 'lucide-react';
 import { useAlert } from '../ui/CustomAlert';
 import { api } from '../../services/api';
@@ -109,24 +109,12 @@ const CommandsForm = ({ initialData }) => {
               </div>
 
               {/* Toggle Switch */}
-              <div className="relative flex-shrink-0 self-end sm:self-center">
-                <input
-                  type="checkbox"
-                  checked={cmdData.enabled}
-                  onChange={(e) => handleCommandChange(cmdId, 'enabled', e.target.checked)}
-                  className="sr-only"
-                />
-                <div className={`
-                  w-14 h-7 rounded-full transition-all duration-300 shadow-inner
-                  ${cmdData.enabled ? 'bg-gradient-to-r from-indigo-400 to-blue-500' : 'bg-gray-300'}
-                `}>
-                  <motion.div
-                    className="w-5 h-5 bg-white rounded-full shadow-md mt-1"
-                    animate={{ x: cmdData.enabled ? 32 : 4 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  />
-                </div>
-              </div>
+              <WizardSwitch
+                checked={cmdData.enabled}
+                onChange={(e) => handleCommandChange(cmdId, 'enabled', e.target.checked)}
+                activeClass="bg-gradient-to-r from-indigo-400 to-blue-500"
+                className="self-end sm:self-center"
+              />
             </label>
           </motion.div>
         ))}
