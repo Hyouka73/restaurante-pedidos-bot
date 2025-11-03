@@ -21,7 +21,7 @@ function SalesProjectionChart() {
         setChartData(null);
 
         // 1. PRIMERA LLAMADA: Verificar el estado del caché
-        const statusResponse = await api.get(`/api/dashboard/projection-status/${restaurant.id}`);
+        const statusResponse = await api.get(`/dashboard/projection-status/${restaurant.id}`);
         const status = statusResponse.status; // "fresh" o "stale"
 
         // 2. REQUISITO DE UX: Poner el mensaje de espera específico
@@ -32,7 +32,7 @@ function SalesProjectionChart() {
         }
 
         // 3. SEGUNDA LLAMADA: Obtener los datos (la API recalculará si es 'stale')
-        const dataResponse = await api.get(`/api/dashboard/projection-data/${restaurant.id}`);
+        const dataResponse = await api.get(`/dashboard/projection-data/${restaurant.id}`);
 
         // 4. Manejar la respuesta
         if (dataResponse.message) {
