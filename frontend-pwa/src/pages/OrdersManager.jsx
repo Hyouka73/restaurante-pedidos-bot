@@ -12,7 +12,7 @@ import {
 import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
 import { ButtonLoader } from '../components/ui/Loader'; // <-- SÍ se usa en el loader de página
 import OrderCard from '../components/orders/OrderCard'; // Componente extraído
-import { WizardErrorBox } from '../components/ui/misc'; // Para mostrar errores
+import { WizardErrorBox } from '../components/ui/WizardComponents'; // Para mostrar errores
 
 // --- Componente Principal ---
 export default function OrdersManager() {

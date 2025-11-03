@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react';
-import { WizardCard, WizardCheckboxField, WizardSelectField } from '../ui/WizardComponents';
-import { Clock } from 'lucide-react';
-import { ButtonLoader } from '../ui/Loader';
+import { 
+  WizardCard, 
+  WizardCheckboxField, 
+  WizardSelectField,
+  WizardSaveButton 
+} from '../ui/WizardComponents';
+import { Clock, Calendar } from 'lucide-react';
 import { useAlert } from '../ui/CustomAlert';
 import { api } from '../../services/api';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { motion } from 'framer-motion';
 
 const HoursForm = ({ initialData }) => {
   const [hours, setHours] = useState(initialData.hours);
@@ -47,13 +52,13 @@ const HoursForm = ({ initialData }) => {
   };
 
   const days = [
-    { key: 'monday', name: 'Lunes' },
-    { key: 'tuesday', name: 'Martes' },
-    { key: 'wednesday', name: 'Miércoles' },
-    { key: 'thursday', name: 'Jueves' },
-    { key: 'friday', name: 'Viernes' },
-    { key: 'saturday', name: 'Sábado' },
-    { key: 'sunday', name: 'Domingo' },
+    { key: 'monday', name: 'Lunes', short: 'Lun' },
+    { key: 'tuesday', name: 'Martes', short: 'Mar' },
+    { key: 'wednesday', name: 'Miércoles', short: 'Mié' },
+    { key: 'thursday', name: 'Jueves', short: 'Jue' },
+    { key: 'friday', name: 'Viernes', short: 'Vie' },
+    { key: 'saturday', name: 'Sábado', short: 'Sáb' },
+    { key: 'sunday', name: 'Domingo', short: 'Dom' },
   ];
 
   const availabilityModes = [
@@ -64,18 +69,22 @@ const HoursForm = ({ initialData }) => {
   ];
 
   return (
-    <WizardCard>
-      <div className="flex items-center gap-3 pb-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center text-white shadow-lg">
-          <Clock size={24} />
-        </div>
-        <div>
-          <h3 className="text-2xl font-bold text-blue-600">Horarios y Disponibilidad</h3>
-          <p className="text-sm text-gray-600 mt-1">Define cuándo y cómo atenderás pedidos</p>
+    <div className="bg-white rounded-2xl shadow-xl border-2 border-[#ffe4c4] p-6 hover:shadow-2xl transition-all duration-300">
+      {/* Header */}
+      <div className="mb-6 pb-4 border-b-2 border-[#ffe4c4]">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center text-white shadow-lg">
+            <Clock size={24} />
+          </div>
+          <div>
+            <h3 className="text-2xl font-bold text-blue-600">Horarios y Disponibilidad</h3>
+            <p className="text-sm text-gray-600 mt-1">Define cuándo y cómo atenderás pedidos</p>
+          </div>
         </div>
       </div>
 
-      <div className="mb-6">
+      {/* Selector de modo */}
+      <div className="mb-8">
         <WizardSelectField
           label="Modo de Disponibilidad"
           value={availabilitySettings.mode}
@@ -89,33 +98,101 @@ const HoursForm = ({ initialData }) => {
         </WizardSelectField>
       </div>
 
-      <div className="space-y-2">
-        <h4 className="text-lg font-bold text-gray-800 mb-3">Horarios de Operación Semanal</h4>
-        {days.map(day => (
-          <div key={day.key} className="flex items-center justify-between p-2 border-b">
-            <span className="capitalize w-24">{day.name}</span>
-            <WizardCheckboxField
-              label="Cerrado"
-              checked={hours[day.key].closed}
-              onChange={(e) => handleHourChange(day.key, 'closed', e.target.checked)}
-              className="!flex-row !items-center !justify-start !gap-2"
-            />
-            {!hours[day.key].closed && (
-              <>
-                <input type="time" className="input input-sm input-bordered w-24" value={hours[day.key].open} onChange={(e) => handleHourChange(day.key, 'open', e.target.value)} />
-                <span className="mx-2">a</span>
-                <input type="time" className="input input-sm input-bordered w-24" value={hours[day.key].close} onChange={(e) => handleHourChange(day.key, 'close', e.target.value)} />
-              </>
-            )}
-          </div>
-        ))}
+      {/* Horarios semanales */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 mb-4">
+          <Calendar size={20} className="text-[#ff7f50]" />
+          <h4 className="text-lg font-bold text-gray-800">Horarios de Operación Semanal</h4>
+        </div>
+
+        <div className="space-y-3">
+          {days.map((day, index) => (
+            <motion.div
+              key={day.key}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              className="bg-gradient-to-r from-gray-50 to-transparent rounded-xl p-4 border-2 border-[#ffe4c4] hover:border-[#ffb9a0] transition-colors"
+            >
+              {/* Layout para desktop y móvil */}
+              <div className="flex flex-col gap-3">
+                {/* Primera fila: Día y checkbox cerrado */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-bold text-gray-700 hidden sm:inline">
+                      {day.name}
+                    </span>
+                    <span className="font-bold text-gray-700 sm:hidden">
+                      {day.short}
+                    </span>
+                  </div>
+                  
+                  {/* Checkbox cerrado - más compacto en móvil */}
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={hours[day.key].closed}
+                      onChange={(e) => handleHourChange(day.key, 'closed', e.target.checked)}
+                      className="w-5 h-5 rounded-lg border-2 border-gray-300 text-[#ff7f50] focus:ring-2 focus:ring-[#ff7f50] focus:ring-offset-0 transition-all"
+                    />
+                    <span className="text-sm font-medium text-gray-600 group-hover:text-gray-800 transition-colors">
+                      Cerrado
+                    </span>
+                  </label>
+                </div>
+
+                {/* Segunda fila: Horarios (solo si no está cerrado) */}
+                {!hours[day.key].closed && (
+                  <div className="flex items-center gap-2 pl-0 sm:pl-2">
+                    {/* Input apertura */}
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">
+                        Apertura
+                      </label>
+                      <input
+                        type="time"
+                        className="w-full px-3 py-2 bg-white border-2 border-[#ffe4c4] rounded-lg text-sm font-medium text-gray-800 focus:border-[#ff7f50] focus:ring-2 focus:ring-[#ffe4c4] outline-none transition-all"
+                        value={hours[day.key].open}
+                        onChange={(e) => handleHourChange(day.key, 'open', e.target.value)}
+                      />
+                    </div>
+
+                    {/* Separador */}
+                    <div className="flex items-end pb-2">
+                      <span className="text-gray-400 font-bold text-sm">→</span>
+                    </div>
+
+                    {/* Input cierre */}
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">
+                        Cierre
+                      </label>
+                      <input
+                        type="time"
+                        className="w-full px-3 py-2 bg-white border-2 border-[#ffe4c4] rounded-lg text-sm font-medium text-gray-800 focus:border-[#ff7f50] focus:ring-2 focus:ring-[#ffe4c4] outline-none transition-all"
+                        value={hours[day.key].close}
+                        onChange={(e) => handleHourChange(day.key, 'close', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </div>
       </div>
-      <div className="mt-6 flex justify-end">
-        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-          {saving ? <ButtonLoader size="sm"/> : 'Guardar Horarios'}
-        </button>
+
+      {/* Botón de guardar */}
+      <div className="mt-8 pt-6 border-t-2 border-[#ffe4c4] flex justify-end">
+        <WizardSaveButton 
+          onClick={handleSave} 
+          loading={saving}
+          className="w-full sm:w-auto min-w-[180px]"
+        >
+          Guardar Horarios
+        </WizardSaveButton>
       </div>
-    </WizardCard>
+    </div>
   );
 };
 

@@ -2,6 +2,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Info, Check, X, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { ButtonLoader } from './Loader';
 
 
 // --- Componente ProgressBar ---
@@ -530,3 +531,81 @@ export const WizardInfoBox = ({ children, icon: Icon, variant = "info" }) => {
     </div>
   );
 };
+
+// --- 🔥 Componente SaveButton reutilizable ---
+export const WizardSaveButton = ({ onClick, loading, children = "Guardar", className = "" }) => (
+  <motion.button
+    onClick={onClick}
+    disabled={loading}
+    whileHover={!loading ? { scale: 1.02 } : {}}
+    whileTap={!loading ? { scale: 0.98 } : {}}
+    className={`
+      relative overflow-hidden
+      px-8 py-4 rounded-2xl font-bold text-white
+      bg-gradient-to-r from-[#ff7f50] to-[#ff6347]
+      shadow-lg hover:shadow-xl
+      disabled:opacity-70 disabled:cursor-not-allowed
+      transition-all duration-300
+      flex items-center justify-center gap-3
+      ${className}
+    `}
+  >
+    {loading ? (
+      <>
+        <ButtonLoader size="md" />
+        <span>Guardando...</span>
+      </>
+    ) : (
+      <>
+        <Check size={20} />
+        {children}
+      </>
+    )}
+  </motion.button>
+);
+
+// --- 🔥 NUEVO: Componente LocationButton reutilizable ---
+export const WizardLocationButton = ({ location, onClick, loading }) => (
+  <motion.button
+    type="button"
+    onClick={onClick}
+    disabled={loading}
+    whileHover={{ scale: 1.02 }}
+    whileTap={{ scale: 0.98 }}
+    className="w-full mt-2 p-4 rounded-xl border-2 border-dashed border-[#ff7f50]/40 hover:border-[#ff7f50] hover:bg-[#ffe4c4]/10 transition-all group"
+  >
+    <div className="flex items-start gap-3">
+      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#ff7f50] to-[#ff6347] flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+        {loading ? (
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="w-5 h-5 border-2 border-white border-t-transparent rounded-full"
+          />
+        ) : (
+          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        )}
+      </div>
+      <div className="flex-1 text-left min-w-0">
+        <p className="text-sm font-bold text-gray-700 mb-1">
+          {location?.lat ? 'Ubicación seleccionada' : 'Seleccionar ubicación en mapa'}
+        </p>
+        {location?.lat ? (
+          <p className="text-xs text-gray-600 line-clamp-2">
+            {location.formatted_address || `${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}`}
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500">
+            Toca para abrir el mapa y marcar tu ubicación
+          </p>
+        )}
+      </div>
+      <svg className="w-5 h-5 text-[#ff7f50] flex-shrink-0 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </div>
+  </motion.button>
+);
