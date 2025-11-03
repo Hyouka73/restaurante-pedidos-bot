@@ -18,34 +18,33 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { data: restaurantData } = useRestaurant(); // <-- 2. Usar el contexto del restaurante
   const [loadingStats, setLoadingStats] = useState(true);
-  const [metrics, setMetrics] = useState({
-    totalOrders: 0,
-    pendingOrders: 0,
-    revenue: 0,
-    avgOrderValue: 0,
-  });
+  const [metrics, setMetrics] = useState(null);
   const [recentOrders, setRecentOrders] = useState([]);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    // 3. Mover la lógica de carga de datos al contexto si es posible, o simplificarla aquí
     const fetchData = async () => {
       if (!restaurantData?.id) {
-        // Si no hay ID de restaurante, no podemos pedir estadísticas.
         return;
       }
 
       try {
         setLoadingStats(true);
+        setError(null);
         const restaurantId = restaurantData.id;
         
-        // 4. Llamar al nuevo endpoint del backend
         const response = await api.get(`/dashboard/${restaurantId}/stats`);
         
-        setMetrics(response.metrics);
-        setRecentOrders(response.recentOrders);
+        if (response && response.metrics) {
+          setMetrics(response.metrics);
+          setRecentOrders(response.recentOrders || []);
+        } else {
+          throw new Error("La respuesta del servidor no tiene el formato esperado.");
+        }
 
-      } catch (error) {
-        console.error("Error al cargar datos del dashboard:", error);
+      } catch (err) {
+        console.error("Error al cargar datos del dashboard:", err);
+        setError(err.message);
       } finally {
         setLoadingStats(false);
       }
@@ -58,13 +57,26 @@ export default function Dashboard() {
     return <Loader variant="dots" size="lg" message="Cargando dashboard..." />;
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#ffe4c4] via-[#ffd3c3] to-[#ffb8a1] py-6 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="bg-white rounded-3xl shadow-xl p-6 sm:p-8 text-red-500">
+            <h1 className="text-2xl font-bold">Error al cargar el dashboard</h1>
+            <p>{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return <div>Redirigiendo...</div>;
   }
 
-  const { totalOrders, pendingOrders, revenue, avgOrderValue } = metrics;
+  const { totalOrders, pendingOrders, revenue, avgOrderValue } = metrics || {};
 
-  const statCards = [
+  const statCards = metrics ? [
     {
       title: 'Pedidos Totales',
       value: totalOrders,
@@ -97,7 +109,7 @@ export default function Dashboard() {
       gradient: 'from-purple-500 to-pink-600',
       bgGradient: 'from-purple-50 to-pink-50',
     },
-  ];
+  ] : [];
 
   const quickActions = [
     { label: 'Gestionar Menú', icon: Package, path: '/menu', color: 'from-blue-500 to-indigo-600' },

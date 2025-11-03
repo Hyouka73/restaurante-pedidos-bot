@@ -1,8 +1,7 @@
 
-const admin = require('../../config/firebase');
+const { db } = require('../config/firebase');
 const ss = require('simple-statistics');
 
-const db = admin.firestore();
 const CACHE_DURATION_DAYS = 15;
 
 async function getProjectionStatus(restaurantId) {
@@ -89,9 +88,15 @@ async function getProjectionData(restaurantId) {
 }
 
 async function getDashboardStats(restaurantId) {
-    // Implement logic to get dashboard stats
+    // TODO: Implement the actual logic to get dashboard stats
     return {
-        message: "Stats not implemented yet"
+        metrics: {
+            totalOrders: 0,
+            pendingOrders: 0,
+            revenue: 0,
+            avgOrderValue: 0,
+        },
+        recentOrders: [],
     };
 }
 

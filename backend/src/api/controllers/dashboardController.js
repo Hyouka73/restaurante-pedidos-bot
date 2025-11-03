@@ -21,7 +21,18 @@ async function getProjectionData(req, res) {
   }
 }
 
+async function getDashboardStats(req, res) {
+  try {
+    const { restaurantId } = req.params;
+    const stats = await dashboardService.getDashboardStats(restaurantId);
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+
 module.exports = {
   getProjectionStatus,
   getProjectionData,
+  getDashboardStats,
 };

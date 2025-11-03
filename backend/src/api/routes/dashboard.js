@@ -6,16 +6,7 @@ const { verifyTokenAndOwner } = require('../middleware/auth');
 const router = express.Router();
 
 // GET /api/dashboard/:restaurantId/stats
-router.get('/:restaurantId/stats', verifyTokenAndOwner, async (req, res) => {
-  try {
-    const { restaurantId } = req.params;
-    const dashboardService = require('../../services/dashboardService');
-    const stats = await dashboardService.getDashboardStats(restaurantId);
-    res.json(stats);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+router.get('/:restaurantId/stats', verifyTokenAndOwner, dashboardController.getDashboardStats);
 
 // GET /api/dashboard/projection-status/:restaurantId
 router.get('/projection-status/:restaurantId', verifyTokenAndOwner, dashboardController.getProjectionStatus);
