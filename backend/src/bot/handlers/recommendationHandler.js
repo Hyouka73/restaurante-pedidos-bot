@@ -113,7 +113,10 @@ async function handleRecommendation(ctx) {
         }
 
     } catch (error) {
-        console.error('Error en recommendationHandler:', error.response ? error.response.data : error.message);
+        console.error('Error en recommendationHandler:');
+        console.error('Type:', typeof error);
+        console.error('Error Object:', error);
+        console.error('Error Properties:', JSON.stringify(error, null, 2));
         await ctx.reply('Lo siento, ocurrió un error mientras buscaba recomendaciones. Por favor, intenta de nuevo.');
         if (ctx.session) {
             delete ctx.session.recommendationFilters;

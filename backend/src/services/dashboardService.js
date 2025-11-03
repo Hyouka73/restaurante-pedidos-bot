@@ -88,16 +88,58 @@ async function getProjectionData(restaurantId) {
 }
 
 async function getDashboardStats(restaurantId) {
-    // TODO: Implement the actual logic to get dashboard stats
+  const ordersRef = db.collection('orders').where('restaurantId', '==', restaurantId);
+  const snapshot = await ordersRef.get();
+
+  if (snapshot.empty) {
     return {
-        metrics: {
-            totalOrders: 0,
-            pendingOrders: 0,
-            revenue: 0,
-            avgOrderValue: 0,
-        },
-        recentOrders: [],
+      metrics: {
+        totalOrders: 0,
+        pendingOrders: 0,
+        revenue: 0,
+        avgOrderValue: 0,
+      },
+      recentOrders: [],
     };
+  }
+
+  let totalOrders = 0;
+  let pendingOrders = 0;
+  let revenue = 0;
+  let completedOrdersCount = 0;
+  const allOrders = [];
+
+  snapshot.forEach(doc => {
+    const order = { id: doc.id, ...doc.data() };
+    allOrders.push(order);
+
+    if (order.status !== 'cancelled') {
+      totalOrders++;
+    }
+
+    if (order.status === 'completed' || order.status === 'delivered') {
+      revenue += order.total;
+      completedOrdersCount++;
+    } else if (order.status !== 'cancelled') {
+      pendingOrders++;
+    }
+  });
+
+  const avgOrderValue = completedOrdersCount > 0 ? revenue / completedOrdersCount : 0;
+
+  const recentOrders = allOrders
+    .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis())
+    .slice(0, 5);
+
+  return {
+    metrics: {
+      totalOrders,
+      pendingOrders,
+      revenue,
+      avgOrderValue,
+    },
+    recentOrders,
+  };
 }
 
 

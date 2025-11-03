@@ -18,23 +18,24 @@ export const RestaurantProvider = ({ children }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const uid = user?.uid;
 
   // ✅ Fetch simple - api.get ya maneja headers automáticamente
   const fetchRestaurant = useCallback(async () => {
-    if (!user) {
+    if (!uid) {
       console.log('[RestaurantContext] No user, skipping fetch');
       setData(null);
       setLoading(false);
       return;
     }
 
-    console.log('[RestaurantContext] 🔵 Fetching restaurant data for user:', user.uid);
+    console.log('[RestaurantContext] 🔵 Fetching restaurant data for user:', uid);
     setLoading(true);
     setError(null);
 
     try {
       // ✅ api.get ya incluye el token automáticamente
-      const response = await api.get(`/config/${user.uid}/general`);
+      const response = await api.get(`/config/${uid}/general`);
 
       console.log('[RestaurantContext] ✅ Datos recibidos:', response);
       setData(response);
@@ -45,18 +46,18 @@ export const RestaurantProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [uid]);
 
   // Fetch cuando cambia el usuario
   useEffect(() => {
-    console.log('[RestaurantContext] useEffect triggered. loadingAuth:', loadingAuth, 'user:', user?.uid);
+    console.log('[RestaurantContext] useEffect triggered. loadingAuth:', loadingAuth, 'uid:', uid);
     
     if (loadingAuth) {
       console.log('[RestaurantContext] Esperando autenticación...');
       return;
     }
 
-    if (!user) {
+    if (!uid) {
       console.log('[RestaurantContext] No hay usuario, limpiando datos');
       setData(null);
       setLoading(false);
@@ -65,7 +66,7 @@ export const RestaurantProvider = ({ children }) => {
 
     console.log('[RestaurantContext] Usuario detectado, iniciando fetch');
     fetchRestaurant();
-  }, [user, loadingAuth, fetchRestaurant]);
+  }, [uid, loadingAuth, fetchRestaurant]);
 
   // Función para actualizar disponibilidad
   const updateAvailability = useCallback(async (status, reason = null) => {
