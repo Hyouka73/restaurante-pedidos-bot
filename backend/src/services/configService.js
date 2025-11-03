@@ -16,7 +16,7 @@ class ConfigService {
   // Obtener solo la información general
   async getGeneralInfo(restaurantId) {
     const config = await this.getRestaurantConfig(restaurantId);
-    const { info, hours, availabilitySettings, availability, delivery, paymentMethods, features, commands } = config;
+    const { info, hours, availabilitySettings, availability, delivery, paymentMethods, features, commands, setupCompleted } = config;
     
     // ✅ CORRECCIÓN CRÍTICA: Siempre incluir el ID explícitamente
     // El ID del documento de Firestore ES el restaurantId (que es el uid del usuario)
@@ -29,7 +29,8 @@ class ConfigService {
       delivery, 
       paymentMethods, 
       features, 
-      commands 
+      commands,
+      setupCompleted
     };
   }
 
