@@ -44,7 +44,7 @@ const DeliveryForm = ({ initialData }) => {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl border-2 border-[#ffe4c4] p-6 hover:shadow-2xl transition-all duration-300">
+    <div className="bg-white rounded-2xl shadow-xl border-2 border-[#ffe4c4] p-3 sm:p-6 hover:shadow-2xl transition-all duration-300">
       {/* Header */}
       <div className="mb-6 pb-4 border-b-2 border-[#ffe4c4]">
         <div className="flex items-center gap-3">
@@ -63,7 +63,7 @@ const DeliveryForm = ({ initialData }) => {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         className={`
-          mb-6 p-4 rounded-xl border-2 transition-all duration-300
+          mb-6 p-3 sm:p-4 rounded-xl border-2 transition-all duration-300
           ${features.deliveryEnabled 
             ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300' 
             : 'bg-gradient-to-r from-gray-50 to-gray-100 border-gray-200'
@@ -123,7 +123,7 @@ const DeliveryForm = ({ initialData }) => {
         >
           <div className="space-y-6">
             {/* Tipo de costo */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-3 sm:p-4 border-2 border-blue-200">
               <WizardSelectField
                 label="Tipo de Costo de Envío"
                 value={delivery.type}

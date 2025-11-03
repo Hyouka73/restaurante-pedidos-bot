@@ -69,7 +69,7 @@ const HoursForm = ({ initialData }) => {
   ];
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl border-2 border-[#ffe4c4] p-6 hover:shadow-2xl transition-all duration-300">
+    <div className="bg-white rounded-2xl shadow-xl border-2 border-[#ffe4c4] p-3 sm:p-6 hover:shadow-2xl transition-all duration-300">
       {/* Header */}
       <div className="mb-6 pb-4 border-b-2 border-[#ffe4c4]">
         <div className="flex items-center gap-3">
@@ -112,7 +112,7 @@ const HoursForm = ({ initialData }) => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className="bg-gradient-to-r from-gray-50 to-transparent rounded-xl p-4 border-2 border-[#ffe4c4] hover:border-[#ffb9a0] transition-colors"
+              className="bg-gradient-to-r from-gray-50 to-transparent rounded-xl p-2 sm:p-4 border-2 border-[#ffe4c4] hover:border-[#ffb9a0] transition-colors"
             >
               {/* Layout para desktop y móvil */}
               <div className="flex flex-col gap-3">

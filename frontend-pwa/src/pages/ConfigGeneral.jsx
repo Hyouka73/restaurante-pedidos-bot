@@ -143,7 +143,7 @@ export default function ConfigGeneral() {
   };
 
   return (
-    <div className="p-4 max-w-6xl mx-auto">
+    <div className="p-2 sm:p-4 max-w-6xl mx-auto">
       <WizardCard>
         <WizardSectionHeader icon={Settings} title="Configuración General" subtitle="Gestiona la información y opciones de tu restaurante" />
         {error && <WizardErrorBox error={error} onDismiss={() => setError('')} />}
