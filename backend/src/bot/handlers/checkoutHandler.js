@@ -6,6 +6,7 @@ const availabilityService = require('../../services/availabilityService');
 const telegramUserService = require('../services/telegramUserService');
 const cartKeyboards = require('../keyboards/cartKeyboards');
 const { SESSION_STATES, askForPhone } = require('./orderHandler');
+const { db } = require('../../config/firebase');
 
 async function handleContinueToDelivery(ctx, userId, restaurantId) {
     const session = ctx.session?.cart;
@@ -164,7 +165,15 @@ async function handleFinalConfirmation(ctx, userId, restaurantId) {
 
         const { notificationMessage, notificationKeyboard } = cartKeyboards.getOrderConfirmedMessage(order, orderTotal, restaurantId);
 
-        await ctx.editMessageText(notificationMessage, notificationKeyboard);
+        // Eliminamos el mensaje de "confirmación final"
+        await ctx.deleteMessage();
+
+        // Enviamos el mensaje de estado del pedido y guardamos su ID
+        const sentMessage = await ctx.reply(notificationMessage, notificationKeyboard);
+        if (sentMessage) {
+            const orderRef = db.collection('restaurants').doc(restaurantId).collection('orders').doc(order.id);
+            await orderRef.update({ telegramMessageId: sentMessage.message_id });
+        }
     } catch (error) {
         console.error('❌ Error creando pedido:', error);
         session.step = SESSION_STATES.FINAL_CONFIRMATION;

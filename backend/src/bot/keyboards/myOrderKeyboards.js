@@ -65,63 +65,60 @@ function formatOrderStatus(order) {
     const orderId = order.orderNumber || order.id.substring(0, 6).toUpperCase();
 
     const statusMap = {
-        pending: { emoji: '⏳', text: 'Pendiente', color: '🟡' },
+        pending: { emoji: '⏳', text: 'Pendiente', color: '⚪' },
         confirmed: { emoji: '✅', text: 'Confirmado', color: '🟢' },
         preparing: { emoji: '👨‍🍳', text: 'En preparación', color: '🟠' },
-        ready: { emoji: '🎉', text: '¡Listo!', color: '🟢' },
+        ready: { emoji: '🎉', text: '¡Listo para recoger!', color: '🟢' },
         delivering: { emoji: '🚚', text: 'En camino', color: '🔵' },
         delivered: { emoji: '🏠', text: 'Entregado', color: '✅' },
         cancelled: { emoji: '❌', text: 'Cancelado', color: '🔴' }
     };
+    
+    const currentStatusInfo = statusMap[order.status] || { emoji: '❓', text: order.status, color: '⚪' };
 
-    const currentStatus = statusMap[order.status] || { emoji: '❓', text: order.status, color: '⚪' };
-
-    const stages = ['pending', 'confirmed', 'preparing', order.deliveryType === 'delivery' ? 'delivering' : 'ready', order.deliveryType === 'delivery' ? 'delivered' : 'ready'];
-    const currentIndex = stages.indexOf(order.status);
-
-    let progressBar = '';
-    stages.forEach((stage, idx) => {
-        if (idx < currentIndex) {
-            progressBar += '✅ ';
-        } else if (idx === currentIndex) {
-            progressBar += `${currentStatus.emoji} `;
-        } else {
-            progressBar += '⚪ ';
-        }
-    });
-
-    let message = `${currentStatus.color} *Pedido #${orderId}*\n\n`;
-    message += `${progressBar}\n\n`;
-    message += `📍 *Estado Actual:* ${currentStatus.emoji} ${currentStatus.text}\n\n`;
-
-    const timeEstimates = {
-        pending: { text: 'Esperando confirmación del restaurante', time: '2-5 min' },
-        confirmed: { text: 'Iniciando preparación', time: '25-35 min' },
-        preparing: { text: 'Tu comida se está cocinando', time: '15-25 min' },
-        ready: {
-            text: order.deliveryType === 'delivery' ? 'Saliendo a reparto' : '¡Puedes recogerlo ahora!',
-            time: order.deliveryType === 'delivery' ? '10-20 min' : 'Ya disponible'
-        },
-        delivering: { text: 'El repartidor está en camino', time: '5-15 min' },
-        delivered: { text: '¡Disfruta tu comida!', time: 'Completado' }
-    };
-
-    const estimate = timeEstimates[order.status];
-    if (estimate) {
-        message += `⏱️ _${estimate.text}_
-`;
-        if (estimate.time !== 'Completado' && estimate.time !== 'Ya disponible') {
-            message += `🕐 Tiempo estimado: *${estimate.time}*\n`;
-        }
+    // Define los pasos del proceso
+    const stages = ['pending', 'confirmed', 'preparing'];
+    if (order.deliveryType === 'delivery') {
+        stages.push('delivering', 'delivered');
+    } else {
+        stages.push('ready'); // Para pickup, 'ready' es el final
     }
 
-    message += `\n${'─'.repeat(20)}\n`;
-    message += `🍽️ *Resumen:*
-`;
+    const currentIndex = stages.indexOf(order.status);
 
-    const itemsToShow = order.items.slice(0, 3);
-    itemsToShow.forEach(item => {
-        message += `   • ${item.quantity}x ${item.name}\n`;
+    // Construye la barra de progreso
+    let progressBar = stages.map((stage, idx) => {
+        if (currentIndex > -1 && idx < currentIndex) {
+            return '🟢'; // Estado pasado
+        } else if (idx === currentIndex) {
+            return currentStatusInfo.color; // Estado actual
+        } else {
+            return '⚪'; // Estado futuro
+        }
+    }).join(' ');
+
+    // Mensaje de estado
+    const timeEstimates = {
+        pending: 'Esperando confirmación...', 
+        confirmed: 'Pronto comenzarán a prepararlo.',
+        preparing: '¡Tu pedido ya se está preparando!',
+        ready: '¡Puedes pasar a recogerlo!',
+        delivering: 'El repartidor está en camino.',
+        delivered: '¡Disfruta tu comida!',
+        cancelled: 'El pedido ha sido cancelado.'
+    };
+    const statusLine = timeEstimates[order.status] || '';
+
+    // Construcción del mensaje final
+    let message = `*Pedido #${orderId}*\n\n`;
+    message += `${progressBar}\n\n`;
+    message += `📍 *Estado Actual:* ${currentStatusInfo.emoji} ${currentStatusInfo.text}\n`;
+    message += `⏱️ ${statusLine}\n\n`;
+    message += `────────────────────\n`;
+    message += `🍽️ *Resumen:*\n`;
+
+    order.items.forEach(item => {
+        message += `• ${item.quantity}x ${item.name}\n`;
     });
 
     if (order.items.length > 3) {
@@ -129,10 +126,6 @@ function formatOrderStatus(order) {
     }
 
     message += `\n💰 *Total:* $${order.total.toFixed(2)}`;
-
-    if (order.deliveryType === 'delivery' && order.info?.location?.formatted_address) {
-        message += `\n📍 Dirección: ${order.info.location.formatted_address.substring(0, 40)}...`;
-    }
 
     return message;
 }

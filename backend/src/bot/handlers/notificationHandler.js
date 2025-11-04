@@ -24,40 +24,44 @@ const commandsWithMyOrder = [
 async function handleNotificationPreference(ctx, callbackData) {
   const [, choice, restaurantId, orderId] = callbackData.split('_');
   const userId = ctx.from.id;
-  await ctx.answerCbQuery(choice === 'yes' ? '✅ ¡Perfecto! Te mantendremos informado.' : '👍 Entendido.');
   
-  // Guardar preferencia en la DB
   try {
     const orderRef = db.collection('restaurants').doc(restaurantId).collection('orders').doc(orderId);
     if (choice === 'yes') {
+      await ctx.answerCbQuery('✅ ¡Perfecto! Te mantendremos informado.');
       await ctx.telegram.setMyCommands(commandsWithMyOrder, {
         scope: { type: 'chat', chat_id: userId } 
       });
-      // Aseguramos que esté habilitado (aunque es el default)
       await orderRef.set({ notificationsEnabled: true }, { merge: true });
+      // Eliminar el mensaje de preferencia de notificación
+      try {
+        await ctx.deleteMessage();
+      } catch (e) {
+        console.warn('No se pudo borrar el mensaje de preferencia de notificación:', e);
+      }
+      // Enviar el estado del pedido como un nuevo mensaje
+      await handleShowOrderStatus(ctx, `s_o_s_${restaurantId}_${orderId}`, true); // true para indicar que es un nuevo mensaje
     } else if (choice === 'no') {
+      await ctx.answerCbQuery('👍 Entendido.');
       await orderRef.set({ notificationsEnabled: false }, { merge: true });
-      await ctx.telegram.setMyCommands(commandsWithMyOrder, {
-        scope: { type: 'chat', chat_id: userId } 
-      });
+      // Editamos el mensaje para confirmar y dar la alternativa
+      await ctx.editMessageText('👍 Entendido. No recibirás notificaciones automáticas.\n\nPuedes usar /mipedido en cualquier momento para ver el estado de tu pedido con el formato actualizado.');
     }
   } catch (error) {
     console.error('Error updating notification preference:', error);
   }
-
-  // En lugar de mostrar un mensaje simple, mostramos el estado del pedido.
-  // Usamos un prefijo estándar 's_o_s_' (show_order_status)
-  await handleShowOrderStatus(ctx, `s_o_s_${restaurantId}_${orderId}`);
 }
 
 /**
  * Muestra el estado de un pedido.
  */
-async function handleShowOrderStatus(ctx, callbackData) {
+async function handleShowOrderStatus(ctx, callbackData, isNewMessage = false) {
   // Aseguramos que los IDs se tomen del callbackData, que puede venir de 's_o_s_' o 'not_'
   const parts = callbackData.split('_');
-  const restaurantId = parts[2];
-  const orderId = parts[3];
+  // El prefijo es "s_o_s_", por lo que los IDs comienzan en el índice 3
+  const restaurantId = parts[3];
+  const orderId = parts[4];
+  
   // Responde al CbQuery solo si no fue respondido ya (ej. en handleNotificationPreference)
   if (!ctx.answered) await ctx.answerCbQuery();
   
@@ -66,23 +70,36 @@ async function handleShowOrderStatus(ctx, callbackData) {
     const statusMessage = formatOrderStatus(order);
     const keyboard = notificationKeyboards.getOrderStatusKeyboard(order, restaurantId, orderId);
 
-    // Editamos el mensaje y CAPTURAMOS la respuesta
-    const msg = await ctx.editMessageText(statusMessage, {
-      parse_mode: 'Markdown',
-      ...keyboard
-    });
+    let msg;
+    if (isNewMessage) {
+      // Enviamos un nuevo mensaje
+      msg = await ctx.reply(statusMessage, {
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
+    } else {
+      // Editamos el mensaje existente
+      msg = await ctx.editMessageText(statusMessage, {
+        parse_mode: 'Markdown',
+        ...keyboard
+      });
+    }
 
-    // Guardamos el ID del mensaje en la orden de FIRESTORE
-    if (msg && msg.message_id) {
+    // Guardamos el ID del mensaje en la orden de FIRESTORE si es un nuevo mensaje o si no estaba guardado
+    if (msg && msg.message_id && (isNewMessage || !order.telegramMessageId)) {
         const orderRef = db.collection('restaurants').doc(restaurantId).collection('orders').doc(orderId);
-        // Usamos { merge: true } para no sobreescribir otros campos
         await orderRef.set({ telegramMessageId: msg.message_id }, { merge: true });
         console.log(`[notificationHandler] Message ID ${msg.message_id} guardado en la orden ${orderId}`);
     }
     
   } catch (error) {
     console.error('Error showing order status:', error);
-    await ctx.editMessageText('❌ Hubo un error al consultar el estado de tu pedido.');
+    // Si falla al editar, intentamos enviar uno nuevo como fallback
+    if (ctx.callbackQuery && ctx.callbackQuery.message) {
+      await ctx.reply('❌ Hubo un error al consultar el estado de tu pedido. Por favor, usa /mipedido para ver el estado actualizado.');
+    } else {
+      await ctx.editMessageText('❌ Hubo un error al consultar el estado de tu pedido.');
+    }
   }
 }
 
@@ -120,7 +137,7 @@ async function handleRefreshOrderStatus(ctx, callbackData) {
  * Muestra la confirmación de cancelación.
  */
 async function handleCancelOrderRequest(ctx, callbackData) {
-  const [, , restaurantId, orderId] = callbackData.split('_');
+  const [, , restaurantId, orderId] = callbackData.split('_'); // [cite:130]
   await ctx.answerCbQuery();
   
   // 1. Obtener mensaje y teclado
@@ -212,7 +229,7 @@ async function handleAskReceiptResponse(ctx, callbackData) {
     await handleShowReceipt(ctx, `show_receipt_${restaurantId}_${orderId}`);
     // answerCbQuery no es necesario aquí porque handleShowReceipt ya lo hace.
   } else {
-    await ctx.answerCbQuery('👍 Entendido');
+    await ctx.answerCbQuery('👍 Entendido. Puedes usar /mipedido para ver el estado de tu pedido.');
   }
 }
 

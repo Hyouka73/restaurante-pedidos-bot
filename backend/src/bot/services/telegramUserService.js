@@ -288,6 +288,23 @@ class TelegramUserService {
   }
 
   /**
+   * 🔥 NUEVA FUNCIÓN: Guarda o actualiza el número de teléfono de un usuario.
+   * @param {string|number} telegramId - ID del usuario en Telegram.
+   * @param {string} phone - El número de teléfono a guardar.
+   */
+  async updateUserPhone(telegramId, phone) {
+    try {
+      const userRef = db.collection('telegram_users').doc(telegramId.toString());
+      await userRef.set({ phone: phone, updatedAt: new Date() }, { merge: true });
+      console.log(`✅ Teléfono actualizado para usuario ${telegramId}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`Error actualizando teléfono para usuario ${telegramId}:`, error);
+      return { success: false, error };
+    }
+  }
+
+  /**
    * Actualiza los comandos del bot para un usuario específico basado en si tiene pedidos activos.
    * @param {object} ctx - El contexto de Telegraf.
    * @param {string} restaurantId - El ID del restaurante.

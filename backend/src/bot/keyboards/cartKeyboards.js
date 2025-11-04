@@ -155,8 +155,8 @@ function getOrderConfirmedMessage(order, total, restaurantId) {
 
     const notificationMessage = '🔔 ¿Quieres recibir notificaciones cuando tu pedido cambie de estado?';
     const notificationKeyboard = Markup.inlineKeyboard([
-        [Markup.button.callback('👍 Sí, notificarme', `not_y_${restaurantId}_${order.id}`)],
-        [Markup.button.callback('👎 No, gracias', `not_n_${restaurantId}_${order.id}`)]
+        [Markup.button.callback('👍 Sí, notificarme', `not_yes_${restaurantId}_${order.id}`)],
+        [Markup.button.callback('👎 No, gracias', `not_no_${restaurantId}_${order.id}`)]
     ]);
 
     return { message, keyboard, notificationMessage, notificationKeyboard };

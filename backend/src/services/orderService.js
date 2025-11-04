@@ -1,7 +1,4 @@
 const { db, admin } = require('../config/firebase');
-// 🔥 AÑADIR AL INICIO DE LOS IMPORTS
-const telegramNotificationService = require('../services/telegramNotificationService');
-// Importamos el "publicador" de Redis
 const { publisher } = require('../config/redisClient');
 
 const SSE_CHANNEL = 'orders_channel';
@@ -81,12 +78,15 @@ class OrderService {
    * Obtiene un pedido por su ID.
    */
   async getOrder(restaurantId, orderId) {
-    const orderDoc = await db.collection('restaurants').doc(restaurantId).collection('orders').doc(orderId).get();
+    // 🔥 CORRECCIÓN DEFINITIVA: La ruta a la subcolección de pedidos es directa.
+    // El error estaba en cómo se construía esta ruta.
+    const orderRef = db.collection('restaurants').doc(restaurantId).collection('orders').doc(orderId);
+    const orderDoc = await orderRef.get();
     if (!orderDoc.exists) {
       throw new Error('Pedido no encontrado');
     }
     // ✅ ¡CORRECCIÓN 3 (EL BUG PRINCIPAL)! Era 'orderDoc', no 'doc'
-    return { id: orderDoc.id, ...orderDoc.data() };
+    return { id: orderDoc.id, restaurantId: restaurantId, ...orderDoc.data() };
   }
 
   /**
@@ -127,16 +127,31 @@ class OrderService {
  				statusHistory: admin.firestore.FieldValue.arrayUnion(newHistoryEntry) 
       });
       
+      // Obtener la orden actualizada para pasarla al servicio de notificación
+      const updatedOrder = await this.getOrder(restaurantId, orderId);
+
+      // Notificar al usuario de Telegram si las notificaciones están habilitadas
+      if (updatedOrder.notificationsEnabled && updatedOrder.customer?.telegramId) {
+        const telegramNotificationService = require('./telegramNotificationService');
+        await telegramNotificationService.notifyUserOfStatusChange(
+          updatedOrder.customer.telegramId,
+          newStatus,
+          updatedOrder,
+          restaurantId
+        );
+      }
+
       // 🔥 NUEVO: Enviar recibo cuando el pedido se confirma
       if (oldStatus === 'pending' && newStatus === 'confirmed') {
         try {
           console.log(`📄 Enviando recibo para orden ${orderId}...`);
           
-          // Obtener datos del restaurante
+          // 🔥 CORRECCIÓN: Carga perezosa para romper el ciclo de dependencia
+          // (orderService -> botService -> configService -> botService)
           const configBotService = require('../bot/services/configBotService');
           const receiptService = require('./receiptService');
           const botService = require('./botService');
-          
+
           const restaurantData = await configBotService.getRestaurantData(restaurantId);
           const bot = botService.getBot(restaurantId);
           
@@ -150,7 +165,6 @@ class OrderService {
             
             if (autoSendReceipt) {
               // Enviar recibo directamente
-              const updatedOrder = await this.getOrder(restaurantId, orderId);
               const receiptHtml = receiptService.generateHtmlReceipt(updatedOrder, restaurantData);
               const receiptBuffer = Buffer.from(receiptHtml, 'utf-8');
               const orderNumber = updatedOrder.orderNumber || orderId.substring(0, 6);
@@ -192,38 +206,6 @@ class OrderService {
 
       console.log(`✅ Orden ${orderId} actualizada: ${oldStatus} → ${newStatus}`);
 
-      // 🔥 ENVIAR NOTIFICACIÓN AUTOMÁTICA AL CLIENTE
-      // Solo si el estado realmente cambió
-      if (oldStatus !== newStatus) {
-        try {
-          await telegramNotificationService.notifyUserOfStatusChange(
-            currentOrder.customer.telegramId, // 1. telegramId
-            newStatus,                        // 2. newStatus
-            { id: orderId, ...currentOrder }, // 3. orderData (¡con el ID!)
-            restaurantId                      // 4. restaurantId
-          );
-        } catch (notifError) {
-          console.error('Error enviando notificación (no crítico):', notifError);
-          // No lanzar error - la actualización del pedido fue exitosa
-        }
-      }
-
-      // Publicar actualización en Redis para SSE
-      try {
-        const { publisher } = require('../config/redisClient');
-        const SSE_CHANNEL = 'orders_channel';
-        
-        const updatedOrder = await this.getOrder(restaurantId, orderId);
-        const message = JSON.stringify({ 
-          type: 'order_update', 
-          payload: updatedOrder 
-        });
-        await publisher.publish(SSE_CHANNEL, message);
-        console.log(`[OrderService] Publicado 'order_update' en ${SSE_CHANNEL}`);
-      } catch (sseError) {
-        console.error('[OrderService] Error publicando actualización en Redis:', sseError);
-      }
-
       return { success: true, orderId, newStatus };
 
     } catch (error) {
@@ -262,7 +244,7 @@ class OrderService {
     }
     
     const doc = snapshot.docs[0];
-    return { id: doc.id, ...doc.data() };
+    return { id: doc.id, restaurantId: restaurantId, ...doc.data() };
   }
 
   /**

@@ -23,14 +23,18 @@ function getNotificationPreferenceMessage(choice) {
 function getOrderStatusKeyboard(order, restaurantId, orderId) {
     const actionButtons = [];
     
-    // Lógica para añadir el botón de cancelar solo si el pedido está pendiente
-    if (order.status === 'pending') {
-        actionButtons.push([Markup.button.callback('❌ Cancelar Pedido', `cancel_order_${restaurantId}_${orderId}`)]);
+    // Si el pedido está entregado, solo mostramos el botón de ver recibo.
+    if (order.status === 'delivered') {
+        actionButtons.push([Markup.button.callback('🧾 Ver Recibo', `show_receipt_${restaurantId}_${orderId}`)]);
+    } else {
+        // Para otros estados, mostramos los botones correspondientes.
+        if (order.status === 'pending') {
+            actionButtons.push([Markup.button.callback('❌ Cancelar Pedido', `cancel_order_${restaurantId}_${orderId}`)]);
+        }
+        actionButtons.push([Markup.button.callback('🔄 Actualizar', `refresh_order_${restaurantId}_${orderId}`)]);
+        actionButtons.push([Markup.button.callback('🧾 Ver Recibo', `show_receipt_${restaurantId}_${orderId}`)]);
+        actionButtons.push([Markup.button.callback('📞 Contactar', 'show_info')]);
     }
-
-    actionButtons.push([Markup.button.callback('🔄 Actualizar', `refresh_order_${restaurantId}_${orderId}`)]);
-    actionButtons.push([Markup.button.callback('🧾 Ver Recibo', `show_receipt_${restaurantId}_${orderId}`)]);
-    actionButtons.push([Markup.button.callback('📞 Contactar', 'show_info')]);
 
     return Markup.inlineKeyboard(actionButtons);
 }
@@ -42,7 +46,7 @@ function getCancelOrderRequestMessage(restaurantId, orderId) {
     const message = `❌ *¿Seguro que quieres cancelar el pedido #${orderId.substring(0, 6)}?*\n\nEsta acción no se puede deshacer.`;
     const keyboard = Markup.inlineKeyboard([
         [Markup.button.callback('✅ Sí, Cancelar', `confirm_cancel_${restaurantId}_${orderId}`)],
-        [Markup.button.callback('« Volver', `refresh_order_${restaurantId}_${orderId}`)]
+        [Markup.button.callback('« Volver', `s_o_s_${restaurantId}_${orderId}`)]
     ]);
     return { message, keyboard };
 }

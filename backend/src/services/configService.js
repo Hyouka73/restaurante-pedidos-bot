@@ -121,6 +121,7 @@ class ConfigService {
   async updateAvailability(restaurantId, status, reason, updatedBy = 'system') {
     if (status === 'open') {
       try {
+        // 🔥 CORRECCIÓN: Carga perezosa para romper el ciclo de dependencia.
         const botService = require('./botService');
         await this.enableBot(restaurantId);
         console.log(`[configService] Iniciando bot para ${restaurantId}`);

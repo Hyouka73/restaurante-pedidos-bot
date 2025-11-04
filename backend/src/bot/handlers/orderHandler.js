@@ -147,10 +147,13 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
     }
     const contactPhone = ctx.message.contact.phone_number;
     if (contactPhone) {
+      // 🔥 Guardar el teléfono en la base de datos para futuros pedidos
+      await telegramUserService.updateUserPhone(userId, contactPhone);
       await ctx.reply(`📞 ¡Número de contacto recibido!`, { reply_markup: { remove_keyboard: true } });
       session.customerPhone = contactPhone;
-      // Iniciar confirmación (isEdit = false, porque es un mensaje nuevo)
-      await askForPhone(ctx, session, { id: userId }, restaurantId, false); 
+      // 🔥 CORRECCIÓN: Avanzar directamente al siguiente paso
+      session.step = SESSION_STATES.SELECTING_PAYMENT;
+      await askPaymentMethod(ctx, session, restaurantId, false);
     } else {
       await ctx.reply('No se pudo extraer el número. Por favor, ingrésalo manualmente.');
       const userInfo = await telegramUserService.getUserInfo(userId);
@@ -168,8 +171,13 @@ async function handleTextMessage(ctx, userId, restaurantId, features) {
         return;
       }
       session.customerPhone = text;
-      // Llama a askForPhone para iniciar la confirmación
-      await askForPhone(ctx, session, { id: userId }, restaurantId, false);
+
+      // 🔥 Guardar el teléfono en la base de datos para futuros pedidos
+      await telegramUserService.updateUserPhone(userId, text);
+
+      // 🔥 CORRECCIÓN: Avanzar directamente al siguiente paso
+      session.step = SESSION_STATES.SELECTING_PAYMENT;
+      await askPaymentMethod(ctx, session, restaurantId, false);
       break;
     
     // ... (otros casos como WAITING_ADDRESS, WAITING_NAME)
@@ -221,33 +229,24 @@ async function askForPhone(ctx, session, userInfo, restaurantId, isEdit = false)
     return;
   }
   
-  const existingPhone = session.customerPhone || userInfo?.phone;
+  // 🔥 LÓGICA MEJORADA: Prioriza el teléfono guardado en la base de datos.
+  const savedPhone = userInfo?.phone;
   let message, keyboard;
 
-  if (existingPhone) {
-    // Confirmar teléfono existente
-    console.log(`[askForPhone] Teléfono encontrado: ${existingPhone}`);
-    session.step = SESSION_STATES.CONFIRMING_PHONE;
-    session.customerPhone = existingPhone;
-    
-    ({ message, keyboard } = orderKeyboards.getConfirmPhoneMessage(existingPhone));
-    const options = { parse_mode: 'Markdown', ...keyboard };
-    if (isEdit) {
-      await ctx.editMessageText(message, options);
-    } else {
-      await ctx.reply(message, options);
-    }
-
+  if (savedPhone) {
+    // Si ya hay un teléfono guardado, lo usamos directamente sin preguntar.
+    console.log(`[askForPhone] Usando teléfono guardado: ${savedPhone}`);
+    session.customerPhone = savedPhone;
+    session.step = SESSION_STATES.SELECTING_PAYMENT;
+    await askPaymentMethod(ctx, session, restaurantId, isEdit);
   } else {
-    // Pedir teléfono
+    // Si no hay teléfono guardado, lo solicitamos.
     console.log('[askForPhone] No se encontró teléfono. Solicitando...');
     session.step = SESSION_STATES.WAITING_PHONE;
     ({ message, keyboard } = orderKeyboards.getAskForPhoneMessage());
     
     const options = { parse_mode: 'Markdown', ...keyboard };
     if (isEdit) {
-      // No se puede editar un mensaje para añadir un teclado de "contactRequest".
-      // Solución: Borrar el mensaje anterior y enviar uno nuevo para simular una edición.
       try {
         await ctx.deleteMessage();
       } catch (e) {

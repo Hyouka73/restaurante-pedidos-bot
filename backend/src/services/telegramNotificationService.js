@@ -16,68 +16,45 @@ class TelegramNotificationService {
       return;
     }
 
-    let restaurantName = 'el restaurante';
-    if (restaurantId) {
-        const restaurantDoc = await db.collection('restaurants').doc(restaurantId).get();
-        if (restaurantDoc.exists) {
-            restaurantName = restaurantDoc.data().info.name;
-        }
-    }
+    // Importamos formatOrderStatus aquí para evitar problemas de dependencia circular
+    const { formatOrderStatus } = require('../bot/keyboards/myOrderKeyboards');
+    const { getOrderStatusKeyboard } = require('../bot/keyboards/notificationKeyboards');
 
-    const orderIdShort = orderData.orderNumber || orderData.id.substring(0, 8).toUpperCase();
-    let message = '';
-
-    const formatItems = (items) => {
-      if (!items || items.length === 0) return 'No hay artículos en este pedido.';
-      return items.map(item => `- ${item.name} (x${item.quantity}) - ${item.price.toFixed(2)}`).join('\n');
-    };
-
-    // Genera mensajes basados en el estado
-    switch (newStatus) {
-      case 'confirmed':
-        message = `✅ ¡Tu pedido #${orderIdShort} ha sido *confirmado* por ${restaurantName}!\n\nPronto comenzarán a prepararlo.`;
-        break;
-      
-      case 'preparing':
-        message = `🧑‍🍳 ¡Tu pedido #${orderIdShort} ya se está *preparando*!`;
-        break;
-
-      case 'ready':
-        if (orderData.deliveryType === 'pickup') {
-          message = `🎉 ¡Tu pedido #${orderIdShort} está *listo para recoger*!\n\nPuedes pasar por él a ${restaurantName}.`;
-        } else {
-          message = `✅ ¡Tu pedido #${orderIdShort} está *listo*!\n\nEstamos preparando tu envío. Te notificaremos cuando salga a reparto.`;
-        }
-        break;
-
-      case 'delivering': // NUEVO ESTADO
-        const itemsSummary = formatItems(orderData.items);
-        const address = orderData.info?.location?.formatted_address || orderData.customer?.address || 'Dirección no especificada';
-        message = `🚚 ¡Tu pedido #${orderIdShort} ha salido a reparto!\n\n*Resumen de tu pedido:*\n${itemsSummary}\n\n*Dirección de entrega:*\n${address}\n\nTotal: ${orderData.total.toFixed(2)}\n\nPronto llegará a tu ubicación.`;
-        break;
-      
-      case 'delivered':
-        message = `🏠 ¡Tu pedido #${orderIdShort} ha sido *entregado*!\n\nMuchas gracias por tu compra en *${restaurantName}*. ¡Disfrútalo! 😊`;
-        break;
-
-      case 'cancelled':
-        message = `❌ Lo sentimos, tu pedido #${orderIdShort} ha sido *cancelado*.`;
-        break;
-      
-      default:
-        // No notificar en otros estados (ej. 'pending')
-        return;
-    }
+    const statusMessage = formatOrderStatus({ ...orderData, status: newStatus });
+    const keyboard = getOrderStatusKeyboard({ ...orderData, status: newStatus }, restaurantId, orderData.id);
 
     try {
-      // Usamos la API de Telegraf para enviar el mensaje directamente al chat del usuario
-      await botInstance.telegram.sendMessage(telegramId, message, {
-        parse_mode: 'Markdown'
+      // Si existe un ID de mensaje anterior, lo borramos para generar una nueva notificación.
+      if (orderData.telegramMessageId) {
+        try {
+          await botInstance.telegram.deleteMessage(telegramId, orderData.telegramMessageId);
+        } catch (deleteError) {
+          // Ignoramos si el mensaje ya fue borrado por el usuario, por ejemplo.
+          console.warn(`No se pudo borrar el mensaje anterior ${orderData.telegramMessageId}: ${deleteError.message}`);
+        }
+      }
+
+      // Siempre enviamos un mensaje nuevo para asegurar la notificación.
+      const sentMessage = await botInstance.telegram.sendMessage(telegramId, statusMessage, {
+        parse_mode: 'Markdown',
+        ...keyboard
       });
-      console.log(`Notificación de estado '${newStatus}' enviada a ${telegramId}`);
+
+      // Guardamos el ID del nuevo mensaje para poder borrarlo en la siguiente actualización.
+      const orderRef = db.collection('restaurants').doc(restaurantId).collection('orders').doc(orderData.id);
+      await orderRef.update({ telegramMessageId: sentMessage.message_id });
+      
+      console.log(`Notificación de estado '${newStatus}' enviada como nuevo mensaje ${sentMessage.message_id} a ${telegramId}`);
+
+      // Si el pedido se marca como entregado, enviamos un mensaje de agradecimiento.
+      if (newStatus === 'delivered') {
+        await botInstance.telegram.sendMessage(telegramId, '¡Gracias por tu compra! Esperamos verte pronto. 😊');
+      }
+
     } catch (error) {
       console.error(`Error al enviar notificación a ${telegramId}:`, error.message);
-      // Manejar errores (ej. el usuario bloqueó el bot)
+      // Aquí podríamos añadir una lógica para reintentar o notificar al admin.
+      // Por ahora, solo registramos el error para no detener el flujo.
     }
   }
 }

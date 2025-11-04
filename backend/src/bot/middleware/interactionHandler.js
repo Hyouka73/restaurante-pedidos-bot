@@ -232,15 +232,23 @@ module.exports = async (ctx) => {
         const suggestions = rawSuggestions.filter(s => s && s.available !== false);
         if (suggestions.length > 0) {
           
-          // 1. Recopilar todos los IDs de las sugerencias
-          const suggestionIds = suggestions.map(s => s.id);
-          // 2. Crear un callback que contenga TODOS los IDs, separados por ':'
-          const addAllCallback = `add_suggestion_group:${suggestionIds.join(':')}`;
+          // 🔥 --- INICIO DE LA CORRECCIÓN --- 🔥
+          // 1. Generar un ID único y corto para este grupo de sugerencias
+          const crypto = require('crypto');
+          const suggestionGroupId = crypto.randomBytes(6).toString('hex');
 
-          // 3. Los botones individuales AHORA llaman al callback grupal
+          // 2. Guardar los IDs de las sugerencias en la sesión del usuario
+          const suggestionIds = suggestions.map(s => s.id);
+          if (!ctx.session.suggestionGroups) ctx.session.suggestionGroups = {};
+          ctx.session.suggestionGroups[suggestionGroupId] = suggestionIds;
+
+          // 3. El callback ahora solo contiene el ID corto del grupo
+          const addAllCallback = `add_suggestion_group:${suggestionGroupId}`;
+
           const suggestionButtons = suggestions.map(s => 
             Markup.button.callback(`➕ ${s.name} ($${s.price})`, addAllCallback)
           );
+          // 🔥 --- FIN DE LA CORRECCIÓN --- 🔥
           
           suggestionButtons.push(Markup.button.callback('❌ No, gracias', 'delete_message'));
           await ctx.reply(`💡 Ya que llevas *${item.name}*, quizás te interese también:`, {
@@ -253,17 +261,31 @@ module.exports = async (ctx) => {
     }
     
     // 🔥 --- AÑADIR ESTE NUEVO BLOQUE --- 🔥
-    if (callbackData.startsWith('add_suggestion_group:')) {
-      // Obtiene los IDs de la callback (ej. ['id1', 'id2', 'id3'])
-      const idsToAdd = callbackData.split(':').slice(1); 
+    if (callbackData.startsWith('add_suggestion_group:')) { // [cite: 298]
+      // 🔥 --- LÓGICA CORREGIDA --- 🔥
+      // 1. Extraer el ID corto del grupo de sugerencias
+      const suggestionGroupId = callbackData.split(':')[1];
       
+      // 2. Recuperar la lista completa de IDs desde la sesión
+      const idsToAdd = ctx.session.suggestionGroups?.[suggestionGroupId];
+
+      // 3. Limpiar la sesión para no acumular datos
+      if (ctx.session.suggestionGroups && ctx.session.suggestionGroups[suggestionGroupId]) {
+        delete ctx.session.suggestionGroups[suggestionGroupId];
+      }
+      // 🔥 --- FIN DE LÓGICA CORREGIDA --- 🔥
+
       if (idsToAdd.length > 0) {
         await ctx.answerCbQuery(`Añadiendo ${idsToAdd.length} sugerencias...`);
         
         // Llama a la función que ya tienes en cartHandler
         await cartHandler.handleAddSuggestionGroup(ctx, idsToAdd, userId, restaurantId);
         
-        // 🔥 CORRECCIÓN: Simplemente mostramos el carrito. La nueva lógica en handleViewCart se encargará de editar el mensaje correcto.
+        // 🔥 CORRECCIÓN: Borramos el mensaje de sugerencia y mostramos el carrito en un mensaje nuevo.
+        // Esto rompe el ciclo de edición que causaba que la lógica de cross-sell se disparara de nuevo.
+        try {
+          await ctx.deleteMessage();
+        } catch (e) { /* No hacer nada si falla */ }
         await cartHandler.handleViewCart(ctx, userId);
       } else {
         await ctx.answerCbQuery('⚠️ No se encontraron sugerencias.', { show_alert: true });
