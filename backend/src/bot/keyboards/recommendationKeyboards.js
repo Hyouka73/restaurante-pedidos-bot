@@ -45,25 +45,31 @@ function getRecommendationPageLayout(items, page) {
 }
 
 function getQuestionMessage(data) {
-    const buttons = data.opciones.map(opt =>
+    const buttons = data.opciones.map(opt => 
         Markup.button.callback(opt.texto_boton, `rec_add:${opt.filtro_a_agregar}`)
     );
-    return { message: data.texto, keyboard: Markup.inlineKeyboard(buttons, { columns: 2 }) };
+
+    // Convertir a array de arrays para el layout
+    const buttonGrid = buttons.map(btn => [btn]);
+
+    // Añadir botón de volver
+    buttonGrid.push([Markup.button.callback('⬅️ Volver', 'rec_back')]);
+
+    return { message: data.texto, keyboard: Markup.inlineKeyboard(buttonGrid) };
 }
 
 function getNoMoreOptionsMessage(text) {
     const message = text + '\n\nNo hay más opciones. ¿Buscamos con los filtros actuales?';
     const keyboard = Markup.inlineKeyboard([
-        Markup.button.callback('Sí, buscar ahora', 'rec_add:final:true')
+        [Markup.button.callback('Sí, buscar ahora', 'rec_add:final:true')],
+        [Markup.button.callback('⬅️ Volver', 'rec_back')]
     ]);
     return { message, keyboard };
 }
 
 function getNoResultsMessage() {
     const message = '🤔 No encontré productos que coincidan...';
-    const keyboard = Markup.inlineKeyboard([
-        [Markup.button.callback('💡 Sí, empezar de nuevo', 'start_recommendation')]
-    ]);
+    const keyboard = Markup.inlineKeyboard([ [Markup.button.callback('💡 Sí, empezar de nuevo', 'start_recommendation')], [Markup.button.callback('⬅️ Volver', 'rec_back')] ]);
     return { message, keyboard };
 }
 
