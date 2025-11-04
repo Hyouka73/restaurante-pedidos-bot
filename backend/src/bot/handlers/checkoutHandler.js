@@ -66,12 +66,8 @@ async function handlePickup(ctx, userId, restaurantId) {
 
     await ctx.answerCbQuery('✅ Recoger en Tienda');
 
-    const { message, keyboard } = cartKeyboards.getPickupMessage(restaurantData);
-
-    await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
-
     const userInfo = await telegramUserService.getUserInfo(userId);
-    await askForPhone(ctx, session, userInfo, restaurantId);
+    await askForPhone(ctx, session, userInfo, restaurantId, true);
 }
 
 async function handlePaymentSelection(ctx, callbackData, userId, restaurantId) {
@@ -140,8 +136,8 @@ async function handleFinalConfirmation(ctx, userId, restaurantId) {
     try {
         const subtotal = session.subtotal || 0;
         const deliveryFee = session.delivery?.fee || 0;
-        const total = session.total || (subtotal + deliveryFee);
         const discountAmount = session.discount?.amount || 0;
+        const orderTotal = session.total || (subtotal + deliveryFee);
 
         const orderService = require('../../services/orderService');
 
@@ -152,7 +148,7 @@ async function handleFinalConfirmation(ctx, userId, restaurantId) {
             subtotal,
             deliveryFee,
             discount: discountAmount,
-            total,
+            total: orderTotal,
             deliveryType: session.deliveryType,
             paymentMethod: session.paymentMethod?.id,
             channel: 'telegram',
@@ -166,11 +162,9 @@ async function handleFinalConfirmation(ctx, userId, restaurantId) {
 
         await telegramUserService.updateUserCommands(ctx, restaurantId);
 
-        const { message, keyboard, notificationMessage, notificationKeyboard } = cartKeyboards.getOrderConfirmedMessage(order, total);
+        const { notificationMessage, notificationKeyboard } = cartKeyboards.getOrderConfirmedMessage(order, orderTotal);
 
-        await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
-        await ctx.reply(notificationMessage, notificationKeyboard);
-
+        await ctx.editMessageText(notificationMessage, notificationKeyboard);
     } catch (error) {
         console.error('❌ Error creando pedido:', error);
         session.step = SESSION_STATES.FINAL_CONFIRMATION;

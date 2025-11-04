@@ -226,13 +226,22 @@ module.exports = async (ctx) => {
       // Lógica de Cross-Sell (Venta Cruzada)
       const itemId = callbackData.split('_')[2];
       const item = await menuService.getMenuItem(restaurantId, itemId);
-      if (item && item.sugerir_items && item.sugerir_items.length > 0) {
-        // ... (lógica de sugerencias) ...
+      if (item && item.sugerir_items && item.sugerir_items.length > 0) { // [cite: 61-62]
         const suggestionPromises = item.sugerir_items.map(suggId => menuService.getMenuItem(restaurantId, suggId));
         const rawSuggestions = await Promise.all(suggestionPromises);
         const suggestions = rawSuggestions.filter(s => s && s.available !== false);
         if (suggestions.length > 0) {
-          const suggestionButtons = suggestions.map(s => Markup.button.callback(`➕ ${s.name} ($${s.price})`, `add_item_${s.id}`));
+          
+          // 1. Recopilar todos los IDs de las sugerencias
+          const suggestionIds = suggestions.map(s => s.id);
+          // 2. Crear un callback que contenga TODOS los IDs, separados por ':'
+          const addAllCallback = `add_suggestion_group:${suggestionIds.join(':')}`;
+
+          // 3. Los botones individuales AHORA llaman al callback grupal
+          const suggestionButtons = suggestions.map(s => 
+            Markup.button.callback(`➕ ${s.name} ($${s.price})`, addAllCallback)
+          );
+          
           suggestionButtons.push(Markup.button.callback('❌ No, gracias', 'delete_message'));
           await ctx.reply(`💡 Ya que llevas *${item.name}*, quizás te interese también:`, {
             parse_mode: 'Markdown',
@@ -240,12 +249,32 @@ module.exports = async (ctx) => {
           });
         }
       }
-      // Limpiar mensaje de sugerencia si se hizo clic en uno
-      if (messageText.includes('quizás te interese también:')) {
-        try { await ctx.deleteMessage(); } catch (e) { /* ... */ }
+      return; // Importante para no continuar al siguiente if
+    }
+    
+    // 🔥 --- AÑADIR ESTE NUEVO BLOQUE --- 🔥
+    if (callbackData.startsWith('add_suggestion_group:')) {
+      // Obtiene los IDs de la callback (ej. ['id1', 'id2', 'id3'])
+      const idsToAdd = callbackData.split(':').slice(1); 
+      
+      if (idsToAdd.length > 0) {
+        await ctx.answerCbQuery(`Añadiendo ${idsToAdd.length} sugerencias...`);
+        
+        // Llama a la función que ya tienes en cartHandler
+        await cartHandler.handleAddSuggestionGroup(ctx, idsToAdd, userId, restaurantId);
+        
+        // Borramos el mensaje de sugerencia para que no quede residual
+        try { await ctx.deleteMessage(); } catch(e) { /* No hacer nada si falla */ }
+        
+        // Mostramos el carrito actualizado para que el usuario vea los cambios
+        await cartHandler.handleViewCart(ctx, userId);
+      } else {
+        await ctx.answerCbQuery('⚠️ No se encontraron sugerencias.', { show_alert: true });
       }
       return;
     }
+    // 🔥 --- FIN DEL NUEVO BLOQUE --- 🔥
+
     if (callbackData.startsWith('item_info_')) {
       const itemId = callbackData.split('_')[2];
       await showItemInfo(ctx, itemId, restaurantId);

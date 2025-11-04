@@ -176,6 +176,62 @@ async function handleClearCart(ctx, userId) {
     }
 }
 
+/**
+ * 🔥 NUEVA FUNCIÓN
+ * Añade un grupo de items (de sugerencias) al carrito.
+ */
+async function handleAddSuggestionGroup(ctx, itemIds, userId, restaurantId) {
+    if (!ctx.session?.cart) {
+        ctx.session.cart = {
+            restaurantId,
+            items: [],
+            step: SESSION_STATES.SELECTING_ITEM,
+            customerName: ctx.from.first_name,
+            createdAt: new Date().toISOString()
+        };
+    }
+    const session = ctx.session.cart;
+    const menuData = await menuService.getMenuForBot(restaurantId);
+    if (!Array.isArray(menuData)) {
+        console.error('Error al cargar menú en handleAddSuggestionGroup');
+        return;
+    }
+
+    let itemsAddedNames = [];
+
+    for (const itemId of itemIds) {
+        const item = menuData.find(i => i.id === itemId);
+        if (!item || item.available === false) {
+            console.warn(`Item sugerido ${itemId} no disponible.`);
+            continue; 
+        }
+
+        const existingItem = session.items.find(i => i.id === itemId);
+        if (existingItem) {
+            existingItem.quantity += 1;
+        } else {
+            session.items.push({
+                id: item.id,
+                name: item.name,
+                price: item.price,
+                quantity: 1,
+                type: item.type || 'item'
+            });
+        }
+        itemsAddedNames.push(item.name);
+    }
+    
+    // Aplicar descuentos (si aplica)
+    const { cart: updatedCart, notification } = await DiscountRuleService.applyDynamicCombos(session, restaurantId);
+    ctx.session.cart = updatedCart;
+    
+    if (notification && notification.title) {
+         await ctx.reply(`*${notification.title}*\n${notification.text}`, { parse_mode: 'Markdown' });
+    }
+    
+    console.log(`Sugerencias añadidas: ${itemsAddedNames.join(', ')}`);
+}
+
 module.exports = {
     handleAddItem,
     handleItemInfo,
@@ -183,5 +239,6 @@ module.exports = {
     handleQuantityChange,
     handleRemoveItem,
     handleConfirmClearCart,
-    handleClearCart
+    handleClearCart,
+    handleAddSuggestionGroup // 🔥 Exportar la nueva función
 };
