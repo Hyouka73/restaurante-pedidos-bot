@@ -40,8 +40,7 @@ async function getProjectionData(restaurantId) {
   }
 
   // Cache is stale or doesn't exist, recalculate
-  const ordersSnapshot = await db.collection('orders')
-    .where('restaurantId', '==', restaurantId)
+  const ordersSnapshot = await db.collection('restaurants').doc(restaurantId).collection('orders')
     .where('status', 'in', ['delivered', 'completed'])
     .orderBy('createdAt', 'asc')
     .get();
@@ -88,7 +87,7 @@ async function getProjectionData(restaurantId) {
 }
 
 async function getDashboardStats(restaurantId) {
-  const ordersRef = db.collection('orders').where('restaurantId', '==', restaurantId);
+  const ordersRef = db.collection('restaurants').doc(restaurantId).collection('orders');
   const snapshot = await ordersRef.get();
 
   if (snapshot.empty) {
