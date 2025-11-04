@@ -246,9 +246,14 @@ async function askForPhone(ctx, session, userInfo, restaurantId, isEdit = false)
     
     const options = { parse_mode: 'Markdown', ...keyboard };
     if (isEdit) {
-        // No se puede editar un mensaje de texto para añadir un teclado de "contactRequest"
-        // así que siempre enviamos uno nuevo.
-        await ctx.reply(message, options);
+      // No se puede editar un mensaje para añadir un teclado de "contactRequest".
+      // Solución: Borrar el mensaje anterior y enviar uno nuevo para simular una edición.
+      try {
+        await ctx.deleteMessage();
+      } catch (e) {
+        console.warn('No se pudo borrar el mensaje anterior al pedir el teléfono.');
+      }
+      await ctx.reply(message, options);
     } else {
         await ctx.reply(message, options);
     }

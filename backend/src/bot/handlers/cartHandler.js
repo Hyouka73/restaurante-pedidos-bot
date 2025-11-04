@@ -67,23 +67,39 @@ async function handleViewCart(ctx, userId) {
     const session = ctx.session?.cart;
 
     if (!session || session.items.length === 0) {
-        await ctx.answerCbQuery();
+        if (ctx.callbackQuery) await ctx.answerCbQuery();
         const { message, keyboard } = cartKeyboards.getEmptyCartMessage();
         try {
             await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
         } catch {
             await ctx.reply(message, { parse_mode: 'Markdown', ...keyboard });
         }
+        if (session) delete session.lastCartMessageId; // Limpiar si el carrito se vacía
         return;
     }
 
     const { message, keyboard } = cartKeyboards.getCartViewMessage(session);
+    const options = { parse_mode: 'Markdown', ...keyboard };
 
-    await ctx.answerCbQuery();
+    if (ctx.callbackQuery) await ctx.answerCbQuery();
+
+    // 🔥 LÓGICA MEJORADA: Intentar editar el mensaje anterior del carrito si existe
+    if (session.lastCartMessageId) {
+        try {
+            await ctx.telegram.editMessageText(ctx.chat.id, session.lastCartMessageId, null, message, options);
+            return; // Si tiene éxito, no hacemos nada más
+        } catch (e) {
+            console.warn(`No se pudo editar el mensaje del carrito anterior (${session.lastCartMessageId}). Se enviará uno nuevo.`);
+        }
+    }
+
+    // Fallback: si no hay mensaje anterior o falló la edición, edita el actual o envía uno nuevo
     try {
-        await ctx.editMessageText(message, { parse_mode: 'Markdown', ...keyboard });
-    } catch {
-        await ctx.reply(message, { parse_mode: 'Markdown', ...keyboard });
+        const msg = await ctx.editMessageText(message, options);
+        session.lastCartMessageId = msg.message_id;
+    } catch (e) {
+        const msg = await ctx.reply(message, options);
+        session.lastCartMessageId = msg.message_id;
     }
 }
 
@@ -231,6 +247,7 @@ async function handleAddSuggestionGroup(ctx, itemIds, userId, restaurantId) {
     
     console.log(`Sugerencias añadidas: ${itemsAddedNames.join(', ')}`);
 }
+
 
 module.exports = {
     handleAddItem,

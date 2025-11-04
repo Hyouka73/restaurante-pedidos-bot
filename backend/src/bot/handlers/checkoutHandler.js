@@ -162,7 +162,7 @@ async function handleFinalConfirmation(ctx, userId, restaurantId) {
 
         await telegramUserService.updateUserCommands(ctx, restaurantId);
 
-        const { notificationMessage, notificationKeyboard } = cartKeyboards.getOrderConfirmedMessage(order, orderTotal);
+        const { notificationMessage, notificationKeyboard } = cartKeyboards.getOrderConfirmedMessage(order, orderTotal, restaurantId);
 
         await ctx.editMessageText(notificationMessage, notificationKeyboard);
     } catch (error) {

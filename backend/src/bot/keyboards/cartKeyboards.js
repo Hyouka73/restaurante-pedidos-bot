@@ -140,23 +140,23 @@ function getFinalConfirmationMessage(session) {
     return { message: confirmMessage, keyboard };
 }
 
-function getOrderConfirmedMessage(order, total) {
+function getOrderConfirmedMessage(order, total, restaurantId) {
     const orderId = order.orderNumber || order.id.substring(0, 8).toUpperCase();
     const message = `✅ *¡Pedido Enviado!*\n\n` +
         `📝 Pedido #${orderId}\n` +
         `💰 Total: *$${total.toFixed(2)}*\n` +
         `⏳ Esperando confirmación del restaurante...\n\n` +
         `Te notificaremos cuando tu pedido sea confirmado.`;
-
+    
     const keyboard = Markup.inlineKeyboard([
-        [Markup.button.callback('🔎 Ver Estado', `s_o_s_${order.restaurantId}_${order.id}`)],
+        [Markup.button.callback('🔎 Ver Estado', `s_o_s_${restaurantId}_${order.id}`)],
         [Markup.button.callback('🏠 Inicio', 'back_to_start')]
     ]);
 
     const notificationMessage = '🔔 ¿Quieres recibir notificaciones cuando tu pedido cambie de estado?';
     const notificationKeyboard = Markup.inlineKeyboard([
-        [Markup.button.callback('👍 Sí, notificarme', `not_y_${order.restaurantId}_${order.id}`)],
-        [Markup.button.callback('👎 No, gracias', `not_n_${order.restaurantId}_${order.id}`)]
+        [Markup.button.callback('👍 Sí, notificarme', `not_y_${restaurantId}_${order.id}`)],
+        [Markup.button.callback('👎 No, gracias', `not_n_${restaurantId}_${order.id}`)]
     ]);
 
     return { message, keyboard, notificationMessage, notificationKeyboard };

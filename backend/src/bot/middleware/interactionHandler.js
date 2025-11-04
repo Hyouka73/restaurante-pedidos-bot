@@ -263,10 +263,7 @@ module.exports = async (ctx) => {
         // Llama a la función que ya tienes en cartHandler
         await cartHandler.handleAddSuggestionGroup(ctx, idsToAdd, userId, restaurantId);
         
-        // Borramos el mensaje de sugerencia para que no quede residual
-        try { await ctx.deleteMessage(); } catch(e) { /* No hacer nada si falla */ }
-        
-        // Mostramos el carrito actualizado para que el usuario vea los cambios
+        // 🔥 CORRECCIÓN: Simplemente mostramos el carrito. La nueva lógica en handleViewCart se encargará de editar el mensaje correcto.
         await cartHandler.handleViewCart(ctx, userId);
       } else {
         await ctx.answerCbQuery('⚠️ No se encontraron sugerencias.', { show_alert: true });
