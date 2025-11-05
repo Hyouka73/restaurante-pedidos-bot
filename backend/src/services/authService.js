@@ -1,7 +1,52 @@
-// backend/src/services/authService.js
-const { db, admin } = require('../config/firebase'); // Asegúrate de importar 'admin' también si se usa
+const { db, admin } = require('../config/firebase');
+const axios = require('axios');
 
 class AuthService {
+
+  async login(email, password) {
+    const apiKey = process.env.FIREBASE_API_KEY;
+    const firebaseUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`;
+
+    try {
+      const response = await axios.post(firebaseUrl, {
+        email,
+        password,
+        returnSecureToken: true
+      });
+
+      const { localId } = response.data;
+      const userDoc = await db.collection('users').doc(localId).get();
+      if (!userDoc.exists) {
+        throw new Error('User not found in Firestore');
+      }
+
+      const restaurantId = userDoc.data().restaurantId;
+      const restaurantDoc = await db.collection('restaurants').doc(restaurantId).get();
+      if (!restaurantDoc.exists) {
+        throw new Error('Restaurant not found');
+      }
+
+      return {
+        user: { uid: userDoc.id, ...userDoc.data() },
+        restaurant: { id: restaurantDoc.id, ...restaurantDoc.data() }
+      };
+    } catch (error) {
+      if (error.response && error.response.data && error.response.data.error) {
+        const errorCode = error.response.data.error.message;
+        switch (errorCode) {
+          case 'INVALID_PASSWORD':
+          case 'EMAIL_NOT_FOUND':
+            throw new Error('Invalid credentials');
+          default:
+            throw new Error('Error logging in');
+        }
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  // ... (rest of the class remains the same)
 
   // Crear o obtener usuario y su restaurante (método central para registro)
   async createUserWithRestaurant(userData) {

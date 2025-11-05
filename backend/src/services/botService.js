@@ -12,6 +12,7 @@ class BotService {
   }
 
   async initBot(restaurantId) {
+    /*
     try {
       // Si ya existe, retornar
       if (this.bots.has(restaurantId)) {
@@ -84,9 +85,12 @@ class BotService {
       console.error(`Error iniciando bot ${restaurantId}:`, error);
       throw error;
     }
+    */
+    return false;
   }
 
   async _createBotWithRetry(token, restaurantId, maxRetries = 3) {
+    /*
     for (let i = 0; i < maxRetries; i++) {
       try {
         const bot = new Telegraf(token);
@@ -116,9 +120,12 @@ class BotService {
         await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
       }
     }
+    */
+   return null;
   }
 
   async stopBot(restaurantId) {
+    /*
     // Evitar dependencia circular importando aquí
     const configService = require('./configService');
     
@@ -147,6 +154,8 @@ class BotService {
       }
     }
     return false;
+    */
+   return false;
   }
 
   getBot(restaurantId) {

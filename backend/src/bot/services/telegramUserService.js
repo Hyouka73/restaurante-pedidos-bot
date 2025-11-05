@@ -115,6 +115,7 @@ class TelegramUserService {
         
         if (!encryptedToken) continue;
 
+        /*
         try {
           const token = cryptoUtils.decryptToken(encryptedToken);
           
@@ -136,7 +137,7 @@ class TelegramUserService {
           console.error(`Error verificando token para restaurante ${doc.id}:`, tokenError);
           continue;
         }
-      }
+        */
 
       return null;
     } catch (error) {
@@ -151,6 +152,7 @@ class TelegramUserService {
    * @param {object} ctx - Contexto de Telegraf
    * @returns {string|null}
    */
+  /*
   async findRestaurantByCurrentToken(ctx) {
     try {
       // Obtener el token del bot actual desde el proceso
@@ -180,6 +182,7 @@ class TelegramUserService {
       return null;
     }
   }
+  */
 
   /**
    * Método de compatibilidad (deprecado)

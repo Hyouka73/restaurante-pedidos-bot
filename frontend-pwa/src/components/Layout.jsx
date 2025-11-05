@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { signOut } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
+import { logout } from '../services/authService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Menu, ShoppingCart, MessageSquare, 
@@ -197,7 +196,7 @@ const DefaultLayout = ({ children, sidebarOpen, setSidebarOpen, handleLogout, ha
 };
 
 export default function Layout() {
-  const [user, loadingAuth] = useAuthState(auth);
+  const { user, loading: loadingAuth, setUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -310,15 +309,11 @@ export default function Layout() {
   }, [isOpen]);
 
   const handleLogout = useCallback((force = false) => {
-    const logoutAction = async () => {
-      try {
-        await signOut(auth);
-        showAlert('Sesión cerrada exitosamente', 'success', 2000);
-        setTimeout(() => navigate('/login'), 500);
-      } catch (error) {
-        showAlert('Error al cerrar sesión', 'error', 3000);
-        setModalState({ isOpen: false });
-      }
+    const logoutAction = () => {
+      logout();
+      setUser(null);
+      showAlert('Sesión cerrada exitosamente', 'success', 2000);
+      setTimeout(() => navigate('/login'), 500);
     };
 
     if (force) {
@@ -330,9 +325,12 @@ export default function Layout() {
       isOpen: true,
       title: 'Confirmar Cierre de Sesión',
       message: '¿Estás seguro de que deseas cerrar la sesión?',
-      onConfirm: logoutAction
+      onConfirm: () => {
+        logoutAction();
+        setModalState({ isOpen: false });
+      }
     });
-  }, [navigate, showAlert]);
+  }, [navigate, showAlert, setUser]);
 
   const isWithinSchedule = useCallback(() => {
     if (!restaurant?.hours) return false;

@@ -24,11 +24,6 @@ export default function ConfigGeneral() {
   const { showAlert } = useAlert();
   const [currentTab, setCurrentTab] = useState('info');
 
-  // ❌ El estado local y el fetch son redundantes, se eliminan.
-  const [botTokenInput, setBotTokenInput] = useState('');
-  const [updatingToken, setUpdatingToken] = useState(false);
-  const [validatingConnection, setValidatingConnection] = useState(false);
-
   useEffect(() => {
     if (!user) {
       navigate('/login');
@@ -40,45 +35,6 @@ export default function ConfigGeneral() {
       setError('No se pudieron cargar los datos del restaurante. Revisa la consola.');
     }
   }, [user, navigate, config, loadingConfig]);
-
-  const handleUpdateBotToken = async () => {
-    if (!user || !config?.id) return navigate('/login');
-    if (!botTokenInput || botTokenInput.trim().length === 0) {
-      return showAlert('Ingresa el token antes de actualizar', 'warning', 3000);
-    }
-    setUpdatingToken(true);
-    try {
-      const restaurantId = config.id;
-      await api.put(`/config/${restaurantId}/bot-token`, { token: botTokenInput.trim() });
-      setBotTokenInput('');
-      showAlert('Token actualizado correctamente', 'success', 3000);
-    } catch (err) {
-      console.error('Error actualizando token:', err);
-      showAlert('Error actualizando token: ' + err.message, 'error', 5000);
-    } finally {
-      setUpdatingToken(false);
-    }
-  };
-
-  const handleValidateBotToken = async () => {
-    if (!user || !config?.id) return navigate('/login');
-    setValidatingConnection(true);
-    try {
-      const restaurantId = config.id;
-      const res = await api.post(`/config/${restaurantId}/validate-bot-token`, {});
-      if (res && res.botInfo) {
-        const info = res.botInfo;
-        showAlert(`Conectado: @${info.username || info.first_name} (id: ${info.id})`, 'success', 4000);
-      } else {
-        showAlert('Conexión exitosa', 'success', 3000);
-      }
-    } catch (err) {
-      console.error('Error validando token:', err);
-      showAlert('Error validando token: ' + (err.message || err), 'error', 5000);
-    } finally {
-      setValidatingConnection(false);
-    }
-  };
 
   // ✅ Usar el estado de carga del contexto
   if (loadingConfig || !config) {
@@ -96,7 +52,7 @@ export default function ConfigGeneral() {
     { id: 'features', label: 'Características' },
     { id: 'payments', label: 'Métodos Pago' },
     { id: 'commands', label: 'Comandos' },
-    { id: 'bot', label: 'Bot / Token' }
+    //{ id: 'bot', label: 'Bot / Token' }
   ];
 
   const renderCurrentTab = () => {

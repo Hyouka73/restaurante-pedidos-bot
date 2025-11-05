@@ -158,6 +158,7 @@ export default function StepBasicInfo({ formData, setFormData, handleChange, han
       </WizardComponents.WizardCard>
 
       {/* Card de Integración con Telegram */}
+      {/*
       <WizardComponents.WizardCard className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
         <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-5">
           <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
@@ -206,6 +207,7 @@ export default function StepBasicInfo({ formData, setFormData, handleChange, han
           </motion.div>
         )}
       </WizardComponents.WizardCard>
+      */}'
 
       {/* Info Box Final */}
       <WizardComponents.WizardInfoBox icon={Sparkles} variant="warning">
@@ -214,7 +216,7 @@ export default function StepBasicInfo({ formData, setFormData, handleChange, han
           <li>• <strong>Nombre:</strong> Personalizar tu menú</li>
           <li>• <strong>Teléfono:</strong> Contacto con clientes</li>
           <li>• <strong>Ubicación:</strong> Calcular envíos</li>
-          <li>• <strong>Token:</strong> Automatizar pedidos</li>
+          {/* <li>• <strong>Token:</strong> Automatizar pedidos</li> */}
         </ul>
       </WizardComponents.WizardInfoBox>
 

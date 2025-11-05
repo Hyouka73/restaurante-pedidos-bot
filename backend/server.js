@@ -9,11 +9,14 @@ const { session } = require('telegraf');
 const { Redis } = require('@telegraf/session/redis');
 const IORedis = require('ioredis');
 
+const cookieParser = require('cookie-parser');
+
 // ===== CONFIGURACIÓN EXPRESS =====
 const app = express(); 
 
 // Middleware JSON (ANTES de las rutas)
 app.use(express.json()); 
+app.use(cookieParser());
 
 // CORS
 const corsOptions = { 

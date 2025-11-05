@@ -14,6 +14,7 @@ function getKey() {
   return crypto.createHash('sha256').update(secret).digest();
 }
 
+/*
 function encryptToken(plain) {
   try {
     const key = getKey();
@@ -114,10 +115,11 @@ function hmacToken(token) {
   const secret = process.env.TOKEN_SECRET || 'fallback-secret';
   return crypto.createHmac('sha256', secret).update(token).digest('hex');
 }
+*/
 
 module.exports = {
-  encryptToken,
-  decryptToken,
-  hmacToken,
-  validateEncryptedFormat
+  // encryptToken,
+  // decryptToken,
+  // hmacToken,
+  // validateEncryptedFormat
 };

@@ -1,11 +1,9 @@
-// frontend-pwa/src/components/ProtectedRoute.jsx
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext'; // Importar el contexto
 
 export default function ProtectedRoute({ children }) {
-  const [user, loading] = useAuthState(auth);
+  const { user, loading } = useAuth();
   const { loading: loadingContext, error: contextError } = useRestaurant(); // Usar el contexto
   const location = useLocation();
 

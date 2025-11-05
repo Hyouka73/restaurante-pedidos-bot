@@ -1,152 +1,63 @@
-// backend/src/api/routes/auth.js
 const express = require('express');
 const authService = require('../../services/authService');
 const { admin } = require('../../config/firebase');
+const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 
 // --- MIDDLEWARES ---
 
-// Middleware para verificar token de Firebase Auth (NO verifica existencia en Firestore)
-// Este middleware SOLO verifica el token JWT de Firebase Auth.
-const verifyFirebaseToken = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1]; // Bearer <token>
+const verifyApiToken = async (req, res, next) => {
+  const token = req.cookies.token;
   if (!token) {
-    return res.status(401).json({ error: 'Token no proporcionado (verifyFirebaseToken)' });
+    return res.status(401).json({ error: 'Token no proporcionado' });
   }
   try {
-    const decodedToken = await admin.auth().verifyIdToken(token);
-    req.user = decodedToken; // Agrega los datos del usuario al request
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
     next();
   } catch (error) {
-    console.error("Error verificando token Firebase:", error);
-    res.status(401).json({ error: 'Token inválido (verifyFirebaseToken)' });
-  }
-};
-
-// Middleware para verificar token Y existencia en Firestore
-// Este middleware verifica el token y ADEMÁS exige que el perfil en Firestore exista.
-const verifyTokenAndProfile = async (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1]; // Bearer <token>
-  if (!token) {
-    return res.status(401).json({ error: 'Token no proporcionado (verifyTokenAndProfile)' });
-  }
-  try {
-    const decodedToken = await admin.auth().verifyIdToken(token);
-    req.user = decodedToken; // Agrega los datos del usuario al request
-
-    // Verificar si el perfil de usuario existe en Firestore
-    const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: 'Usuario no encontrado en la base de datos (verifyTokenAndProfile).' });
-    }
-    
-    const userData = userDoc.data();
-    const restaurantId = userData.restaurantId;
-    req.restaurantId = restaurantId; // Adjuntar ID para compatibilidad
-
-    // Obtener y adjuntar los datos completos del restaurante
-    const restaurantDoc = await admin.firestore().collection('restaurants').doc(restaurantId).get();
-    if (!restaurantDoc.exists) {
-      return res.status(404).json({ error: 'Restaurante asociado no encontrado (verifyTokenAndProfile).' });
-    }
-    req.restaurant = { id: restaurantDoc.id, ...restaurantDoc.data() };
-
-    next();
-  } catch (error) {
-    console.error("Error verificando token o perfil:", error);
-    res.status(401).json({ error: 'Token inválido o perfil no encontrado (verifyTokenAndProfile)' });
+    res.status(401).json({ error: 'Token inválido' });
   }
 };
 
 // --- RUTAS ---
 
-// POST /api/auth/ensure-profile - Crear perfil si no existe
-// Esta ruta NO usa verifyTokenAndProfile, sino verifyFirebaseToken
-// porque su propósito es CREAR el perfil si no existe.
-router.post('/ensure-profile', verifyFirebaseToken, async (req, res) => {
+router.post('/login', async (req, res) => {
+  const { email, password } = req.body;
   try {
-    const { uid, email, displayName } = req.user; // Obtenido del token verificado
+    const { user, restaurant } = await authService.login(email, password);
+    const token = jwt.sign({ uid: user.uid, restaurantId: restaurant.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-    console.log(`[ensure-profile] Solicitud recibida para UID: ${uid}`);
-
-    // Verificar si el perfil de usuario existe
-    const userDocRef = admin.firestore().collection('users').doc(uid);
-    const userDoc = await userDocRef.get();
-
-    if (!userDoc.exists) {
-      console.log(`[ensure-profile] Usuario ${uid} no encontrado, creando...`);
-      // Si no existe, crearlo (y el restaurante asociado)
-      await authService.createUserWithRestaurant({
-        uid,
-        email,
-        displayName: displayName || email.split('@')[0]
-      });
-      console.log(`[ensure-profile] Perfil y restaurante para ${uid} creados.`);
-      return res.json({ success: true, message: 'Perfil y restaurante creados.' });
-    } else {
-      console.log(`[ensure-profile] Perfil para ${uid} ya existía.`);
-      // Si ya existe, devolver éxito
-      // Opcional: Verificar restaurantDoc.exists también
-      return res.json({ success: true, message: 'Perfil ya existía.' });
-    }
-  } catch (error) {
-    console.error('[ensure-profile] Error interno:', error);
-    res.status(500).json({ error: `Error interno del servidor: ${error.message}` });
-  }
-});
-
-// GET /api/auth/profile - Obtener perfil del usuario y restaurante
-// Esta ruta SÍ requiere que el perfil exista.
-router.get('/profile', verifyTokenAndProfile, async (req, res) => {
-  try {
-    // La información ya fue cargada por el middleware verifyTokenAndProfile
-    res.json({
-      user: {
-        uid: req.user.uid,
-        email: req.user.email,
-        displayName: req.user.displayName,
-      },
-      restaurant: req.restaurant // Usar los datos adjuntos
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 3600000 // 1 hour
     });
+
+    res.json({ user, restaurant });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(401).json({ message: error.message });
   }
 });
 
-// PUT /api/auth/profile - Actualizar perfil del restaurante (info básica)
-router.put('/profile', verifyTokenAndProfile, async (req, res) => {
-  try {
-    const updateData = { info: req.body };
-    await authService.updateRestaurantInfo(req.restaurantId, updateData);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+router.post('/logout', (req, res) => {
+  res.clearCookie('token');
+  res.status(200).json({ message: 'Logout successful' });
 });
 
-// POST /api/auth/link-telegram-token
-router.post('/link-telegram-token', verifyTokenAndProfile, async (req, res) => {
-  try {
-    const { token } = req.body;
-    if (!token) {
-      return res.status(400).json({ error: 'Token de bot es requerido.' });
-    }
-
-    const { Telegraf } = require('telegraf');
-    const tempBot = new Telegraf(token);
+router.get('/me', verifyApiToken, async (req, res) => {
     try {
-      await tempBot.telegram.getMe();
-      res.json({ success: true, message: 'Token de bot verificado exitosamente.' });
-    } catch (telegramError) {
-      console.error('Error verificando token de bot:', telegramError);
-      return res.status(400).json({ error: 'Token de bot inválido o no autorizado.' });
+        const { uid } = req.user;
+        const userDoc = await admin.firestore().collection('users').doc(uid).get();
+        if (!userDoc.exists) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+        res.json(userDoc.data());
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
-
-  } catch (error) {
-    console.error('Error en link-telegram-token:', error);
-    res.status(500).json({ error: error.message });
-  }
 });
 
 module.exports = router;

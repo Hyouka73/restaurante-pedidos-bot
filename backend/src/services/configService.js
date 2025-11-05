@@ -61,6 +61,7 @@ class ConfigService {
   }
 
   // Método específico para actualizar solo el token de Telegram
+  /*
   async updateTelegramToken(restaurantId, newToken) {
     const cryptoUtils = require('../utils/crypto');
     const encrypted = cryptoUtils.encryptToken(newToken);
@@ -73,6 +74,7 @@ class ConfigService {
     });
     return { success: true };
   }
+  */
 
   // Método para marcar la configuración como completada
   async markSetupAsCompleted(restaurantId) {

@@ -42,6 +42,7 @@ router.put('/:restaurantId/general', verifyTokenAndOwner, async (req, res) => {
 });
 
 // PUT /api/config/:restaurantId/bot-token
+/*
 router.put('/:restaurantId/bot-token', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
@@ -53,8 +54,10 @@ router.put('/:restaurantId/bot-token', verifyTokenAndOwner, async (req, res) => 
     res.status(500).json({ error: error.message });
   }
 });
+*/
 
 // POST /api/config/:restaurantId/validate-bot-token
+/*
 router.post('/:restaurantId/validate-bot-token', verifyTokenAndOwner, async (req, res) => {
   try {
     const { restaurantId } = req.params;
@@ -88,6 +91,7 @@ router.post('/:restaurantId/validate-bot-token', verifyTokenAndOwner, async (req
     res.status(500).json({ error: error.message });
   }
 });
+*/
 
 // PUT /api/config/:restaurantId/mark-setup-completed
 router.put('/:restaurantId/mark-setup-completed', verifyTokenAndOwner, async (req, res) => {
@@ -204,6 +208,7 @@ router.get('/:restaurantId/messages', verifyTokenAndOwner, async (req, res) => {
 });
 
 // DEV-only: GET debug info about stored telegram token (no plaintext returned)
+/*
 router.get('/:restaurantId/_debug-telegram-token', verifyTokenAndOwner, async (req, res) => {
   try {
     if (process.env.NODE_ENV === 'production') {
@@ -256,6 +261,7 @@ router.get('/:restaurantId/_debug-telegram-token', verifyTokenAndOwner, async (r
     res.status(500).json({ error: error.message });
   }
 });
+*/
 
 // PUT /api/config/:restaurantId/messages
 router.put('/:restaurantId/messages', verifyTokenAndOwner, async (req, res) => {
