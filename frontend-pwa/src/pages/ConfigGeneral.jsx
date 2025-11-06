@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext'; // <-- 1. Importar hook
 import { api } from '../services/api';
 import { useAlert } from '../components/ui/CustomAlert';
@@ -16,7 +15,7 @@ import PaymentMethodsForm from '../components/config/PaymentMethodsForm';
 import CommandsForm from '../components/config/CommandsForm';
 
 export default function ConfigGeneral() {
-  const [user] = useAuthState(auth);
+  const { user } = useAuth();
   const navigate = useNavigate();
   // ✅ Usamos el estado de carga y los datos directamente del contexto
   const { data: config, loading: loadingConfig } = useRestaurant(); 

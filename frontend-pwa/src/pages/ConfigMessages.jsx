@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
 import { useRestaurant } from '../context/RestaurantContext';
 import Loader from '../components/ui/Loader';
 
 export default function ConfigMessages() {
-  const [user, loadingAuth] = useAuthState(auth);
+  const { user, loading: loadingAuth } = useAuth();
   const navigate = useNavigate();
   const { data: restaurantData, loading: loadingRestaurant } = useRestaurant();
   const restaurantId = restaurantData?.id;

@@ -115,7 +115,6 @@ class TelegramUserService {
         
         if (!encryptedToken) continue;
 
-        /*
         try {
           const token = cryptoUtils.decryptToken(encryptedToken);
           
@@ -137,8 +136,7 @@ class TelegramUserService {
           console.error(`Error verificando token para restaurante ${doc.id}:`, tokenError);
           continue;
         }
-        */
-
+      }
       return null;
     } catch (error) {
       console.error('Error buscando restaurante por botId:', error);

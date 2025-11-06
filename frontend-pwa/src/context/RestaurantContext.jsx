@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from './AuthContext'; // Importar el nuevo hook
 import { api } from '../services/api';
 
 const RestaurantContext = createContext();
@@ -14,11 +13,11 @@ export const useRestaurant = () => {
 };
 
 export const RestaurantProvider = ({ children }) => {
-  const [user, loadingAuth] = useAuthState(auth);
+  const { user, loading: loadingAuth } = useAuth(); // Usar el nuevo hook de autenticación
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const uid = user?.uid;
+  const uid = user?.uid; // El objeto user ahora viene de AuthContext
 
   // ✅ Fetch simple - api.get ya maneja headers automáticamente
   const fetchRestaurant = useCallback(async () => {

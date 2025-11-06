@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'; // Eliminamos useRef
 import { useNavigate } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useAlert, AlertContainer } from '../components/ui/CustomAlert';
 import { ButtonLoader } from '../components/ui/Loader';
@@ -44,7 +43,7 @@ const initialNewComboState = {
 };
 
 const Menu = () => { 
-  const [user, loadingAuth] = useAuthState(auth);
+  const { user, loading: loadingAuth } = useAuth();
   const navigate = useNavigate();
   const { data: restaurantData, loading: loadingRestaurant } = useRestaurant();
   const restaurantId = restaurantData?.id;

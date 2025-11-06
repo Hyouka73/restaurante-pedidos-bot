@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from './AuthContext';
 import { api } from '../services/api';
 
 const BotContext = createContext();
@@ -14,7 +13,7 @@ export const useBot = () => {
 };
 
 export const BotProvider = ({ children }) => {
-  const [user, loadingAuth] = useAuthState(auth);
+  const { user, loading: loadingAuth } = useAuth();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

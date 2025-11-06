@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
 import { api, API_BASE } from '../services/api';
 import { 
@@ -16,7 +15,7 @@ import { WizardErrorBox } from '../components/ui/WizardComponents'; // Para most
 
 // --- Componente Principal ---
 export default function OrdersManager() {
-  const [user] = useAuthState(auth);
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { data: restaurantData } = useRestaurant();
   const restaurantId = restaurantData?.id;

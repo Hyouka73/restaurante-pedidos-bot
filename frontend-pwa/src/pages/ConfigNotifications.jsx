@@ -1,12 +1,11 @@
 // frontend-pwa/src/pages/ConfigNotifications.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api'; // <-- 1. Importar api
 
 export default function ConfigNotifications() {
-  const [user] = useAuthState(auth);
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

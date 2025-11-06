@@ -1,8 +1,7 @@
 // frontend-pwa/src/pages/Dashboard.jsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
 import { api } from '../services/api'; // <-- 1. Importar api
 import { motion } from 'framer-motion';
@@ -14,7 +13,7 @@ import Loader from '../components/ui/Loader';
 import SalesProjectionChart from '../components/SalesProjectionChart';
 
 export default function Dashboard() {
-  const [user, loadingAuth] = useAuthState(auth);
+  const { user, loading: loadingAuth } = useAuth();
   const navigate = useNavigate();
   const { data: restaurantData } = useRestaurant(); // <-- 2. Usar el contexto del restaurante
   const [loadingStats, setLoadingStats] = useState(true);

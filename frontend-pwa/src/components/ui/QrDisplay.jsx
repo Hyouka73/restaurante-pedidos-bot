@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../../config/firebase';
+import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { api } from '../../services/api';
 import { Download, ExternalLink, RefreshCw, AlertCircle, Copy, CheckCircle } from 'lucide-react';
@@ -8,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ButtonLoader } from './Loader';
 
 const QrDisplay = () => {
-  const [user] = useAuthState(auth);
+  const { user } = useAuth();
   const { data: restaurant } = useRestaurant();
   const restaurantId = restaurant?.id;
   

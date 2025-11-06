@@ -1,15 +1,14 @@
 // frontend-pwa/src/components/OrderDetail.jsx
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuthState } from 'react-firebase-hooks/auth';
-import { auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext'; // <-- 1. Importar el hook
 import { api } from '../services/api';
 
 export default function OrderDetail() {
   const { orderId } = useParams();
   const navigate = useNavigate();
-  const [user] = useAuthState(auth);
+  const { user } = useAuth();
   const { data: restaurantData } = useRestaurant(); // <-- 2. Usar el hook
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
