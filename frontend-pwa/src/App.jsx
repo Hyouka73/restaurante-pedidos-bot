@@ -4,7 +4,7 @@ import Login from './components/Login';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AlertContainer, useAlert } from './components/ui/CustomAlert';
-import { configureAlerts } from './services/api';
+import { configureAlerts } from './components/ui/CustomAlert';
 import ConfigMessages from './pages/ConfigMessages';
 import ConfigGeneral from './pages/ConfigGeneral';
 import SetupWizard from './pages/SetupWizard';

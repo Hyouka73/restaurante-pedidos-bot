@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { WizardSaveButton, WizardSwitch } from '../ui/WizardComponents';
 import { ShoppingBag, Truck, Package, MapPin, Image, MessageSquare, User, Phone } from 'lucide-react';
 import { useAlert } from '../ui/CustomAlert';
-import { api } from '../../services/api';
+import  api  from '../../services/api';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { motion } from 'framer-motion';
 

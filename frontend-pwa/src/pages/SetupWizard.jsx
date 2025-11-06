@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
+import { useRestaurant } from '../context/RestaurantContext';
+import api from '../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Sparkles, PartyPopper } from 'lucide-react';
 import Wizard from '../components/ui/Wizard';
@@ -16,6 +17,9 @@ export default function SetupWizard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [setupCompleted, setSetupCompleted] = useState(false);
+  const { user } = useAuth();
+  const { data: restaurantData, refetch } = useRestaurant();
+  const restaurantId = restaurantData?.id;
   
   const { alerts, showAlert, hideAlert } = useAlert();
 
@@ -91,47 +95,15 @@ export default function SetupWizard() {
 
   // --- useEffect para verificar estado inicial ---
   useEffect(() => {
-    const checkSetupStatus = async () => {
-      if (!auth.currentUser) return;
-
-      try {
-        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-        if (!userDoc.exists()) {
-          setError('Usuario no encontrado.');
-          showAlert('Usuario no encontrado', 'error', 4000);
-          return;
-        }
-        const restaurantId = userDoc.data().restaurantId;
-
-        const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
-        if (!restaurantDoc.exists()) {
-          setError('Restaurante no encontrado.');
-          showAlert('Restaurante no encontrado', 'error', 4000);
-          return;
-        }
-        const restaurantData = restaurantDoc.data();
-
-        setSetupCompleted(restaurantData.setupCompleted || false);
-
-        if (restaurantData.setupCompleted) {
-          showAlert('Configuración ya completada', 'info', 2000);
-          navigate('/');
-          return;
-        }
-
-        if (restaurantData.info) {
-          setFormData(prev => ({ ...prev, ...restaurantData }));
-        }
-
-      } catch (err) {
-        const errorMsg = 'Error: ' + err.message;
-        setError(errorMsg);
-        showAlert(errorMsg, 'error', 5000);
+    if (restaurantData) {
+      if (restaurantData.setupCompleted) {
+        showAlert('Configuración ya completada', 'info', 2000);
+        navigate('/');
+      } else {
+        setFormData(prev => ({ ...prev, ...restaurantData }));
       }
-    };
-
-    checkSetupStatus();
-  }, [navigate]);
+    }
+  }, [restaurantData, navigate, showAlert]);
 
   // --- useEffect para redirección después de completar setup ---
   useEffect(() => {
@@ -248,7 +220,7 @@ export default function SetupWizard() {
 
   const handleSubmit = async () => {
     if (!validateStep()) return;
-    if (!auth.currentUser) {
+    if (!user) {
       showAlert('No hay usuario autenticado', 'error', 3000);
       return;
     }
@@ -257,17 +229,12 @@ export default function SetupWizard() {
     setError('');
     
     try {
-      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      const restaurantId = userDoc.data().restaurantId;
-
-      const restaurantRef = doc(db, 'restaurants', restaurantId);
-      await updateDoc(restaurantRef, {
-        ...formData,
-        setupCompleted: true
-      });
+      await api.put(`/config/${restaurantId}/general`, formData);
+      await api.put(`/config/${restaurantId}/mark-setup-completed`);
 
       showAlert('¡Configuración guardada!', 'success', 3000);
       setSetupCompleted(true); // Esto activará el useEffect de redirección
+      refetch(); // Refrescar los datos del restaurante en el contexto
 
     } catch (err) {
       const errorMsg = 'Error al guardar: ' + err.message;

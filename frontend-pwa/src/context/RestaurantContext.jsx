@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext'; // Importar el nuevo hook
-import { api } from '../services/api';
+import api from '../services/api';
 
 const RestaurantContext = createContext();
 

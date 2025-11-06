@@ -1,7 +1,7 @@
 // frontend-pwa/src/components/SalesProjectionChart.jsx
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { api } from '../services/api';
+import api from '../services/api';
 import { useRestaurant } from '../context/RestaurantContext';
 import Loader from './ui/Loader'; // Assuming this is the correct path
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { api } from '../../services/api';
+import  api  from '../../services/api';
 import { Download, ExternalLink, RefreshCw, AlertCircle, Copy, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ButtonLoader } from './Loader';

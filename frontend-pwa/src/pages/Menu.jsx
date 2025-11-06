@@ -11,7 +11,8 @@ import MenuItemForm from '../components/menu/MenuItemForm';
 import MenuComboForm from '../components/menu/MenuComboForm';
 import MenuItemCard from '../components/menu/MenuItemCard';
 import MenuComboCard from '../components/menu/MenuComboCard';
-import { api, configureAlerts } from '../services/api'; 
+import { configureAlerts } from '../components/ui/CustomAlert';
+import api from '../services/api'; 
 import Modal from '../components/ui/Modal'; // <-- 🔥 1. IMPORTAMOS TU MODAL
 
 const initialNewItemState = { 

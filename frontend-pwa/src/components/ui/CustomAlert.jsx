@@ -2,6 +2,36 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 
+// --- Alerta Global ---
+// Esto permite que módulos no-React (como interceptores de API) muestren alertas.
+let alertEmitter = null;
+
+/**
+ * Configura el emisor de alertas. Llámalo en tu componente raíz (App.jsx).
+ * @param {function} emitter - La función `showAlert` del hook `useAlert`.
+ */
+export const configureAlerts = (emitter) => {
+  alertEmitter = emitter;
+};
+
+/**
+ * Muestra una alerta desde cualquier lugar de la aplicación.
+ * @param {string} message - El mensaje a mostrar.
+ * @param {'success'|'error'|'warning'|'info'|'notification'} [type='info'] - El tipo de alerta.
+ * @param {number} [duration=3000] - Duración en ms (0 para persistente).
+ */
+export const triggerAlert = (message, type = 'info', duration = 3000) => {
+  if (alertEmitter) {
+    alertEmitter(message, type, duration);
+  } else {
+    // Fallback si el sistema de alertas aún no está listo
+    console.warn('Alert system not configured yet. Alert triggered via console:', { message, type });
+    // Opcional: podrías usar un alert nativo como fallback
+    // window.alert(`${type.toUpperCase()}: ${message}`);
+  }
+};
+
+
 // Hook personalizado para manejar alertas
 export const useAlert = () => {
   const [alerts, setAlerts] = useState([]);

@@ -7,7 +7,7 @@ import {
 } from '../ui/WizardComponents';
 import { Clock, Calendar } from 'lucide-react';
 import { useAlert } from '../ui/CustomAlert';
-import { api } from '../../services/api';
+import  api  from '../../services/api';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { motion } from 'framer-motion';
 

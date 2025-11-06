@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext'; // <-- 1. Importar hook
-import { api } from '../services/api';
+import api from '../services/api';
 import { useAlert } from '../components/ui/CustomAlert';
 import { WizardCard, WizardSectionHeader, WizardErrorBox } from '../components/ui/WizardComponents';
 import { ButtonLoader } from '../components/ui/Loader';

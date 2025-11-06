@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
-import { api, API_BASE } from '../services/api';
+import api from '../services/api';
 import { 
   Package, Clock, CheckCircle, XCircle, ChefHat, Store, Truck, 
   RefreshCw 
@@ -94,7 +94,7 @@ export default function OrdersManager() {
     if (!restaurantId) return;
 
     console.log('[OrdersManager] 📡 Conectando SSE...');
-    const eventSource = new EventSource(`${API_BASE}/events`);
+    const eventSource = new EventSource(`${api.defaults.baseURL}/events`);
     
     eventSource.onopen = () => {
       console.log('[OrdersManager] ✅ SSE conectado');

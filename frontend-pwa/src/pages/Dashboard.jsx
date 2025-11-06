@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useRestaurant } from '../context/RestaurantContext';
-import { api } from '../services/api'; // <-- 1. Importar api
+import api from '../services/api'; // <-- 1. Importar api
 import { motion } from 'framer-motion';
 import { 
   Store, ShoppingCart, Clock, DollarSign, TrendingUp, 

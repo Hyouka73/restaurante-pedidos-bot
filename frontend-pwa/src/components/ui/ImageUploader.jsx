@@ -1,7 +1,7 @@
 // frontend-pwa/src/components/ui/ImageUploader.jsx
 import { useState, useRef } from 'react';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
-import { api } from '../../services/api';
+import  api  from '../../services/api';
 import { ButtonLoader } from './Loader';
 
 const ImageUploader = ({ 

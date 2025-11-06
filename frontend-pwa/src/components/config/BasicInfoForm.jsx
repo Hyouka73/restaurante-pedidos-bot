@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { WizardInputField, WizardTextAreaField, WizardSaveButton, WizardLocationButton } from '../ui/WizardComponents';
 import MapSelectorModal from '../ui/MapSelectorModal';
 import { useAlert } from '../ui/CustomAlert';
-import { api } from '../../services/api';
+import  api  from '../../services/api';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { MapPin, Store, Phone, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
