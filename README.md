@@ -14,18 +14,6 @@ Integra un **chatbot conversacional e interactivo en Telegram** (desarrollado co
 
 ---
 
-## 📸 Demostración Visual y Capturas
-
-> 💡 **Vistas clave recomendadas para portafolio:**
-> 1. **Chatbot en Telegram:** Captura de pantalla de la interacción en Telegram mostrando el menú interactivo con Inline Keyboards, selección de combos y resumen del carrito.
-> 2. **Panel de Cocina / KDS en Vivo:** Interfaz de la PWA mostrando pedidos entrantes en tiempo real clasificados por estados (Pendiente, En Preparación, Listo, Entregado).
-> 3. **Dashboard de Proyección de Ventas:** Gráficas de tendencias y proyección de ventas generadas con Recharts y alimentadas por el módulo estadístico.
-> 4. **Generador de Códigos QR:** Vista de generación e impresión de códigos QR por mesa para pedidos directos.
-
-*(Para incluir imágenes locales en el repositorio, agrégalas en `docs/screenshots/` y referencia aquí con `![Demo](docs/screenshots/vista.png)`).*
-
----
-
 ## ⚡ Características Principales
 
 - **Bot de Telegram Interactivo:**
